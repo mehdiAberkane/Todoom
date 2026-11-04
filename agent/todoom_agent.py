@@ -226,19 +226,30 @@ def run_claude(card, branch):
         return False, (proc.stderr or proc.stdout).strip()[-2000:]
 
 
+def update_base():
+    """Merge requests are merged on GitLab, so the local base has to catch up first."""
+    git("switch", BASE_BRANCH)
+    git("fetch", REMOTE, BASE_BRANCH)
+    new_commits = git("rev-list", "--count", f"{BASE_BRANCH}..{REMOTE}/{BASE_BRANCH}")
+    git("merge", "--ff-only", f"{REMOTE}/{BASE_BRANCH}")
+    if new_commits == "0":
+        log.info("%s déjà à jour", BASE_BRANCH)
+    else:
+        log.info("%s mis à jour : %s nouveau(x) commit(s)", BASE_BRANCH, new_commits)
+
+
 def process(card_path, card, cols):
     title = card["title"]
     if git("status", "--porcelain", "--untracked-files=no"):
         log.warning("dépôt modifié, ticket « %s » laissé en attente", title)
         return
     move(card_path, card, cols[COL_LOCK])
+    started = time.monotonic()
+    log.info("=== NOUVEAU TICKET : « %s »", title)
 
     branch, commits, dirty, mr_url = "", "", "", None
     try:
-        # Merge requests are merged on GitLab, so the local base has to catch up first.
-        git("fetch", REMOTE, BASE_BRANCH)
-        git("switch", BASE_BRANCH)
-        git("merge", "--ff-only", f"{REMOTE}/{BASE_BRANCH}")
+        update_base()
         branch = branch_for(card)
         log.info("ticket « %s » -> branche %s", title, branch)
         # A failed ticket sent back to En cours resumes on its existing branch.
@@ -283,7 +294,13 @@ def process(card_path, card, cols):
     description = (card["description"].rstrip() + "\n\n" + "\n".join(report)).strip()
     column = COL_DONE if ok else COL_FAILED
     move(card_path, read_json(card_path), cols[column], description)
-    log.info("ticket « %s » -> %s (%s)", title, column, status)
+    minutes, seconds = divmod(int(time.monotonic() - started), 60)
+    log.info("=== TICKET TERMINÉ (%s, %d min %02d s) : « %s » -> %s", status, minutes, seconds, title, column)
+    if mr_url:
+        log.info("    Merge request : %s", mr_url)
+    if not ok:
+        log.info("    Raison : %s", (summary or "inconnue").splitlines()[0])
+    log.info("En attente du prochain ticket...")
 
 
 def tick(dry_run=False):

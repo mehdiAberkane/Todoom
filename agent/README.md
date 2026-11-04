@@ -3,7 +3,7 @@
 Surveille un tableau Todoom toutes les 30 secondes. Chaque ticket placé dans « En cours » est confié à Claude Code en mode non interactif, un ticket à la fois :
 
 1. le ticket passe dans la colonne « Agent » (créée automatiquement) ;
-2. l'agent met à jour la branche de base et crée une branche pour le ticket ;
+2. l'agent se place sur la branche de base, récupère les merge requests fusionnées sur GitLab, puis crée une branche pour le ticket ;
 3. Claude y fait le travail, lance les vérifications prévues, puis commite ;
 4. l'agent pousse la branche sur GitLab et ouvre une merge request vers la branche de base ;
 5. le ticket passe dans « A verifier », avec la branche, les commits, le lien de la merge request et le résumé de Claude dans sa description ;
