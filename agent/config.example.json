@@ -4,6 +4,7 @@
   "project": "Mon projet (Go)",
   "checks": "gofmt, go vet ./... et go test ./...",
   "base_branch": "main",
+  "remote": "origin",
   "poll_seconds": 30,
   "ticket_timeout_minutes": 45
 }

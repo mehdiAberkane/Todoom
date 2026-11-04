@@ -4,8 +4,9 @@ Claude Code headless on them, one at a time.
 Flow for each card:
   En cours -> Agent (lock, visible in the app) -> A verifier or Echec (with a report)
 
-Work happens on a dedicated branch per card. The agent commits but never
-pushes and never merges: review the branch, then merge it yourself.
+Work happens on a dedicated branch per card, named <type>/<few-words>. Claude
+commits on it; this script then pushes it and opens a merge request on GitLab.
+Nothing is ever merged here: review and merge the request on GitLab.
 
 Settings live in config.json next to this file (see config.example.json).
 
@@ -20,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,6 +32,7 @@ BOARD_DIR = REPO = None
 PROJECT = ""
 CHECKS = "gofmt, go vet ./... et go test ./..."
 BASE_BRANCH = "main"
+REMOTE = "origin"
 POLL_SECONDS = 30
 TICKET_TIMEOUT = 45 * 60
 
@@ -57,11 +60,32 @@ Ticket : {title}
 Consignes :
 - Fais uniquement ce que demande le ticket, dans le style du code existant.
 - Avant de finir, lance : {checks}.
-- Commite ton travail sur la branche courante. Ne pousse pas, ne change pas de branche.
+- Commite ton travail sur la branche courante, avec uniquement les fichiers liés au ticket.
+- Ne pousse pas et ne change pas de branche : le push et la merge request sont faits après toi.
 - Si le ticket est flou ou impossible, ne devine pas : n'écris rien et explique pourquoi.
 - Termine par un résumé en français de 10 lignes maximum : ce qui est fait,
   ce qui reste, et le résultat des tests.
 """
+
+NAME_PROMPT = """Donne le nom de la branche git de ce ticket, au format <type>/<mots-avec-tirets>.
+Types : feature (nouvelle fonctionnalité), hotfix ou bugfix (correction), security (problème
+de sécurité), quality (qualité du code).
+Mots : 2 à 4 mots en minuscules, sans accents, séparés par des tirets, qui résument l'action.
+Réponds uniquement par le nom de la branche.
+
+Ticket : {title}
+{description}
+"""
+
+BRANCH_RE = re.compile(r"(feature|hotfix|bugfix|security|quality)/[a-z0-9]+(-[a-z0-9]+)*")
+BRANCH_KEYWORDS = [
+    ("security", r"\b(securite|security|vuln\w*|cve)\b"),
+    ("hotfix", r"\b(hotfix|urgent)\b"),
+    ("bugfix", r"\b(bug\w*|bugfix|fix\w*|corrig\w*|correction)\b"),
+    ("quality", r"\b(qualite|quality|refacto\w*|nettoy\w*|lint)\b"),
+]
+STOP_WORDS = {"a", "au", "aux", "avec", "d", "dans", "de", "des", "du", "en", "et", "l", "la",
+              "le", "les", "par", "pour", "sur", "un", "une"}
 
 log = logging.getLogger("todoom-agent")
 
@@ -121,9 +145,60 @@ def move(card_path, card, column_id, description=None):
     write_json(card_path, card)
 
 
-def slug(text):
-    s = re.sub(r"[^a-z0-9]+", "-", text.lower().encode("ascii", "ignore").decode()).strip("-")
-    return s[:40] or "ticket"
+def plain_words(text):
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    return re.findall(r"[a-z0-9]+", ascii_text)
+
+
+def guess_branch(card):
+    """Fallback when Claude cannot name the branch: keywords decide the type."""
+    title = " ".join(plain_words(card["title"]))
+    kind = next((k for k, pattern in BRANCH_KEYWORDS if re.search(pattern, title)), "feature")
+    words = [w for w in plain_words(card["title"]) if w not in STOP_WORDS][:4]
+    return f"{kind}/{'-'.join(words) or 'ticket'}"
+
+
+def suggest_branch(card):
+    prompt = NAME_PROMPT.format(title=card["title"], description=card["description"].strip())
+    try:
+        proc = subprocess.run([claude_path(), "-p", prompt, "--model", "haiku"], cwd=REPO,
+                              capture_output=True, text=True, encoding="utf-8", timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return guess_branch(card)
+    name = proc.stdout.strip()
+    return name if BRANCH_RE.fullmatch(name) else guess_branch(card)
+
+
+def branch_exists(name):
+    return bool(git("branch", "--list", name) or git("ls-remote", "--heads", REMOTE, name))
+
+
+def branch_for(card):
+    """Reuses the branch of an earlier attempt, named in the card's report, or picks a new one."""
+    earlier = re.findall(r"^Branche : (\S+)", card["description"], re.MULTILINE)
+    if earlier and git("branch", "--list", earlier[-1]):
+        return earlier[-1]
+    name = suggest_branch(card)
+    return f"{name}-{card['id'][-6:]}" if branch_exists(name) else name
+
+
+def push_branch(branch, title):
+    """Pushes the branch and opens a merge request through GitLab push options.
+
+    Returns the merge request URL, or the URL to create one, or None if GitLab gave neither.
+    """
+    one_line_title = " ".join(title.split())
+    cmd = ["git", "push", "-u", REMOTE, branch,
+           "-o", "merge_request.create",
+           "-o", f"merge_request.target={BASE_BRANCH}",
+           "-o", f"merge_request.title={one_line_title}",
+           "-o", "merge_request.remove_source_branch"]
+    proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+    if proc.returncode:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, proc.stdout, proc.stderr)
+    urls = re.findall(r"https?://\S+/-/merge_requests/\S+", proc.stderr)
+    existing = [u for u in urls if re.search(r"/merge_requests/\d+", u)]
+    return (existing or urls or [None])[0]
 
 
 def claude_path():
@@ -157,12 +232,15 @@ def process(card_path, card, cols):
         log.warning("dépôt modifié, ticket « %s » laissé en attente", title)
         return
     move(card_path, card, cols[COL_LOCK])
-    branch = f"agent/{slug(title)}-{card['id'][-6:]}"
-    log.info("ticket « %s » -> branche %s", title, branch)
 
-    commits = dirty = ""
+    branch, commits, dirty, mr_url = "", "", "", None
     try:
+        # Merge requests are merged on GitLab, so the local base has to catch up first.
+        git("fetch", REMOTE, BASE_BRANCH)
         git("switch", BASE_BRANCH)
+        git("merge", "--ff-only", f"{REMOTE}/{BASE_BRANCH}")
+        branch = branch_for(card)
+        log.info("ticket « %s » -> branche %s", title, branch)
         # A failed ticket sent back to En cours resumes on its existing branch.
         git("switch", *([branch] if git("branch", "--list", branch) else ["-c", branch]))
         ok, summary = run_claude(card, branch)
@@ -172,7 +250,7 @@ def process(card_path, card, cols):
         ok, summary = False, f"Erreur git : {(e.stderr or str(e)).strip()}"
     except OSError as e:
         ok, summary = False, f"Impossible de lancer Claude : {e}"
-    if git("branch", "--list", branch):
+    if branch and git("branch", "--list", branch):
         commits = git("log", "--oneline", f"{BASE_BRANCH}..{branch}", check=False)
     dirty = git("status", "--porcelain", "--untracked-files=no", check=False)
     if not dirty:
@@ -183,10 +261,22 @@ def process(card_path, card, cols):
         ok, summary = False, summary or "Aucun commit produit."
     ok = ok and not dirty
 
+    pushed = False
+    if ok:
+        try:
+            mr_url = push_branch(branch, title)
+            pushed = True
+        except (subprocess.CalledProcessError, OSError) as e:
+            ok = False
+            error = getattr(e, "stderr", None) or str(e)
+            summary = f"Le push a échoué : {error.strip()}\n\n{summary}"
+
     status = "OK" if ok else "ÉCHEC"
     report = [f"--- Agent ({status}, {datetime.now():%d/%m %H:%M}) ---",
-              f"Branche : {branch}",
+              f"Branche : {branch or 'aucune'}",
               f"Commits : {commits or 'aucun'}"]
+    if pushed:
+        report.append(f"Merge request : {mr_url or 'non créée, à ouvrir à la main sur GitLab'}")
     if dirty:
         report.append("Attention : modifications non commitées laissées sur la branche.")
     report += ["", summary or "(pas de résumé)"]
@@ -218,7 +308,7 @@ def tick(dry_run=False):
 
 
 def load_config():
-    global BOARD_DIR, REPO, PROJECT, CHECKS, BASE_BRANCH, POLL_SECONDS, TICKET_TIMEOUT
+    global BOARD_DIR, REPO, PROJECT, CHECKS, BASE_BRANCH, REMOTE, POLL_SECONDS, TICKET_TIMEOUT
     try:
         cfg = read_json(CONFIG_PATH)
     except FileNotFoundError:
@@ -228,6 +318,7 @@ def load_config():
     PROJECT = cfg.get("project", REPO.name)
     CHECKS = cfg.get("checks", CHECKS)
     BASE_BRANCH = cfg.get("base_branch", BASE_BRANCH)
+    REMOTE = cfg.get("remote", REMOTE)
     POLL_SECONDS = cfg.get("poll_seconds", POLL_SECONDS)
     TICKET_TIMEOUT = cfg.get("ticket_timeout_minutes", TICKET_TIMEOUT // 60) * 60
 

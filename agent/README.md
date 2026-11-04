@@ -3,13 +3,30 @@
 Surveille un tableau Todoom toutes les 30 secondes. Chaque ticket placé dans « En cours » est confié à Claude Code en mode non interactif, un ticket à la fois :
 
 1. le ticket passe dans la colonne « Agent » (créée automatiquement) ;
-2. Claude travaille sur une branche `agent/<ticket>` du dépôt associé, lance les vérifications prévues, puis commite ;
-3. le ticket passe dans « A verifier », avec la branche, les commits et le résumé de Claude dans sa description ;
-4. en cas d'échec, il passe dans « Echec » avec le même compte rendu. C'est le cas si Claude renvoie une erreur ou dépasse le temps maximal, s'il ne produit aucun commit, ou s'il laisse des modifications non commitées.
+2. l'agent met à jour la branche de base et crée une branche pour le ticket ;
+3. Claude y fait le travail, lance les vérifications prévues, puis commite ;
+4. l'agent pousse la branche sur GitLab et ouvre une merge request vers la branche de base ;
+5. le ticket passe dans « A verifier », avec la branche, les commits, le lien de la merge request et le résumé de Claude dans sa description ;
+6. en cas d'échec, il passe dans « Echec » avec le même compte rendu. C'est le cas si Claude renvoie une erreur ou dépasse le temps maximal, s'il ne produit aucun commit, s'il laisse des modifications non commitées, ou si une commande git ou le push échoue. Rien n'est poussé si le travail de Claude a échoué.
 
-Pour réessayer un ticket en échec, remettez-le dans « En cours » : l'agent reprend sur la même branche.
+Vous faites ensuite la revue et la fusion sur GitLab, puis vous passez le ticket en « Terminé ». L'agent ne fusionne jamais, et Claude lui-même n'a pas le droit de pousser.
 
-L'agent ne pousse jamais et ne fusionne jamais. Relisez la branche, puis fusionnez-la vous-même. Si le dépôt a des modifications non commitées, le ticket attend.
+Pour réessayer un ticket en échec, remettez-le dans « En cours » : l'agent reprend sur la même branche. Si le dépôt a des modifications non commitées, le ticket attend.
+
+## Noms de branches
+
+Claude choisit le nom au format `<type>/<mots-avec-tirets>`, par exemple `feature/module-scope` :
+
+| Type | Usage |
+|---|---|
+| `feature` | nouvelle fonctionnalité |
+| `hotfix`, `bugfix` | correction |
+| `security` | problème de sécurité |
+| `quality` | qualité du code |
+
+Si le nom proposé n'est pas valide, l'agent le déduit du titre du ticket. Si la branche existe déjà pour un autre ticket, il ajoute un suffixe.
+
+La merge request passe par les options de push de GitLab : aucun token n'est nécessaire, seul l'accès SSH au dépôt compte. La branche source est supprimée sur GitLab à la fusion.
 
 ## Installation
 
@@ -27,7 +44,8 @@ Copier `config.example.json` en `config.json` et le remplir :
 | `repo` | dépôt git où l'agent travaille |
 | `project` | nom et description courte du projet, donnés à Claude |
 | `checks` | vérifications à lancer avant de commiter |
-| `base_branch` | branche de départ de chaque ticket |
+| `base_branch` | branche de départ de chaque ticket et cible des merge requests |
+| `remote` | dépôt distant où pousser (`origin` par défaut) |
 | `poll_seconds`, `ticket_timeout_minutes` | rythme de surveillance et durée maximale d'un ticket |
 
 `config.json` contient vos chemins et l'ID de votre tableau : il est ignoré par git.
