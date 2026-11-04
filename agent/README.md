@@ -4,7 +4,10 @@ Surveille un tableau Todoom toutes les 30 secondes. Chaque ticket placé dans «
 
 1. le ticket passe dans la colonne « Agent » (créée automatiquement) ;
 2. Claude travaille sur une branche `agent/<ticket>` du dépôt associé, lance les vérifications prévues, puis commite ;
-3. le ticket passe dans « À valider », avec la branche, les commits et le résumé de Claude dans sa description.
+3. le ticket passe dans « A verifier », avec la branche, les commits et le résumé de Claude dans sa description ;
+4. en cas d'échec, il passe dans « Echec » avec le même compte rendu. C'est le cas si Claude renvoie une erreur ou dépasse le temps maximal, s'il ne produit aucun commit, ou s'il laisse des modifications non commitées.
+
+Pour réessayer un ticket en échec, remettez-le dans « En cours » : l'agent reprend sur la même branche.
 
 L'agent ne pousse jamais et ne fusionne jamais. Relisez la branche, puis fusionnez-la vous-même. Si le dépôt a des modifications non commitées, le ticket attend.
 

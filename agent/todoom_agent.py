@@ -2,7 +2,7 @@
 Claude Code headless on them, one at a time.
 
 Flow for each card:
-  En cours -> Agent (lock, visible in the app) -> À valider (with a summary)
+  En cours -> Agent (lock, visible in the app) -> A verifier or Echec (with a report)
 
 Work happens on a dedicated branch per card. The agent commits but never
 pushes and never merges: review the branch, then merge it yourself.
@@ -35,7 +35,8 @@ TICKET_TIMEOUT = 45 * 60
 
 COL_TRIGGER = "En cours"
 COL_LOCK = "Agent"
-COL_DONE = "À valider"
+COL_DONE = "A verifier"
+COL_FAILED = "Echec"
 
 # What Claude may do without asking. Anything else is refused in headless mode.
 ALLOWED_TOOLS = [
@@ -94,7 +95,7 @@ def ensure_columns(board_path):
     """Adds the Agent and À valider columns if the board lacks them."""
     board = read_json(board_path)
     names = {c["name"]: c["id"] for c in board["columns"]}
-    missing = [n for n in (COL_LOCK, COL_DONE) if n not in names]
+    missing = [n for n in (COL_LOCK, COL_DONE, COL_FAILED) if n not in names]
     if missing:
         for name in missing:
             col = {"id": uid(), "name": name}
@@ -159,16 +160,28 @@ def process(card_path, card, cols):
     branch = f"agent/{slug(title)}-{card['id'][-6:]}"
     log.info("ticket « %s » -> branche %s", title, branch)
 
-    git("switch", BASE_BRANCH)
-    git("switch", "-c", branch)
+    commits = dirty = ""
     try:
+        git("switch", BASE_BRANCH)
+        # A failed ticket sent back to En cours resumes on its existing branch.
+        git("switch", *([branch] if git("branch", "--list", branch) else ["-c", branch]))
         ok, summary = run_claude(card, branch)
     except subprocess.TimeoutExpired:
         ok, summary = False, f"Arrêté après {TICKET_TIMEOUT // 60} minutes."
-    commits = git("log", "--oneline", f"{BASE_BRANCH}..{branch}")
-    dirty = git("status", "--porcelain", "--untracked-files=no")
+    except subprocess.CalledProcessError as e:
+        ok, summary = False, f"Erreur git : {(e.stderr or str(e)).strip()}"
+    except OSError as e:
+        ok, summary = False, f"Impossible de lancer Claude : {e}"
+    if git("branch", "--list", branch):
+        commits = git("log", "--oneline", f"{BASE_BRANCH}..{branch}", check=False)
+    dirty = git("status", "--porcelain", "--untracked-files=no", check=False)
     if not dirty:
         git("switch", BASE_BRANCH, check=False)
+
+    # No commit or leftover edits means the ticket is not done, even if Claude exited cleanly.
+    if ok and not commits:
+        ok, summary = False, summary or "Aucun commit produit."
+    ok = ok and not dirty
 
     status = "OK" if ok else "ÉCHEC"
     report = [f"--- Agent ({status}, {datetime.now():%d/%m %H:%M}) ---",
@@ -178,8 +191,9 @@ def process(card_path, card, cols):
         report.append("Attention : modifications non commitées laissées sur la branche.")
     report += ["", summary or "(pas de résumé)"]
     description = (card["description"].rstrip() + "\n\n" + "\n".join(report)).strip()
-    move(card_path, read_json(card_path), cols[COL_DONE], description)
-    log.info("ticket « %s » terminé (%s)", title, status)
+    column = COL_DONE if ok else COL_FAILED
+    move(card_path, read_json(card_path), cols[column], description)
+    log.info("ticket « %s » -> %s (%s)", title, column, status)
 
 
 def tick(dry_run=False):
