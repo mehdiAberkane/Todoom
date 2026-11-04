@@ -1,0 +1,9 @@
+{
+  "board_dir": "G:\\Mon Drive\\Todoom\\boards\\<id-du-tableau>",
+  "repo": "C:\\chemin\\vers\\le\\projet",
+  "project": "Mon projet (Go)",
+  "checks": "gofmt, go vet ./... et go test ./...",
+  "base_branch": "main",
+  "poll_seconds": 30,
+  "ticket_timeout_minutes": 45
+}
