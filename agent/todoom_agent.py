@@ -125,12 +125,18 @@ def slug(text):
     return s[:40] or "ticket"
 
 
+def claude_path():
+    # The native installer puts claude in ~/.local/bin, which is often not on PATH.
+    default = Path.home() / ".local" / "bin" / ("claude.exe" if os.name == "nt" else "claude")
+    return shutil.which("claude") or (str(default) if default.exists() else "claude")
+
+
 def run_claude(card, branch):
     checklist = "\n".join(f"- [{'x' if i['done'] else ' '}] {i['text']}" for i in card["checklist"])
     details = "\n".join(p for p in (card["description"].strip(), checklist) if p) or "(pas de détail)"
     prompt = PROMPT.format(project=PROJECT, repo=REPO, branch=branch, title=card["title"],
                            details=details, checks=CHECKS)
-    cmd = [shutil.which("claude") or "claude", "-p", prompt,
+    cmd = [claude_path(), "-p", prompt,
            "--output-format", "json",
            "--permission-mode", "acceptEdits",
            "--allowedTools", *ALLOWED_TOOLS,
