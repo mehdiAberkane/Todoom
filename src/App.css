@@ -289,6 +289,10 @@ textarea { resize: vertical; }
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 }
 .label-modal { width: min(460px, 100%); }
+/* Card editor takes ~60% of the window; the description absorbs the extra height. */
+.card-modal { width: min(max(60vw, 760px), 100%); min-height: 60vh; display: flex; flex-direction: column; }
+.card-modal .modal-body { flex: 1; grid-template-columns: 1fr 260px; }
+.card-modal .description { flex: 1; min-height: 200px; }
 .modal-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
 .modal-head h3 { flex: 1; margin: 0; font-size: 17px; }
 .modal-title { flex: 1; font-size: 19px; font-weight: 700; background: transparent; border-color: transparent; resize: none; }
