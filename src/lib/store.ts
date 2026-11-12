@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
 import type { Board, Card, Presence } from "../types";
-import { LABEL_COLORS, now, uid } from "./utils";
+import { LABEL_COLORS, now, orderBetween, uid } from "./utils";
 
 export interface Data {
   boards: Board[];
@@ -34,9 +34,17 @@ function normalizeBoard(raw: Partial<Board>): Board {
     name: raw.name ?? "Sans nom",
     columns: raw.columns ?? [],
     labels: raw.labels ?? [],
+    ...(typeof raw.order === "number" ? { order: raw.order } : {}),
     createdAt: raw.createdAt ?? now(),
     updatedAt: raw.updatedAt ?? "",
   };
+}
+
+/** Boards without an order (older files) come last, oldest first. */
+function sortBoards(boards: Board[]): Board[] {
+  return [...boards].sort(
+    (a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.createdAt.localeCompare(b.createdAt),
+  );
 }
 
 function normalizeCard(raw: Partial<Card>, boardId: string): Card {
@@ -93,7 +101,7 @@ function parse(files: FileEntry[]): Data {
   for (const card of cards.values()) byBoard[card.boardId]?.push(card);
 
   return {
-    boards: [...boards.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    boards: sortBoards([...boards.values()]),
     cards: byBoard,
     presence,
   };
@@ -191,7 +199,7 @@ export function useTodoom(backend: Backend) {
 
     const saveBoard = (board: Board) => {
       const saved = { ...board, updatedAt: now() };
-      setData((d) => ({ ...d, boards: d.boards.map((b) => (b.id === saved.id ? saved : b)) }));
+      setData((d) => ({ ...d, boards: sortBoards(d.boards.map((b) => (b.id === saved.id ? saved : b))) }));
       writeJson(boardPath(saved.id), saved);
     };
 
@@ -200,13 +208,33 @@ export function useTodoom(backend: Backend) {
       deleteCard,
       saveBoard,
 
-      createBoard(name: string): Board {
+      /** `ids` is the full sidebar order after the drop; only the moved board is rewritten when possible. */
+      moveBoard(boards: Board[], movedId: string, ids: string[]) {
+        const byId = new Map(boards.map((b) => [b.id, b]));
+        const i = ids.indexOf(movedId);
+        const moved = byId.get(movedId);
+        if (!moved || i < 0) return;
+        const orderOf = (id: string | undefined) => (id ? byId.get(id)?.order : undefined);
+        const order = boards.every((b) => b.order !== undefined) ? orderBetween(orderOf(ids[i - 1]), orderOf(ids[i + 1])) : null;
+        if (order !== null) {
+          saveBoard({ ...moved, order });
+          return;
+        }
+        ids.forEach((id, index) => {
+          const b = byId.get(id);
+          if (b && b.order !== index) saveBoard({ ...b, order: index });
+        });
+      },
+
+      createBoard(name: string, existing: Board[]): Board {
         const t = now();
+        const orders = existing.map((b) => b.order).filter((o): o is number => o !== undefined);
         const board: Board = {
           id: uid(),
           name,
           columns: DEFAULT_COLUMNS.map((n) => ({ id: uid(), name: n })),
           labels: DEFAULT_LABELS.map((l) => ({ ...l, id: uid() })),
+          ...(orders.length ? { order: Math.max(...orders) + 1 } : {}),
           createdAt: t,
           updatedAt: t,
         };

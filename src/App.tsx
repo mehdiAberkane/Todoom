@@ -55,7 +55,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         currentId={board?.id}
         counts={counts}
         onSelect={setBoardId}
-        onCreate={(name) => setBoardId(actions.createBoard(name).id)}
+        onCreate={(name) => setBoardId(actions.createBoard(name, data.boards).id)}
+        onMove={(movedId, ids) => actions.moveBoard(data.boards, movedId, ids)}
         onSettings={onSettings}
         status={status}
         error={error}
@@ -72,7 +73,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             <div className="empty-skull">💀</div>
             <h2>Aucun tableau.</h2>
             <p>Le doom n'attend que toi.</p>
-            <button className="btn-primary big" onClick={() => setBoardId(actions.createBoard("Mon premier tableau").id)}>
+            <button className="btn-primary big" onClick={() => setBoardId(actions.createBoard("Mon premier tableau", data.boards).id)}>
               Créer mon premier tableau
             </button>
           </div>

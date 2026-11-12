@@ -14,6 +14,8 @@ export interface Board {
   name: string;
   columns: Column[];
   labels: Label[];
+  /** Fractional position in the sidebar; absent on boards created before reordering existed. */
+  order?: number;
   createdAt: string;
   updatedAt: string;
 }

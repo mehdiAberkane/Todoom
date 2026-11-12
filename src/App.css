@@ -125,6 +125,7 @@ textarea { resize: vertical; }
 }
 .board-link:hover { background: var(--panel); }
 .board-link.active { background: var(--accent-soft); color: #ffd2c8; box-shadow: inset 3px 0 0 var(--accent); }
+.board-link.dragging { position: relative; z-index: 2; background: var(--card-hover); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); cursor: grabbing; }
 .board-link-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .new-board { margin-top: 8px; background: transparent; border-style: dashed; }
 .sidebar-foot { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; font-size: 12px; }

@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Board, Presence } from "../types";
 import type { SyncStatus } from "../lib/store";
 
@@ -15,6 +18,7 @@ interface Props {
   counts: Record<string, number>;
   onSelect: (id: string) => void;
   onCreate: (name: string) => void;
+  onMove: (movedId: string, ids: string[]) => void;
   onSettings: () => void;
   status: SyncStatus;
   error: string | null;
@@ -22,8 +26,17 @@ interface Props {
   others: Presence[];
 }
 
-export function Sidebar({ boards, currentId, counts, onSelect, onCreate, onSettings, status, error, dataDir, others }: Props) {
+export function Sidebar({ boards, currentId, counts, onSelect, onCreate, onMove, onSettings, status, error, dataDir, others }: Props) {
   const [name, setName] = useState("");
+  // The distance threshold keeps a plain click selecting the board.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const ids = boards.map((b) => b.id);
+    const moved = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
+    onMove(String(active.id), moved);
+  };
 
   const create = () => {
     const n = name.trim();
@@ -41,12 +54,19 @@ export function Sidebar({ boards, currentId, counts, onSelect, onCreate, onSetti
 
       <nav className="board-list">
         <div className="section-title">Tableaux</div>
-        {boards.map((b) => (
-          <button key={b.id} className={`board-link ${b.id === currentId ? "active" : ""}`} onClick={() => onSelect(b.id)}>
-            <span className="board-link-name">{b.name}</span>
-            <span className="count">{counts[b.id] ?? 0}</span>
-          </button>
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={boards.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+            {boards.map((b) => (
+              <BoardLink
+                key={b.id}
+                board={b}
+                active={b.id === currentId}
+                count={counts[b.id] ?? 0}
+                onSelect={() => onSelect(b.id)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
         <input
           className="new-board"
           placeholder="+ Nouveau tableau"
@@ -70,5 +90,23 @@ export function Sidebar({ boards, currentId, counts, onSelect, onCreate, onSetti
         </button>
       </footer>
     </aside>
+  );
+}
+
+function BoardLink({ board, active, count, onSelect }: { board: Board; active: boolean; count: number; onSelect: () => void }) {
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: board.id });
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={`board-link ${active ? "active" : ""} ${isDragging ? "dragging" : ""}`}
+      {...attributes}
+      {...listeners}
+      onClick={onSelect}
+    >
+      <span className="board-link-name">{board.name}</span>
+      <span className="count">{count}</span>
+    </button>
   );
 }
