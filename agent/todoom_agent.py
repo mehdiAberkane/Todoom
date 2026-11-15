@@ -315,7 +315,8 @@ def tick(dry_run=False):
             card = read_json(path)
         except (OSError, json.JSONDecodeError):
             continue
-        if card.get("columnId") == cols[COL_TRIGGER]:
+        # Archived cards keep their column in Todoom but are off the board.
+        if card.get("columnId") == cols[COL_TRIGGER] and not card.get("archivedAt"):
             pending.append((card.get("order", 0), path, card))
     for _, path, card in sorted(pending, key=lambda p: p[0]):
         if dry_run:

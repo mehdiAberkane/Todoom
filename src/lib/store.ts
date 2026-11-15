@@ -59,6 +59,7 @@ function normalizeCard(raw: Partial<Card>, boardId: string): Card {
     labels: raw.labels ?? [],
     due: raw.due ?? null,
     checklist: raw.checklist ?? [],
+    archivedAt: raw.archivedAt ?? null,
     createdAt: raw.createdAt ?? now(),
     updatedAt: raw.updatedAt ?? "",
   };
@@ -253,8 +254,24 @@ export function useTodoom(backend: Backend) {
         run(() => backend.remove(boardDir(boardId)));
       },
 
+      archiveCard(card: Card) {
+        saveCard({ ...card, archivedAt: now() });
+      },
+
+      /** Puts the card back at the bottom of its column, or of the first column if its own was deleted. */
+      restoreCard(board: Board, card: Card, cards: Card[]) {
+        const columnId = board.columns.some((c) => c.id === card.columnId) ? card.columnId : board.columns[0]?.id;
+        if (!columnId) return;
+        const last = cards
+          .filter((c) => c.columnId === columnId && !c.archivedAt)
+          .reduce((m, c) => Math.max(m, c.order), -1);
+        saveCard({ ...card, columnId, order: last + 1, archivedAt: null });
+      },
+
+      /** The column's cards are archived, not deleted, so they can still be restored. */
       deleteColumn(board: Board, columnId: string, cards: Card[]) {
-        cards.filter((c) => c.columnId === columnId).forEach(deleteCard);
+        const t = now();
+        cards.filter((c) => c.columnId === columnId && !c.archivedAt).forEach((c) => saveCard({ ...c, archivedAt: t }));
         saveBoard({ ...board, columns: board.columns.filter((c) => c.id !== columnId) });
       },
 
@@ -270,6 +287,7 @@ export function useTodoom(backend: Backend) {
           labels: [],
           due: null,
           checklist: [],
+          archivedAt: null,
           createdAt: t,
           updatedAt: t,
         };

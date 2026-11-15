@@ -45,7 +45,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   }, [board?.id]);
 
   const counts = useMemo(
-    () => Object.fromEntries(Object.entries(data.cards).map(([id, cards]) => [id, cards.length])),
+    () => Object.fromEntries(Object.entries(data.cards).map(([id, cards]) => [id, cards.filter((c) => !c.archivedAt).length])),
     [data.cards],
   );
   const others = data.presence.filter((p) => p.host !== host && Date.now() - Date.parse(p.at) < PRESENCE_WINDOW_MS);

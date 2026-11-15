@@ -1,26 +1,33 @@
 import { useState } from "react";
 import type { Board, Card } from "../types";
-import { addDays, dueStatus, formatDateTime, uid } from "../lib/utils";
-import { DangerButton, Modal } from "./ui";
+import { addDays, dueStatus, formatDateTime, now, uid } from "../lib/utils";
+import { Modal } from "./ui";
 
 interface Props {
   card: Card;
   board: Board;
   onSave: (card: Card) => void;
-  onDelete: () => void;
   onClose: () => void;
   onManageLabels: () => void;
 }
 
 /** Edits a draft and saves once on close, so typing doesn't rewrite the file on every keystroke. */
-export function CardModal({ card, board, onSave, onDelete, onClose, onManageLabels }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels }: Props) {
   const [draft, setDraft] = useState(card);
   const [newItem, setNewItem] = useState("");
   const set = (patch: Partial<Card>) => setDraft((d) => ({ ...d, ...patch }));
 
+  const cleaned = () => ({ ...draft, title: draft.title.trim() || card.title });
+
   const close = () => {
-    const cleaned = { ...draft, title: draft.title.trim() || card.title };
-    if (JSON.stringify(cleaned) !== JSON.stringify(card)) onSave(cleaned);
+    const c = cleaned();
+    if (JSON.stringify(c) !== JSON.stringify(card)) onSave(c);
+    onClose();
+  };
+
+  // Keeps any pending edits; archiving is reversible, so no confirmation.
+  const archive = () => {
+    onSave({ ...cleaned(), archivedAt: now() });
     onClose();
   };
 
@@ -151,9 +158,9 @@ export function CardModal({ card, board, onSave, onDelete, onClose, onManageLabe
             {card.updatedAt && <div>Modifiée le {formatDateTime(card.updatedAt)}</div>}
           </div>
 
-          <DangerButton className="full" onConfirm={onDelete} confirmLabel="Clique encore pour l'anéantir">
-            🗑 Supprimer la carte
-          </DangerButton>
+          <button className="btn-ghost full" onClick={archive} title="La carte quitte le tableau ; elle reste restaurable depuis les archives">
+            📦 Archiver la carte
+          </button>
         </aside>
       </div>
     </Modal>

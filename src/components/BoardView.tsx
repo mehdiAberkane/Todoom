@@ -21,6 +21,7 @@ import { ColumnPreview, ColumnView } from "./ColumnView";
 import { CardBody } from "./CardTile";
 import { CardModal } from "./CardModal";
 import { LabelManager } from "./LabelManager";
+import { ArchiveModal } from "./ArchiveModal";
 import { DangerButton, InlineEdit } from "./ui";
 
 type Lists = Record<string, string[]>;
@@ -28,7 +29,11 @@ type Lists = Record<string, string[]>;
 const COL = "col:";
 const CARD = "card:";
 
-export function BoardView({ board, cards, actions }: { board: Board; cards: Card[]; actions: Actions }) {
+export function BoardView({ board, cards: allCards, actions }: { board: Board; cards: Card[]; actions: Actions }) {
+  // Everything below works on the cards still on the board; archived ones only show in the archive.
+  const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
+  const archived = useMemo(() => allCards.filter((c) => c.archivedAt), [allCards]);
+  const [showArchive, setShowArchive] = useState(false);
   const [query, setQuery] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
@@ -226,6 +231,9 @@ export function BoardView({ board, cards, actions }: { board: Board; cards: Card
           <button className="btn-ghost" onClick={() => setShowLabels(true)}>
             🏷 Étiquettes
           </button>
+          <button className="btn-ghost" onClick={() => setShowArchive(true)} title="Cartes archivées : restaurer ou supprimer">
+            📦 Archives{archived.length > 0 && ` (${archived.length})`}
+          </button>
           <DangerButton onConfirm={() => actions.deleteBoard(board.id)} confirmLabel="Supprimer le tableau ?" title="Supprimer ce tableau">
             🗑 Tableau
           </DangerButton>
@@ -286,15 +294,20 @@ export function BoardView({ board, cards, actions }: { board: Board; cards: Card
           card={openCard}
           board={board}
           onSave={actions.saveCard}
-          onDelete={() => {
-            actions.deleteCard(openCard);
-            setOpenCardId(null);
-          }}
           onClose={() => setOpenCardId(null)}
           onManageLabels={() => setShowLabels(true)}
         />
       )}
       {showLabels && <LabelManager board={board} onSave={actions.saveBoard} onClose={() => setShowLabels(false)} />}
+      {showArchive && (
+        <ArchiveModal
+          board={board}
+          cards={archived}
+          onRestore={(card) => actions.restoreCard(board, card, allCards)}
+          onDelete={actions.deleteCard}
+          onClose={() => setShowArchive(false)}
+        />
+      )}
     </div>
   );
 }

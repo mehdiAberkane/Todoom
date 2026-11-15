@@ -38,6 +38,8 @@ export interface Card {
   /** YYYY-MM-DD */
   due: string | null;
   checklist: ChecklistItem[];
+  /** Set when the card is archived: it leaves the board but can be restored. */
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
