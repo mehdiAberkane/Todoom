@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { backend } from "./lib/backend";
 import { useTodoom } from "./lib/store";
+import { useUpdater } from "./lib/updater";
 import { localGet, localSet } from "./lib/utils";
 import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
@@ -35,6 +36,7 @@ export default function App() {
 
 function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () => void }) {
   const { data, status, error, host, actions } = useTodoom(backend);
+  const updater = useUpdater();
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   const board = data.boards.find((b) => b.id === boardId) ?? data.boards[0];
 
@@ -62,6 +64,9 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         error={error}
         dataDir={dataDir}
         others={others}
+        version={updater.version}
+        update={updater.state}
+        onInstallUpdate={updater.install}
       />
       <main className="main">
         {board ? (

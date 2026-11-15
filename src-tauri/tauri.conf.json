@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Todoom",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "fr.devsecopsforce.todoom",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -35,6 +35,18 @@
       "icons/icon.ico"
     ],
     "category": "Productivity",
-    "shortDescription": "Gestion de tickets kanban"
+    "shortDescription": "Gestion de tickets kanban",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY4QTlBNkYwMjVGRUMzOTkKUldTWncvNGw4S2FwK0FnWU1qUnNkRWVESFc4YWVLRHFlYUVacmxMbWd5ay9uem13dmFUdmdWOHMK",
+      "endpoints": [
+        "https://github.com/mehdiAberkane/Todoom/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

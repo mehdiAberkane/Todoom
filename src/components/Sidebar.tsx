@@ -4,6 +4,7 @@ import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import type { Board, Presence } from "../types";
 import type { SyncStatus } from "../lib/store";
+import type { UpdateState } from "../lib/updater";
 
 const STATUS_TEXT: Record<SyncStatus, string> = {
   loading: "Chargement…",
@@ -24,9 +25,13 @@ interface Props {
   error: string | null;
   dataDir: string;
   others: Presence[];
+  version: string | null;
+  update: UpdateState;
+  onInstallUpdate: () => void;
 }
 
-export function Sidebar({ boards, currentId, counts, onSelect, onCreate, onMove, onSettings, status, error, dataDir, others }: Props) {
+export function Sidebar(props: Props) {
+  const { boards, currentId, counts, onSelect, onCreate, onMove, onSettings, status, error, dataDir, others } = props;
   const [name, setName] = useState("");
   // The distance threshold keeps a plain click selecting the board.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -77,6 +82,7 @@ export function Sidebar({ boards, currentId, counts, onSelect, onCreate, onMove,
       </nav>
 
       <footer className="sidebar-foot">
+        <UpdateBanner state={props.update} onInstall={props.onInstallUpdate} />
         {others.length > 0 && (
           <div className="presence" title="Ces machines ont Todoom ouvert en ce moment">
             👀 Aussi ouvert sur {others.map((o) => o.host).join(", ")}
@@ -88,9 +94,35 @@ export function Sidebar({ boards, currentId, counts, onSelect, onCreate, onMove,
         <button className="data-dir" onClick={onSettings} title="Changer de dossier de données">
           📁 <span>{dataDir}</span>
         </button>
+        {props.version && <div className="app-version">Todoom v{props.version}</div>}
       </footer>
     </aside>
   );
+}
+
+function UpdateBanner({ state, onInstall }: { state: UpdateState; onInstall: () => void }) {
+  switch (state.kind) {
+    case "available":
+      return (
+        <button className="update-btn" onClick={onInstall}>
+          ⬆ Mettre à jour vers {state.version}
+        </button>
+      );
+    case "installing":
+      return (
+        <div className="update-progress">
+          Installation…{state.progress !== null && ` ${Math.round(state.progress * 100)} %`}
+        </div>
+      );
+    case "error":
+      return (
+        <button className="update-error" onClick={onInstall} title={state.message}>
+          Échec de la mise à jour, réessayer
+        </button>
+      );
+    default:
+      return null;
+  }
 }
 
 function BoardLink({ board, active, count, onSelect }: { board: Board; active: boolean; count: number; onSelect: () => void }) {
