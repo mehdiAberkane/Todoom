@@ -440,3 +440,17 @@ textarea { resize: vertical; }
 @media (max-width: 760px) {
   .modal-body { grid-template-columns: 1fr; }
 }
+
+/* Card changed elsewhere while being edited */
+.external-banner { background: rgba(255, 159, 28, 0.12); border: 1px solid var(--accent-2); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.external-conflict { color: #ffb4a6; font-weight: 600; }
+.conflict-modal { width: min(620px, 100%); }
+.conflict-modal > p { margin: 0 0 12px; font-size: 13px; }
+.conflict { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+.conflict h4 { margin: 0 0 2px; }
+.conflict label { display: grid; grid-template-columns: auto 110px 1fr; gap: 10px; align-items: start; background: var(--card); border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.conflict label.on { border-color: var(--accent); }
+.conflict input { accent-color: var(--accent); margin-top: 2px; }
+.conflict-who { font-weight: 600; }
+.conflict-value { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.conflict-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
