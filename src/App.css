@@ -454,3 +454,12 @@ textarea { resize: vertical; }
 .conflict-who { font-weight: 600; }
 .conflict-value { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
 .conflict-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+
+/* Data files that could not be loaded */
+.issues-btn { background: rgba(255, 77, 46, 0.12); border: 1px solid var(--accent); color: #ffb4a6; border-radius: 8px; padding: 6px 10px; text-align: left; font-size: 12px; font-weight: 600; }
+.issues-modal { width: min(720px, 100%); }
+.issues-modal > p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+.issues-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.issues-list li { background: var(--card); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.issues-list code { overflow-wrap: anywhere; }
+.issues-list span { color: #ffb4a6; }

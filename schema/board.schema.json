@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mehdiAberkane/Todoom/schema/board.schema.json",
+  "title": "Todoom board",
+  "description": "One board: boards/<id>/board.json. Missing fields get defaults; a field of the wrong type makes Todoom skip the board and its cards.",
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "description": "Also the folder name under boards/." },
+    "name": { "type": "string" },
+    "columns": {
+      "type": "array",
+      "description": "In display order.",
+      "items": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" } } }
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "color"],
+        "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "color": { "type": "string", "description": "CSS color, e.g. #ff4d2e." } }
+      }
+    },
+    "order": { "type": "number", "description": "Position in the sidebar, lowest first." },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" }
+  }
+}

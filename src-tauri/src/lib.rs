@@ -265,6 +265,17 @@ async fn load_all(app: AppHandle) -> Result<Vec<FileEntry>, String> {
     .await
 }
 
+/// Never overwrites an existing file that isn't valid JSON: the UI lists such files
+/// for the user to repair, and writing over one would destroy what is left of it.
+fn refuse_unreadable(target: &Path, rel: &str) -> Result<(), String> {
+    match fs::read_to_string(target) {
+        Ok(existing) if serde_json::from_str::<serde_json::Value>(&existing).is_err() => Err(format!(
+            "{rel} est illisible (JSON invalide) : il n'est pas écrasé. Répare-le ou supprime-le à la main."
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// Writes through a temp file + rename so a half-written file never gets synced.
 #[tauri::command]
 async fn write_file(app: AppHandle, path: String, content: String) -> Result<(), String> {
@@ -275,6 +286,7 @@ async fn write_file(app: AppHandle, path: String, content: String) -> Result<(),
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
+        refuse_unreadable(&target, &path)?;
         remember(&state, &root, &target, false);
         let tmp = target.with_extension("json.tmp");
         fs::write(&tmp, &content).map_err(|e| e.to_string())?;
@@ -349,6 +361,21 @@ mod tests {
         let mut files: Vec<_> = out.into_iter().map(|f| (f.path, f.content)).collect();
         files.sort();
         files
+    }
+
+    #[test]
+    fn unreadable_files_are_not_overwritten() {
+        let dir = std::env::temp_dir().join(format!("todoom-refuse-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let (broken, valid, missing) = (dir.join("broken.json"), dir.join("valid.json"), dir.join("missing.json"));
+        fs::write(&broken, r#"{"id":"c1","title":"coupé par Dri"#).unwrap();
+        fs::write(&valid, r#"{"id":"c2"}"#).unwrap();
+
+        assert!(refuse_unreadable(&broken, "broken.json").unwrap_err().contains("illisible"));
+        assert!(refuse_unreadable(&valid, "valid.json").is_ok());
+        assert!(refuse_unreadable(&missing, "missing.json").is_ok());
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

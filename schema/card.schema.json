@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mehdiAberkane/Todoom/schema/card.schema.json",
+  "title": "Todoom card",
+  "description": "One card: boards/<boardId>/cards/<id>.json. Missing fields get defaults; a field of the wrong type makes Todoom skip the file and list it under « fichiers ignorés ». Keep fields you don't know about untouched when rewriting a card.",
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "description": "Also the file name, without .json." },
+    "boardId": { "type": "string", "description": "Informative: the board is the folder the file is in." },
+    "columnId": { "type": "string", "description": "Id of a column of board.json; an unknown id shows the card in the first column." },
+    "order": { "type": "number", "description": "Position in the column, lowest first. Any number; a card placed between two others gets the midpoint." },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "labels": { "type": "array", "items": { "type": "string" }, "description": "Ids of labels of board.json." },
+    "due": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "Due date, YYYY-MM-DD." },
+    "checklist": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "done"],
+        "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "done": { "type": "boolean" } }
+      }
+    },
+    "archivedAt": { "type": ["string", "null"], "description": "ISO date when archived; null while on the board." },
+    "createdAt": { "type": "string", "description": "ISO date." },
+    "updatedAt": { "type": "string", "description": "ISO date. Set it on every write: between Drive conflict copies the latest one wins." }
+  }
+}

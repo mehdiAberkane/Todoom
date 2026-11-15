@@ -3,7 +3,8 @@ import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type D
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Board, Presence } from "../types";
-import type { SyncStatus } from "../lib/store";
+import type { FileIssue, SyncStatus } from "../lib/store";
+import { Modal } from "./ui";
 import type { UpdateState } from "../lib/updater";
 
 const STATUS_TEXT: Record<SyncStatus, string> = {
@@ -27,6 +28,7 @@ interface Props {
   error: string | null;
   dataDir: string;
   others: Presence[];
+  issues: FileIssue[];
   version: string | null;
   update: UpdateState;
   onInstallUpdate: () => void;
@@ -85,6 +87,7 @@ export function Sidebar(props: Props) {
 
       <footer className="sidebar-foot">
         <UpdateBanner state={props.update} onInstall={props.onInstallUpdate} />
+        <FileIssues issues={props.issues} dataDir={dataDir} />
         {others.length > 0 && (
           <div className="presence" title="Ces machines ont Todoom ouvert en ce moment">
             👀 Aussi ouvert sur {others.map((o) => o.host).join(", ")}
@@ -102,6 +105,41 @@ export function Sidebar(props: Props) {
         {props.version && <div className="app-version">Todoom v{props.version}</div>}
       </footer>
     </aside>
+  );
+}
+
+function FileIssues({ issues, dataDir }: { issues: FileIssue[]; dataDir: string }) {
+  const [open, setOpen] = useState(false);
+  if (!issues.length) return null;
+  const n = issues.length;
+  return (
+    <>
+      <button className="issues-btn" onClick={() => setOpen(true)} title="Fichiers de données que Todoom n'a pas pu charger">
+        ⚠ {n} fichier{n > 1 ? "s" : ""} ignoré{n > 1 ? "s" : ""}
+      </button>
+      {open && (
+        <Modal onClose={() => setOpen(false)} className="issues-modal">
+          <div className="modal-head">
+            <h3>⚠ Fichiers non chargés</h3>
+            <button className="icon-btn" onClick={() => setOpen(false)} title="Fermer (Échap)">
+              ✕
+            </button>
+          </div>
+          <p className="muted">
+            Ces fichiers de <code>{dataDir}</code> n'ont pas pu être chargés. Todoom ne les écrase jamais : répare-les ou
+            supprime-les à la main. Un fichier en cours de synchronisation par Drive peut apparaître ici un instant.
+          </p>
+          <ul className="issues-list">
+            {issues.map((i) => (
+              <li key={i.path + i.reason}>
+                <code>{i.path}</code>
+                <span>{i.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+    </>
   );
 }
 

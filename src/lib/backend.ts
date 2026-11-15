@@ -63,6 +63,14 @@ const browserBackend: Backend = {
   loadAll: async () => Object.entries(readFs()).map(([path, content]) => ({ path, content })),
   write: async (path, content) => {
     const fs = readFs();
+    // Same rule as the desktop backend: never overwrite a file that isn't valid JSON.
+    if (path in fs) {
+      try {
+        JSON.parse(fs[path]);
+      } catch {
+        throw new Error(`${path} est illisible (JSON invalide) : il n'est pas écrasé. Répare-le ou supprime-le à la main.`);
+      }
+    }
     fs[path] = content;
     writeFs(fs);
   },

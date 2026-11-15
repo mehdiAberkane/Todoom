@@ -76,6 +76,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         error={error}
         dataDir={dataDir}
         others={others}
+        issues={data.issues}
         version={updater.version}
         update={updater.state}
         onInstallUpdate={updater.install}

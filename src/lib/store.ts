@@ -2,18 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
 import type { AppSettings, Board, Card, Presence } from "../types";
 import { LABEL_COLORS, now, orderBetween, uid } from "./utils";
+import { boardProblem, cardProblem, settingsProblem } from "./validate";
+
+/** A file of the data folder that couldn't be loaded, and why. */
+export interface FileIssue {
+  path: string;
+  reason: string;
+}
 
 export interface Data {
   boards: Board[];
   cards: Record<string, Card[]>;
   presence: Presence[];
   settings: AppSettings;
+  issues: FileIssue[];
 }
 
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
 export const DEFAULT_SETTINGS: AppSettings = { background: null, backgroundDim: 0.45, updatedAt: "" };
-const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS };
+const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [] };
 const SETTINGS_PATH = "settings.json";
 // Safety net only: the folder watcher reports other machines' changes as they happen.
 const POLL_MS = 120_000;
@@ -68,55 +76,86 @@ function normalizeCard(raw: Partial<Card>, boardId: string): Card {
   };
 }
 
+type Kind = "board" | "card" | "settings" | "presence";
+
+/** Which kind of Todoom file a path is, or null for files Todoom doesn't own. */
+function kindOf(parts: string[]): Kind | null {
+  if (parts[0] === ".presence") return "presence";
+  // Also matches Drive conflict copies such as "settings (1).json" or "board (1).json".
+  if (parts.length === 1 && parts[0].startsWith("settings")) return "settings";
+  if (parts[0] !== "boards") return null;
+  if (parts.length === 3 && parts[2].startsWith("board")) return "board";
+  if (parts.length === 4 && parts[2] === "cards") return "card";
+  return null;
+}
+
 /**
  * Turns the folder listing into app state. Drive conflict copies such as
  * "board (1).json" carry the same id, so the most recently updated one wins.
+ * Files that can't be used are listed in `issues` rather than dropped silently.
  */
-function parse(files: FileEntry[]): Data {
+export function parse(files: FileEntry[]): Data {
   const boards = new Map<string, Board>();
-  const cards = new Map<string, Card>();
+  const cards = new Map<string, { card: Card; path: string }>();
   const presence: Presence[] = [];
+  const issues: FileIssue[] = [];
   let settings = DEFAULT_SETTINGS;
 
   for (const file of files) {
+    const parts = file.path.split("/");
+    const kind = kindOf(parts);
+    if (!kind) continue;
     let raw;
     try {
       raw = JSON.parse(file.content);
     } catch {
+      // Heartbeats are rewritten every minute; a half-synced one isn't worth a warning.
+      if (kind !== "presence") issues.push({ path: file.path, reason: "JSON invalide (fichier partiel ou corrompu)" });
       continue;
     }
-    const parts = file.path.split("/");
-    if (parts[0] === ".presence") {
+    if (kind === "presence") {
       if (raw?.host && raw?.at) presence.push(raw);
       continue;
     }
-    // Also matches Drive conflict copies such as "settings (1).json".
-    if (parts.length === 1 && parts[0].startsWith("settings")) {
-      const s = { ...DEFAULT_SETTINGS, ...raw } as AppSettings;
-      if (s.updatedAt > settings.updatedAt) settings = s;
+    const why = kind === "card" ? cardProblem(raw) : kind === "board" ? boardProblem(raw) : settingsProblem(raw);
+    if (why) {
+      issues.push({ path: file.path, reason: why });
       continue;
     }
-    if (parts[0] !== "boards" || !raw?.id) continue;
-    if (parts.length === 3 && parts[2].startsWith("board")) {
+    if (kind === "settings") {
+      const s = { ...DEFAULT_SETTINGS, ...raw } as AppSettings;
+      if (s.updatedAt > settings.updatedAt) settings = s;
+    } else if (kind === "board") {
       const board = normalizeBoard(raw);
       const prev = boards.get(board.id);
       if (!prev || board.updatedAt > prev.updatedAt) boards.set(board.id, board);
-    } else if (parts.length === 4 && parts[2] === "cards") {
+    } else {
       const card = normalizeCard(raw, parts[1]);
       const prev = cards.get(card.id);
-      if (!prev || card.updatedAt > prev.updatedAt) cards.set(card.id, card);
+      if (!prev || card.updatedAt > prev.card.updatedAt) cards.set(card.id, { card, path: file.path });
     }
   }
 
   const byBoard: Record<string, Card[]> = {};
   for (const board of boards.values()) byBoard[board.id] = [];
-  for (const card of cards.values()) byBoard[card.boardId]?.push(card);
+  for (const { card, path } of cards.values()) {
+    const board = boards.get(card.boardId);
+    if (!board) {
+      issues.push({ path, reason: "son tableau (board.json) est absent ou illisible" });
+      continue;
+    }
+    byBoard[card.boardId].push(card);
+    if (!card.archivedAt && !board.columns.some((c) => c.id === card.columnId)) {
+      issues.push({ path, reason: "colonne inconnue : la carte est affichée dans la première colonne" });
+    }
+  }
 
   return {
     boards: sortBoards([...boards.values()]),
     cards: byBoard,
     presence,
     settings,
+    issues: issues.sort((a, b) => a.path.localeCompare(b.path)),
   };
 }
 

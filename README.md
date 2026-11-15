@@ -25,11 +25,17 @@ mémorisé par machine.
 Todoom/
   boards/<idTableau>/board.json         colonnes, étiquettes, nom
   boards/<idTableau>/cards/<idCarte>.json
+  settings.json                         paramètres partagés (fond d'écran)
   .presence/<nomDuPC>.json              « aussi ouvert sur… »
 ```
+
+Le format de chaque fichier est décrit dans [`schema/`](schema/) (schémas JSON) pour les
+scripts et agents qui écrivent dans le dossier. Un fichier illisible ou d'un format
+inattendu n'est pas affiché : il est listé dans la barre latérale (« ⚠ fichiers
+ignorés ») avec la raison, et Todoom ne l'écrase jamais.
 
 - Un fichier par carte : un conflit de synchro ne touche qu'une carte, et les copies
   de conflit de Drive (`xxx (1).json`) sont fusionnées en gardant la plus récente.
 - Les cartes ont un `order` décimal : déplacer une carte ne réécrit que cette carte.
 - L'app surveille le dossier et se recharge quand un autre PC modifie quelque chose
-  (plus un rafraîchissement toutes les 30 s et au retour sur la fenêtre).
+  (plus un rafraîchissement toutes les 2 min et au retour sur la fenêtre).

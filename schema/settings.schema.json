@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mehdiAberkane/Todoom/schema/settings.schema.json",
+  "title": "Todoom settings",
+  "description": "App-wide settings shared by every machine: settings.json at the root of the data folder.",
+  "type": "object",
+  "properties": {
+    "background": { "type": ["string", "null"], "description": "Background image as a JPEG data URL, or null." },
+    "backgroundDim": { "type": "number", "minimum": 0, "maximum": 0.9 },
+    "updatedAt": { "type": "string" }
+  }
+}
