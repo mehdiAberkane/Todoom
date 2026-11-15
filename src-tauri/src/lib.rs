@@ -318,6 +318,10 @@ pub fn run() {
             let state = app.state::<AppState>();
             *state.config.lock().unwrap() = load_config(&handle);
             start_watcher(&handle, &state);
+            // Shows which build is running, e.g. "Todoom v0.2.1".
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_title(&format!("Todoom v{}", app.package_info().version));
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
