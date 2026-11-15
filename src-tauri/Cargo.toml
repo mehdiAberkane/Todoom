@@ -1,6 +1,6 @@
 [package]
 name = "todoom"
-version = "0.2.1"
+version = "0.3.0"
 description = "Todoom - gestion de tickets kanban"
 authors = ["devsecops-force"]
 edition = "2024"
