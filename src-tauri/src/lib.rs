@@ -3,11 +3,11 @@
 //! machine changes something.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::{Component, Path, PathBuf},
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use notify_debouncer_mini::{
@@ -36,11 +36,31 @@ struct FileEntry {
 /// Paths we touched recently: (when, whether it covers everything below it).
 type RecentWrites = Arc<Mutex<HashMap<PathBuf, (Instant, bool)>>>;
 
+/// Last content read for a file, reused while its size and modification time are unchanged.
+struct CachedFile {
+    modified: SystemTime,
+    len: u64,
+    content: String,
+}
+
 #[derive(Default)]
 struct AppState {
     config: Mutex<Config>,
     recent_writes: RecentWrites,
     watcher: Mutex<Option<Debouncer<RecommendedWatcher>>>,
+    files: Mutex<HashMap<PathBuf, CachedFile>>,
+}
+
+/// Runs disk work on a blocking thread. Synchronous Tauri commands run on the main
+/// thread, so a slow drive (Google Drive's virtual G:) would freeze keyboard input.
+async fn blocking<T, F>(app: AppHandle, work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&AppHandle) -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || work(&app))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -137,21 +157,30 @@ fn get_data_dir(state: State<AppState>) -> Option<String> {
 }
 
 #[tauri::command]
-fn set_data_dir(app: AppHandle, state: State<AppState>, path: String) -> Result<(), String> {
-    fs::create_dir_all(&path).map_err(|e| format!("Impossible de créer {path} : {e}"))?;
-    {
-        let mut cfg = state.config.lock().unwrap();
-        cfg.data_dir = Some(path);
-        let json = serde_json::to_string_pretty(&*cfg).map_err(|e| e.to_string())?;
-        fs::write(config_path(&app)?, json).map_err(|e| e.to_string())?;
-    }
-    start_watcher(&app, &state);
-    Ok(())
+async fn set_data_dir(app: AppHandle, path: String) -> Result<(), String> {
+    blocking(app, move |app| {
+        let state = app.state::<AppState>();
+        fs::create_dir_all(&path).map_err(|e| format!("Impossible de créer {path} : {e}"))?;
+        {
+            let mut cfg = state.config.lock().unwrap();
+            cfg.data_dir = Some(path);
+            let json = serde_json::to_string_pretty(&*cfg).map_err(|e| e.to_string())?;
+            fs::write(config_path(app)?, json).map_err(|e| e.to_string())?;
+        }
+        state.files.lock().unwrap().clear();
+        start_watcher(app, &state);
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn suggest_data_dir(app: AppHandle) -> Result<Option<String>, String> {
+    blocking(app, |_| Ok(find_drive_folder())).await
 }
 
 /// Looks for a local Google Drive folder and proposes `<Drive>/Todoom`.
-#[tauri::command]
-fn suggest_data_dir() -> Option<String> {
+fn find_drive_folder() -> Option<String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     let names = ["Mon Drive", "My Drive"];
 
@@ -186,60 +215,95 @@ fn hostname() -> String {
     gethostname::gethostname().to_string_lossy().into_owned()
 }
 
-fn walk(root: &Path, dir: &Path, out: &mut Vec<FileEntry>) {
+/// Lists the JSON files, rereading only those whose size or modification time changed:
+/// on Google Drive a listing costs ~30 ms while reading every file costs seconds.
+fn walk(
+    root: &Path,
+    dir: &Path,
+    cache: &mut HashMap<PathBuf, CachedFile>,
+    seen: &mut Vec<PathBuf>,
+    out: &mut Vec<FileEntry>,
+) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
-            walk(root, &path, out);
-        } else if path.extension().is_some_and(|e| e == "json") {
-            if let (Ok(content), Ok(rel)) = (fs::read_to_string(&path), path.strip_prefix(root)) {
-                let path = rel.to_string_lossy().replace('\\', "/");
-                out.push(FileEntry { path, content });
-            }
+        let Ok(meta) = entry.metadata() else { continue };
+        if meta.is_dir() {
+            walk(root, &path, cache, seen, out);
+            continue;
         }
+        if !path.extension().is_some_and(|e| e == "json") {
+            continue;
+        }
+        let Ok(rel) = path.strip_prefix(root) else { continue };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        let fresh = cache
+            .get(&path)
+            .is_some_and(|c| c.modified == modified && c.len == meta.len());
+        if !fresh {
+            let Ok(content) = fs::read_to_string(&path) else { continue };
+            cache.insert(path.clone(), CachedFile { modified, len: meta.len(), content });
+        }
+        out.push(FileEntry { path: rel, content: cache[&path].content.clone() });
+        seen.push(path);
     }
 }
 
 #[tauri::command]
-fn load_all(state: State<AppState>) -> Result<Vec<FileEntry>, String> {
-    let root = data_root(&state)?;
-    let mut out = Vec::new();
-    walk(&root, &root, &mut out);
-    Ok(out)
+async fn load_all(app: AppHandle) -> Result<Vec<FileEntry>, String> {
+    blocking(app, |app| {
+        let state = app.state::<AppState>();
+        let root = data_root(&state)?;
+        let mut cache = state.files.lock().unwrap();
+        let (mut seen, mut out) = (Vec::new(), Vec::new());
+        walk(&root, &root, &mut cache, &mut seen, &mut out);
+        let seen: HashSet<_> = seen.into_iter().collect();
+        cache.retain(|p, _| seen.contains(p));
+        Ok(out)
+    })
+    .await
 }
 
 /// Writes through a temp file + rename so a half-written file never gets synced.
 #[tauri::command]
-fn write_file(state: State<AppState>, path: String, content: String) -> Result<(), String> {
-    let root = data_root(&state)?;
-    let target = resolve(&root, &path)?;
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    remember(&state, &root, &target, false);
-    let tmp = target.with_extension("json.tmp");
-    fs::write(&tmp, &content).map_err(|e| e.to_string())?;
-    if fs::rename(&tmp, &target).is_err() {
-        // Some virtual drives refuse renames over existing files.
-        let _ = fs::remove_file(&tmp);
-        fs::write(&target, &content).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+async fn write_file(app: AppHandle, path: String, content: String) -> Result<(), String> {
+    blocking(app, move |app| {
+        let state = app.state::<AppState>();
+        let root = data_root(&state)?;
+        let target = resolve(&root, &path)?;
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        remember(&state, &root, &target, false);
+        let tmp = target.with_extension("json.tmp");
+        fs::write(&tmp, &content).map_err(|e| e.to_string())?;
+        if fs::rename(&tmp, &target).is_err() {
+            // Some virtual drives refuse renames over existing files.
+            let _ = fs::remove_file(&tmp);
+            fs::write(&target, &content).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
-fn remove_path(state: State<AppState>, path: String) -> Result<(), String> {
-    let root = data_root(&state)?;
-    let target = resolve(&root, &path)?;
-    remember(&state, &root, &target, true);
-    if target.is_dir() {
-        fs::remove_dir_all(&target).map_err(|e| e.to_string())
-    } else if target.exists() {
-        fs::remove_file(&target).map_err(|e| e.to_string())
-    } else {
-        Ok(())
-    }
+async fn remove_path(app: AppHandle, path: String) -> Result<(), String> {
+    blocking(app, move |app| {
+        let state = app.state::<AppState>();
+        let root = data_root(&state)?;
+        let target = resolve(&root, &path)?;
+        remember(&state, &root, &target, true);
+        if target.is_dir() {
+            fs::remove_dir_all(&target).map_err(|e| e.to_string())
+        } else if target.exists() {
+            fs::remove_file(&target).map_err(|e| e.to_string())
+        } else {
+            Ok(())
+        }
+    })
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -265,4 +329,46 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn load(root: &Path, cache: &mut HashMap<PathBuf, CachedFile>) -> Vec<(String, String)> {
+        let (mut seen, mut out) = (Vec::new(), Vec::new());
+        walk(root, root, cache, &mut seen, &mut out);
+        let seen: HashSet<_> = seen.into_iter().collect();
+        cache.retain(|p, _| seen.contains(p));
+        let mut files: Vec<_> = out.into_iter().map(|f| (f.path, f.content)).collect();
+        files.sort();
+        files
+    }
+
+    #[test]
+    fn walk_cache_follows_changes() {
+        let root = std::env::temp_dir().join(format!("todoom-walk-{}", std::process::id()));
+        let cards = root.join("boards/b1/cards");
+        fs::create_dir_all(&cards).unwrap();
+        fs::write(root.join("boards/b1/board.json"), "board").unwrap();
+        fs::write(cards.join("c1.json"), "v1").unwrap();
+        fs::write(cards.join("skip.json.tmp"), "tmp").unwrap();
+        let mut cache = HashMap::new();
+
+        assert_eq!(
+            load(&root, &mut cache),
+            [("boards/b1/board.json".into(), "board".into()), ("boards/b1/cards/c1.json".into(), "v1".into())]
+        );
+
+        fs::write(cards.join("c1.json"), "version 2").unwrap();
+        fs::write(cards.join("c2.json"), "new").unwrap();
+        fs::remove_file(root.join("boards/b1/board.json")).unwrap();
+        assert_eq!(
+            load(&root, &mut cache),
+            [("boards/b1/cards/c1.json".into(), "version 2".into()), ("boards/b1/cards/c2.json".into(), "new".into())]
+        );
+        assert_eq!(cache.len(), 2);
+
+        fs::remove_dir_all(&root).unwrap();
+    }
 }

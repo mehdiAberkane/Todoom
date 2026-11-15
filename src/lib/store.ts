@@ -12,7 +12,8 @@ export interface Data {
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
 const EMPTY: Data = { boards: [], cards: {}, presence: [] };
-const POLL_MS = 30_000;
+// Safety net only: the folder watcher reports other machines' changes as they happen.
+const POLL_MS = 120_000;
 const HEARTBEAT_MS = 60_000;
 
 const DEFAULT_COLUMNS = ["À faire", "En cours", "Terminé"];
