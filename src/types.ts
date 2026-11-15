@@ -44,6 +44,15 @@ export interface Card {
   updatedAt: string;
 }
 
+/** App-wide preferences, stored once in the data folder so every machine shares them. */
+export interface AppSettings {
+  /** Background image as a compressed JPEG data URL, or null for the plain dark background. */
+  background: string | null;
+  /** How much the background is darkened to keep cards readable, from 0 to 0.9. */
+  backgroundDim: number;
+  updatedAt: string;
+}
+
 export interface Presence {
   host: string;
   at: string;

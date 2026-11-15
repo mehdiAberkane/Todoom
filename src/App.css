@@ -149,6 +149,51 @@ textarea { resize: vertical; }
 .data-dir span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
 .data-dir:hover { color: var(--text); }
 .app-version { color: var(--muted); font-size: 11px; opacity: 0.7; }
+.settings-link { background: transparent; border: 0; padding: 4px 0; color: var(--muted); text-align: left; font-size: 12px; }
+.settings-link:hover, .settings-link.active { color: var(--text); }
+
+/* Background image: panels turn translucent so the picture shows through. */
+.app { background-size: cover; background-position: center; }
+.has-bg .sidebar { background: rgba(20, 18, 24, 0.72); backdrop-filter: blur(14px); }
+.has-bg .board-head { background: rgba(14, 13, 17, 0.35); backdrop-filter: blur(6px); }
+.has-bg .column { background: rgba(29, 27, 35, 0.8); backdrop-filter: blur(10px); }
+.has-bg .add-column input { background: rgba(14, 13, 17, 0.55); }
+
+/* Settings page */
+.settings-page { flex: 1; overflow-y: auto; padding: 22px 28px 40px; }
+.settings-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.settings-head h1 { margin: 0; font-size: 22px; }
+.settings-section {
+  background: rgba(25, 23, 30, 0.88);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  max-width: 860px;
+  backdrop-filter: blur(10px);
+}
+.settings-section h2 { margin: 0 0 6px; font-size: 15px; }
+.settings-section > p { margin: 0 0 12px; font-size: 13px; }
+.bg-editor { display: flex; gap: 18px; flex-wrap: wrap; }
+.bg-preview {
+  width: 320px;
+  height: 180px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg) center / cover no-repeat;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.bg-preview-card { background: rgba(29, 27, 35, 0.8); backdrop-filter: blur(10px); border-radius: 8px; padding: 8px 14px; font-size: 12px; }
+.bg-controls { flex: 1; min-width: 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.dim-label { margin-top: 8px; font-size: 13px; }
+.bg-controls input[type="range"] { width: 100%; max-width: 320px; accent-color: var(--accent); }
+.bg-controls .hint { margin: 0; }
+.settings-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-path { background: var(--card); border-radius: 6px; padding: 6px 10px; font-size: 12px; overflow-wrap: anywhere; }
 .update-btn {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #1a0b06;

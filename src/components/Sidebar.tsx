@@ -20,6 +20,8 @@ interface Props {
   onSelect: (id: string) => void;
   onCreate: (name: string) => void;
   onMove: (movedId: string, ids: string[]) => void;
+  settingsOpen: boolean;
+  onOpenSettings: () => void;
   onSettings: () => void;
   status: SyncStatus;
   error: string | null;
@@ -93,6 +95,9 @@ export function Sidebar(props: Props) {
         </div>
         <button className="data-dir" onClick={onSettings} title="Changer de dossier de données">
           📁 <span>{dataDir}</span>
+        </button>
+        <button className={`settings-link ${props.settingsOpen ? "active" : ""}`} onClick={props.onOpenSettings}>
+          ⚙ Paramètres
         </button>
         {props.version && <div className="app-version">Todoom v{props.version}</div>}
       </footer>

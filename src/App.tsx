@@ -7,6 +7,7 @@ import { localGet, localSet } from "./lib/utils";
 import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
 import { Setup } from "./components/Setup";
+import { SettingsPage } from "./components/SettingsPage";
 
 const PRESENCE_WINDOW_MS = 3 * 60_000;
 
@@ -38,7 +39,16 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const { data, status, error, host, actions } = useTodoom(backend);
   const updater = useUpdater();
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
+  const [showSettings, setShowSettings] = useState(false);
   const board = data.boards.find((b) => b.id === boardId) ?? data.boards[0];
+  const openBoard = (id: string) => {
+    setBoardId(id);
+    setShowSettings(false);
+  };
+  const { background, backgroundDim } = data.settings;
+  const backgroundStyle = background
+    ? { backgroundImage: `linear-gradient(rgba(0,0,0,${backgroundDim}), rgba(0,0,0,${backgroundDim})), url(${background})` }
+    : undefined;
 
   useEffect(() => {
     if (board) localSet("todoom-board", board.id);
@@ -51,13 +61,15 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const others = data.presence.filter((p) => p.host !== host && Date.now() - Date.parse(p.at) < PRESENCE_WINDOW_MS);
 
   return (
-    <div className="app">
+    <div className={`app ${background ? "has-bg" : ""}`} style={backgroundStyle}>
       <Sidebar
         boards={data.boards}
-        currentId={board?.id}
+        currentId={showSettings ? undefined : board?.id}
         counts={counts}
-        onSelect={setBoardId}
-        onCreate={(name) => setBoardId(actions.createBoard(name, data.boards).id)}
+        onSelect={openBoard}
+        onCreate={(name) => openBoard(actions.createBoard(name, data.boards).id)}
+        settingsOpen={showSettings}
+        onOpenSettings={() => setShowSettings(true)}
         onMove={(movedId, ids) => actions.moveBoard(data.boards, movedId, ids)}
         onSettings={onSettings}
         status={status}
@@ -69,7 +81,16 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         onInstallUpdate={updater.install}
       />
       <main className="main">
-        {board ? (
+        {showSettings ? (
+          <SettingsPage
+            settings={data.settings}
+            onSave={actions.saveSettings}
+            dataDir={dataDir}
+            onChangeDataDir={onSettings}
+            version={updater.version}
+            onBack={() => setShowSettings(false)}
+          />
+        ) : board ? (
           <BoardView key={board.id} board={board} cards={data.cards[board.id] ?? []} actions={actions} />
         ) : status === "loading" ? (
           <div className="empty-state">Chargement…</div>

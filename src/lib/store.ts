@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
-import type { Board, Card, Presence } from "../types";
+import type { AppSettings, Board, Card, Presence } from "../types";
 import { LABEL_COLORS, now, orderBetween, uid } from "./utils";
 
 export interface Data {
   boards: Board[];
   cards: Record<string, Card[]>;
   presence: Presence[];
+  settings: AppSettings;
 }
 
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
-const EMPTY: Data = { boards: [], cards: {}, presence: [] };
+export const DEFAULT_SETTINGS: AppSettings = { background: null, backgroundDim: 0.45, updatedAt: "" };
+const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS };
+const SETTINGS_PATH = "settings.json";
 // Safety net only: the folder watcher reports other machines' changes as they happen.
 const POLL_MS = 120_000;
 const HEARTBEAT_MS = 60_000;
@@ -73,6 +76,7 @@ function parse(files: FileEntry[]): Data {
   const boards = new Map<string, Board>();
   const cards = new Map<string, Card>();
   const presence: Presence[] = [];
+  let settings = DEFAULT_SETTINGS;
 
   for (const file of files) {
     let raw;
@@ -84,6 +88,12 @@ function parse(files: FileEntry[]): Data {
     const parts = file.path.split("/");
     if (parts[0] === ".presence") {
       if (raw?.host && raw?.at) presence.push(raw);
+      continue;
+    }
+    // Also matches Drive conflict copies such as "settings (1).json".
+    if (parts.length === 1 && parts[0].startsWith("settings")) {
+      const s = { ...DEFAULT_SETTINGS, ...raw } as AppSettings;
+      if (s.updatedAt > settings.updatedAt) settings = s;
       continue;
     }
     if (parts[0] !== "boards" || !raw?.id) continue;
@@ -106,6 +116,7 @@ function parse(files: FileEntry[]): Data {
     boards: sortBoards([...boards.values()]),
     cards: byBoard,
     presence,
+    settings,
   };
 }
 
@@ -209,6 +220,12 @@ export function useTodoom(backend: Backend) {
       saveCard,
       deleteCard,
       saveBoard,
+
+      saveSettings(settings: AppSettings) {
+        const saved = { ...settings, updatedAt: now() };
+        setData((d) => ({ ...d, settings: saved }));
+        writeJson(SETTINGS_PATH, saved);
+      },
 
       /** `ids` is the full sidebar order after the drop; only the moved board is rewritten when possible. */
       moveBoard(boards: Board[], movedId: string, ids: string[]) {
