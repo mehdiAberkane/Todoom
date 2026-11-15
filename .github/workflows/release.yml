@@ -41,6 +41,24 @@ jobs:
 
       - run: npm ci
 
+      # Fails in seconds, before the long build, when the update signing secrets
+      # are missing or don't match. Errors go to annotations, which are readable
+      # without signing in (unlike the job logs).
+      - name: Check update signing secrets
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY absent ou vide"; exit 1; }
+          [ -n "$PASSWORD" ] || { echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY_PASSWORD absent ou vide"; exit 1; }
+          echo probe > "$RUNNER_TEMP/probe.txt"
+          if ! out=$(npx tauri signer sign -k "$KEY" -p "$PASSWORD" "$RUNNER_TEMP/probe.txt" 2>&1); then
+            echo "::error::Clé de signature refusée : $(echo "$out" | tail -n 2 | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "Clé et mot de passe de signature valides."
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
