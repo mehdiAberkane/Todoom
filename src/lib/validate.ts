@@ -36,8 +36,11 @@ const BOARD: Check[] = [
   ["updatedAt", optional(isString)],
 ];
 
+// Base64 only: no quote or parenthesis can break out of the CSS url() it goes into.
+const isImageDataUrl = (v: unknown) => isString(v) && /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(v);
+
 const SETTINGS: Check[] = [
-  ["background", nullable(isString)],
+  ["background", nullable(isImageDataUrl)],
   ["backgroundDim", optional(isNumber)],
   ["updatedAt", optional(isString)],
 ];

@@ -54,6 +54,21 @@ describe("loading the data folder", () => {
     expect(data.issues).toEqual([]);
   });
 
+  it("only accepts a base64 image as background, so nothing can break out of url()", () => {
+    const ok = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+    expect(parse(files({ "settings.json": JSON.stringify({ background: ok, updatedAt: "1" }) })).settings.background).toBe(ok);
+    for (const trap of [
+      'data:image/png;base64,AAAA"), url("https://evil.example/x.png',
+      "https://evil.example/tracker.png",
+      "javascript:alert(1)",
+      "data:text/html;base64,PHNjcmlwdD4=",
+    ]) {
+      const data = parse(files({ "settings.json": JSON.stringify({ background: trap, updatedAt: "1" }) }));
+      expect(data.settings.background).toBeNull();
+      expect(data.issues[0].reason).toBe("champ « background » de type inattendu");
+    }
+  });
+
   it("reports an unreadable settings file and keeps the defaults", () => {
     const data = parse(files({ "settings.json": JSON.stringify({ backgroundDim: "fort" }) }));
     expect(data.settings.background).toBeNull();

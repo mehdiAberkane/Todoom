@@ -97,6 +97,64 @@ fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
     Ok(root.join(rel_path))
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Access {
+    Write,
+    Remove,
+}
+
+/// The only paths the UI may write or delete, relative to the data folder: the
+/// files Todoom itself produces. Anything else is refused, so the commands can't
+/// be turned into "write or delete any file" even from injected script.
+fn allowed(rel: &str, access: Access) -> bool {
+    let id = |s: &str| {
+        !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    };
+    let json_id = |s: &str| s.strip_suffix(".json").is_some_and(id);
+    let parts: Vec<&str> = rel.split('/').collect();
+    match (access, parts.as_slice()) {
+        (Access::Write, ["settings.json"]) => true,
+        (Access::Write, [".presence", file]) => json_id(file),
+        (Access::Write, ["boards", board, "board.json"]) => id(board),
+        (_, ["boards", board, "cards", file]) => id(board) && json_id(file),
+        (Access::Remove, ["boards", board]) => id(board),
+        _ => false,
+    }
+}
+
+/// Folders that must never become the data folder: a whole drive, the home folder
+/// itself or a system folder would be scanned on every reload and written into.
+fn check_data_dir(path: &Path) -> Result<(), String> {
+    let shown = path.display();
+    if !path.is_absolute() {
+        return Err(format!("{shown} n'est pas un chemin complet."));
+    }
+    if path.parent().is_none() {
+        return Err(format!("{shown} est la racine d'un disque : choisis un dossier dédié, par exemple …\\Mon Drive\\Todoom."));
+    }
+    let lower = |p: &Path| p.to_string_lossy().to_lowercase().trim_end_matches(['\\', '/']).to_string();
+    let target = lower(path);
+    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+        if target == lower(Path::new(&home)) {
+            return Err(format!("{shown} est ton dossier personnel : choisis un sous-dossier dédié."));
+        }
+    }
+    let mut system: Vec<PathBuf> = ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"]
+        .iter()
+        .filter_map(|v| std::env::var_os(v).map(PathBuf::from))
+        .collect();
+    if cfg!(unix) {
+        system.extend(["/System", "/Library", "/Applications", "/bin", "/sbin", "/usr", "/etc", "/var", "/private"].map(PathBuf::from));
+    }
+    for dir in system {
+        let dir = lower(&dir);
+        if target == dir || target.starts_with(&format!("{dir}\\")) || target.starts_with(&format!("{dir}/")) {
+            return Err(format!("{shown} est un dossier système : choisis un dossier à toi, par exemple dans ton Google Drive."));
+        }
+    }
+    Ok(())
+}
+
 fn is_temp(path: &Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
@@ -160,6 +218,7 @@ fn get_data_dir(state: State<AppState>) -> Option<String> {
 async fn set_data_dir(app: AppHandle, path: String) -> Result<(), String> {
     blocking(app, move |app| {
         let state = app.state::<AppState>();
+        check_data_dir(Path::new(&path))?;
         fs::create_dir_all(&path).map_err(|e| format!("Impossible de créer {path} : {e}"))?;
         {
             let mut cfg = state.config.lock().unwrap();
@@ -282,6 +341,9 @@ async fn write_file(app: AppHandle, path: String, content: String) -> Result<(),
     blocking(app, move |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
+        if !allowed(&path, Access::Write) {
+            return Err(format!("Écriture refusée : {path} n'est pas un fichier de données Todoom."));
+        }
         let target = resolve(&root, &path)?;
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -305,6 +367,9 @@ async fn remove_path(app: AppHandle, path: String) -> Result<(), String> {
     blocking(app, move |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
+        if !allowed(&path, Access::Remove) {
+            return Err(format!("Suppression refusée : {path} n'est pas une carte ni un tableau Todoom."));
+        }
         let target = resolve(&root, &path)?;
         remember(&state, &root, &target, true);
         if target.is_dir() {
@@ -361,6 +426,74 @@ mod tests {
         let mut files: Vec<_> = out.into_iter().map(|f| (f.path, f.content)).collect();
         files.sort();
         files
+    }
+
+    #[test]
+    fn only_todoom_data_files_can_be_written_or_removed() {
+        for ok in ["settings.json", ".presence/PC-Main.json", "boards/mw0abc/board.json", "boards/mw0abc/cards/mw0xyz.json"] {
+            assert!(allowed(ok, Access::Write), "{ok}");
+        }
+        for ok in ["boards/mw0abc", "boards/mw0abc/cards/mw0xyz.json"] {
+            assert!(allowed(ok, Access::Remove), "{ok}");
+        }
+        let traps = [
+            "",
+            "boards",
+            "../outside.json",
+            "boards/../../Windows/win.ini",
+            "boards/b1/../../x.json",
+            "C:/Windows/System32/drivers/etc/hosts",
+            "/etc/passwd",
+            "boards/b1/cards/c1.exe",
+            "boards/b1/cards/c1.json/../../evil.json",
+            "boards/b 1/board.json",
+            "boards/b1/cards/sub/c1.json",
+            ".presence/../settings.json",
+            "settings.json.bak",
+            "boards\\b1\\board.json",
+        ];
+        for trap in traps {
+            assert!(!allowed(trap, Access::Write), "écriture acceptée : {trap}");
+            assert!(!allowed(trap, Access::Remove), "suppression acceptée : {trap}");
+        }
+        // Whole folders other than one board, and settings/presence, can't be removed.
+        for no in ["settings.json", ".presence/PC.json", "boards/b1/board.json", "boards/b1/cards", ".presence"] {
+            assert!(!allowed(no, Access::Remove), "{no}");
+        }
+    }
+
+    #[test]
+    fn resolve_never_leaves_the_data_folder() {
+        let root = Path::new("/data");
+        assert!(resolve(root, "boards/b1/board.json").is_ok());
+        for trap in ["", "..", "../x.json", "boards/../../x", "/etc/passwd"] {
+            assert!(resolve(root, trap).is_err(), "{trap}");
+        }
+        // Only an absolute path on Windows; elsewhere `allowed` rejects the backslashes.
+        if cfg!(windows) {
+            assert!(resolve(root, "C:\\Windows\\win.ini").is_err());
+        }
+    }
+
+    #[test]
+    fn data_folder_cannot_be_a_drive_root_home_or_system_folder() {
+        assert!(check_data_dir(Path::new("relative/folder")).is_err());
+        if cfg!(windows) {
+            assert!(check_data_dir(Path::new("C:\\")).is_err());
+            assert!(check_data_dir(Path::new("G:\\")).is_err());
+            let windir = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+            assert!(check_data_dir(Path::new(&windir)).is_err());
+            assert!(check_data_dir(&Path::new(&windir).join("System32")).is_err());
+            assert!(check_data_dir(Path::new(&std::env::var("ProgramFiles").unwrap())).is_err());
+            assert!(check_data_dir(Path::new(&std::env::var("USERPROFILE").unwrap())).is_err());
+            assert!(check_data_dir(Path::new("G:\\Mon Drive\\Todoom")).is_ok());
+            assert!(check_data_dir(&Path::new(&std::env::var("USERPROFILE").unwrap()).join("Todoom")).is_ok());
+        } else {
+            assert!(check_data_dir(Path::new("/")).is_err());
+            assert!(check_data_dir(Path::new("/etc/todoom")).is_err());
+            assert!(check_data_dir(Path::new(&std::env::var("HOME").unwrap())).is_err());
+            assert!(check_data_dir(&Path::new(&std::env::var("HOME").unwrap()).join("Todoom")).is_ok());
+        }
     }
 
     #[test]

@@ -5,8 +5,21 @@
   "description": "App-wide settings shared by every machine: settings.json at the root of the data folder.",
   "type": "object",
   "properties": {
-    "background": { "type": ["string", "null"], "description": "Background image as a JPEG data URL, or null." },
-    "backgroundDim": { "type": "number", "minimum": 0, "maximum": 0.9 },
-    "updatedAt": { "type": "string" }
+    "background": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^data:image/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$",
+      "description": "Background image as a base64 image data URL, or null. Anything else makes Todoom ignore settings.json."
+    },
+    "backgroundDim": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.9
+    },
+    "updatedAt": {
+      "type": "string"
+    }
   }
 }

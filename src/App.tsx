@@ -47,7 +47,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   };
   const { background, backgroundDim } = data.settings;
   const backgroundStyle = background
-    ? { backgroundImage: `linear-gradient(rgba(0,0,0,${backgroundDim}), rgba(0,0,0,${backgroundDim})), url(${background})` }
+    ? { backgroundImage: `linear-gradient(rgba(0,0,0,${backgroundDim}), rgba(0,0,0,${backgroundDim})), url("${background}")` }
     : undefined;
 
   useEffect(() => {

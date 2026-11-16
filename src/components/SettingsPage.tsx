@@ -58,7 +58,7 @@ export function SettingsPage({ settings, onSave, dataDir, onChangeDataDir, versi
             className="bg-preview"
             style={
               settings.background
-                ? { backgroundImage: `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim})), url(${settings.background})` }
+                ? { backgroundImage: `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim})), url("${settings.background}")` }
                 : undefined
             }
           >
