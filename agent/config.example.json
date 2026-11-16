@@ -6,5 +6,6 @@
   "base_branch": "main",
   "remote": "origin",
   "poll_seconds": 30,
-  "ticket_timeout_minutes": 45
+  "ticket_timeout_minutes": 45,
+  "sandbox": []
 }

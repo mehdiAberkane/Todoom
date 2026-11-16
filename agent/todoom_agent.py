@@ -35,6 +35,9 @@ BASE_BRANCH = "main"
 REMOTE = "origin"
 POLL_SECONDS = 30
 TICKET_TIMEOUT = 45 * 60
+# Optional command that runs Claude elsewhere (container, other account), e.g.
+# ["docker", "run", "--rm", "-v", "{repo}:/work", "-w", "/work", "todoom-agent"].
+SANDBOX = []
 
 COL_TRIGGER = "En cours"
 COL_LOCK = "Agent"
@@ -76,6 +79,14 @@ Réponds uniquement par le nom de la branche.
 Ticket : {title}
 {description}
 """
+
+# Ticket text is untrusted input, and Claude may run `go run` / `go test`, which
+# execute any code. Whatever runs under it doesn't inherit tokens, passwords or
+# the SSH agent; Claude's own login (ANTHROPIC_*, CLAUDE_*) is kept. Files the
+# user can read (~/.ssh, …) stay readable: only SANDBOX removes that.
+SECRET_ENV = re.compile(r"TOKEN|SECRET|PASSW|API_?KEY|PRIVATE_KEY|CREDENTIAL|ASKPASS|SSH_AUTH_SOCK|SSH_AGENT"
+                        r"|^AWS_|^AZURE_|^GOOGLE_APPLICATION", re.IGNORECASE)
+KEEP_ENV = re.compile(r"^(ANTHROPIC_|CLAUDE_)", re.IGNORECASE)
 
 BRANCH_RE = re.compile(r"(feature|hotfix|bugfix|security|quality)/[a-z0-9]+(-[a-z0-9]+)*")
 BRANCH_KEYWORDS = [
@@ -161,7 +172,7 @@ def guess_branch(card):
 def suggest_branch(card):
     prompt = NAME_PROMPT.format(title=card["title"], description=card["description"].strip())
     try:
-        proc = subprocess.run([claude_path(), "-p", prompt, "--model", "haiku"], cwd=REPO,
+        proc = subprocess.run(claude_cmd("-p", prompt, "--model", "haiku"), cwd=REPO, env=claude_env(),
                               capture_output=True, text=True, encoding="utf-8", timeout=120)
     except (OSError, subprocess.TimeoutExpired):
         return guess_branch(card)
@@ -207,18 +218,29 @@ def claude_path():
     return shutil.which("claude") or (str(default) if default.exists() else "claude")
 
 
+def claude_cmd(*args):
+    """The claude command line, inside SANDBOX when one is configured."""
+    if SANDBOX:
+        return [part.replace("{repo}", str(REPO)) for part in SANDBOX] + ["claude", *args]
+    return [claude_path(), *args]
+
+
+def claude_env():
+    return {k: v for k, v in os.environ.items() if KEEP_ENV.match(k) or not SECRET_ENV.search(k)}
+
+
 def run_claude(card, branch):
     checklist = "\n".join(f"- [{'x' if i['done'] else ' '}] {i['text']}" for i in card["checklist"])
     details = "\n".join(p for p in (card["description"].strip(), checklist) if p) or "(pas de détail)"
     prompt = PROMPT.format(project=PROJECT, repo=REPO, branch=branch, title=card["title"],
                            details=details, checks=CHECKS)
-    cmd = [claude_path(), "-p", prompt,
-           "--output-format", "json",
-           "--permission-mode", "acceptEdits",
-           "--allowedTools", *ALLOWED_TOOLS,
-           "--disallowedTools", *DISALLOWED_TOOLS]
-    proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, encoding="utf-8",
-                          timeout=TICKET_TIMEOUT)
+    cmd = claude_cmd("-p", prompt,
+                     "--output-format", "json",
+                     "--permission-mode", "acceptEdits",
+                     "--allowedTools", *ALLOWED_TOOLS,
+                     "--disallowedTools", *DISALLOWED_TOOLS)
+    proc = subprocess.run(cmd, cwd=REPO, env=claude_env(), capture_output=True, text=True,
+                          encoding="utf-8", timeout=TICKET_TIMEOUT)
     try:
         out = json.loads(proc.stdout)
         return not out.get("is_error") and proc.returncode == 0, out.get("result", "").strip()
@@ -326,7 +348,7 @@ def tick(dry_run=False):
 
 
 def load_config():
-    global BOARD_DIR, REPO, PROJECT, CHECKS, BASE_BRANCH, REMOTE, POLL_SECONDS, TICKET_TIMEOUT
+    global BOARD_DIR, REPO, PROJECT, CHECKS, BASE_BRANCH, REMOTE, POLL_SECONDS, TICKET_TIMEOUT, SANDBOX
     try:
         cfg = read_json(CONFIG_PATH)
     except FileNotFoundError:
@@ -339,6 +361,9 @@ def load_config():
     REMOTE = cfg.get("remote", REMOTE)
     POLL_SECONDS = cfg.get("poll_seconds", POLL_SECONDS)
     TICKET_TIMEOUT = cfg.get("ticket_timeout_minutes", TICKET_TIMEOUT // 60) * 60
+    SANDBOX = cfg.get("sandbox", SANDBOX)
+    if not (isinstance(SANDBOX, list) and all(isinstance(p, str) for p in SANDBOX)):
+        sys.exit("« sandbox » doit être une liste de chaînes, par exemple [\"docker\", \"run\", …].")
 
 
 def main():
@@ -350,6 +375,9 @@ def main():
     dry_run = "--dry-run" in sys.argv
     once = dry_run or "--once" in sys.argv
     log.info("agent démarré, surveille « %s » de %s", COL_TRIGGER, BOARD_DIR)
+    if not SANDBOX:
+        log.warning("ATTENTION : Claude s'exécute avec tes droits (fichiers, clés SSH). Un ticket piégé peut "
+                    "faire exécuter du code. Voir la section Sécurité de agent/README.md.")
     while True:
         try:
             tick(dry_run)

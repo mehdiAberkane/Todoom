@@ -1,2 +1,5 @@
 # Local settings: board id and paths of this machine
 config.json
+
+# Created when the tests or the agent run
+__pycache__/
