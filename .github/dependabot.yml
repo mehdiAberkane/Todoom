@@ -1,0 +1,12 @@
+# Opens a pull request when a pinned GitHub Action has a new release, updating
+# the commit SHA and the version comment together. Review what changed in the
+# action before merging: the release workflow holds the update signing key.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

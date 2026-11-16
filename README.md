@@ -39,3 +39,10 @@ ignorés ») avec la raison, et Todoom ne l'écrase jamais.
 - Les cartes ont un `order` décimal : déplacer une carte ne réécrit que cette carte.
 - L'app surveille le dossier et se recharge quand un autre PC modifie quelque chose
   (plus un rafraîchissement toutes les 2 min et au retour sur la fenêtre).
+
+## Publier une version
+
+`npm run release` (ou `minor`, `major`, `x.y.z`) monte la version, crée le tag et le
+pousse ; GitHub Actions construit Windows + macOS, signe et publie la Release, que
+Todoom propose d'installer. La clé de signature, sa sauvegarde et son remplacement :
+[`docs/cle-de-signature.md`](docs/cle-de-signature.md).
