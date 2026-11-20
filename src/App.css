@@ -483,3 +483,10 @@ textarea { resize: vertical; }
 .trash-list li { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 8px; padding: 8px 10px; }
 .trash-info { flex: 1; min-width: 0; font-size: 12px; }
 .trash-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+
+.zoom-indicator {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 1000;
+  padding: 6px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--border);
+  color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}

@@ -11,6 +11,7 @@
     "updater:default",
     "process:allow-restart",
     "dialog:allow-ask",
-    "core:window:allow-destroy"
+    "core:window:allow-destroy",
+    "core:webview:allow-set-webview-zoom"
   ]
 }
