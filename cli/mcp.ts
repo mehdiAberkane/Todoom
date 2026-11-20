@@ -37,7 +37,9 @@ export function createServer(dir: string): McpServer {
     "list_boards",
     {
       title: "List boards",
-      description: "Todoom boards with their columns (in board order), labels and priority levels (highest first).",
+      description:
+        "Todoom boards with their columns (in board order), labels and priority levels (highest first). " +
+        "Before working on a board's tickets, read its context with get_board.",
       inputSchema: { includeTrashed: z.boolean().optional().describe("Also list boards in the trash") },
       annotations: readOnly,
     },
@@ -55,6 +57,30 @@ export function createServer(dir: string): McpServer {
             priorities: prioritiesOf(b).map((p) => p.name),
           })),
       ),
+  );
+
+  server.registerTool(
+    "get_board",
+    {
+      title: "Get a board and its context",
+      description:
+        "A board with its context page (description): repository, working rules, vocabulary, what each column means. " +
+        "Read it before taking a ticket of this board, and follow it.",
+      inputSchema: { board: z.string().describe("Board name") },
+      annotations: readOnly,
+    },
+    ({ board }) => run(() => store.boardDetail(board)),
+  );
+
+  server.registerTool(
+    "update_board",
+    {
+      title: "Write a board's context",
+      description: "Replaces the board's context page (description). Only when the user asks to write or change it.",
+      inputSchema: { board: z.string().describe("Board name"), description: z.string() },
+      annotations: writes,
+    },
+    ({ board, description }) => run(() => store.setBoardDescription(board, description)),
   );
 
   server.registerTool(
@@ -215,7 +241,7 @@ export function createServer(dir: string): McpServer {
       description:
         "Marks the card as being worked on by this computer and this conversation, and optionally moves it (e.g. to « En cours »). " +
         "Refused when someone else (another computer, agent or conversation) holds it: then leave it, unless the user says otherwise. " +
-        "Take a card before working on it, and release it when done.",
+        "Take a card before working on it (after reading its board's context with get_board), and release it when done.",
       inputSchema: {
         card: z.string().describe("Card short id (SOL-42) or id"),
         column: z.string().optional().describe("Column to move the card to at the same time"),

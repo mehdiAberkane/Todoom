@@ -67,7 +67,7 @@ DISALLOWED_TOOLS = ["Bash(git push*)", "Bash(git checkout*)", "Bash(git switch*)
 PROMPT = """Tu travailles sur le projet {project} dans {repo}.
 Tu es sur la branche git {branch}, créée pour ce ticket. Reste dessus.
 
-Ticket : {title}
+{context}Ticket : {title}
 {details}
 
 Consignes :
@@ -343,13 +343,22 @@ def claude_env():
     return {k: v for k, v in os.environ.items() if KEEP_ENV.match(k) or not SECRET_ENV.search(k)}
 
 
+def board_context():
+    """The board's context page (written in Todoom), given to Claude before the ticket."""
+    try:
+        text = (read_json(BOARD_DIR / "board.json").get("description") or "").strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        text = ""
+    return f"Contexte du tableau (à respecter) :\n{text}\n\n" if text else ""
+
+
 def run_claude(card, branch):
     checklist = "\n".join(f"- [{'x' if i['done'] else ' '}] {i['text']}" for i in card["checklist"])
     remarks = "\n\n".join(f"Commentaire ({c.get('author', {}).get('host', '?')}, {c.get('createdAt', '')[:16]}) :\n{c['text']}"
                           for c in comments_of(card))
     details = "\n\n".join(p for p in (card["description"].strip(), checklist, remarks) if p) or "(pas de détail)"
     prompt = PROMPT.format(project=PROJECT, repo=REPO, branch=branch, title=card["title"],
-                           details=details, checks=CHECKS)
+                           details=details, checks=CHECKS, context=board_context())
     cmd = claude_cmd("-p", prompt,
                      "--output-format", "json",
                      "--permission-mode", "acceptEdits",

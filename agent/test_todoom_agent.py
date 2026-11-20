@@ -211,3 +211,13 @@ class ClaimTest(unittest.TestCase):
         released = agent.set_claim(card, False)
         self.assertIsNone(card["claimedBy"])
         self.assertIsNone(released[0]["to"])
+
+
+class ContextTest(unittest.TestCase):
+    def test_the_board_context_goes_before_the_ticket(self):
+        with mock.patch.object(agent, "read_json", return_value={"description": "Dépôt : solaris\nRègle : pas de push"}), \
+             mock.patch.object(agent, "BOARD_DIR", Path("board")):
+            self.assertEqual(agent.board_context(), "Contexte du tableau (à respecter) :\nDépôt : solaris\nRègle : pas de push\n\n")
+        with mock.patch.object(agent, "read_json", return_value={}), mock.patch.object(agent, "BOARD_DIR", Path("board")):
+            self.assertEqual(agent.board_context(), "")
+        self.assertIn("{context}Ticket", agent.PROMPT)

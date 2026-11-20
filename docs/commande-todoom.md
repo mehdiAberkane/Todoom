@@ -40,6 +40,7 @@ noms possibles quand un nom n'est pas reconnu.
 | Commande | Effet |
 |---|---|
 | `todoom boards [--all]` | tableaux, colonnes, étiquettes et niveaux de priorité (`--all` : corbeille comprise) |
+| `todoom board <tableau> [--description <texte>]` | un tableau et sa page de contexte (dépôt, règles, vocabulaire, sens des colonnes), à lire avant de prendre un ticket ; `--description` la remplace |
 | `todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]` | cartes, colonne par colonne, sans description |
 | `todoom show <carte>` | une carte entière, avec ses commentaires, son historique et ses liens (titre, tableau, colonne, terminée ou non) |
 | `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
@@ -69,7 +70,7 @@ ou la variable `TODOOM_AGENT` (le serveur MCP signe « Claude » par défaut), e
 
 ## Serveur MCP pour Claude
 
-`todoom mcp` expose les mêmes opérations comme outils : `list_boards`, `list_cards`,
+`todoom mcp` expose les mêmes opérations comme outils : `list_boards`, `get_board`, `update_board`, `list_cards`,
 `get_card`, `create_card`, `update_card`, `move_card`, `claim_card`, `release_card`, `link_cards`, `unlink_cards`, `add_comment`,
 `archive_card`, `restore_card`.
 
@@ -91,6 +92,7 @@ Les tickets de ce projet sont sur le tableau Todoom « <Nom du tableau> ».
 Utilise les outils MCP todoom (ou la commande `todoom`, sortie JSON) ; n'écris
 jamais les fichiers JSON du dossier Todoom à la main.
 
+- Avant de commencer : `get_board` pour lire le contexte du tableau, et le suivre.
 - Au début d'un ticket : `claim_card` avec `column` « En cours » et `conversation`
   (un nom court pour cette conversation). S'il est refusé parce qu'un autre
   l'a déjà pris, n'y touche pas et dis-le-moi.

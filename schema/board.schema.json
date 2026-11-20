@@ -21,6 +21,10 @@
       "pattern": "^[A-Z][A-Z0-9]{0,5}$",
       "description": "Prefix of the cards' short ids (SOL in SOL-42), unique among boards. Given automatically from the name when missing."
     },
+    "description": {
+      "type": "string",
+      "description": "Context page of the board: repository, working rules, vocabulary, meaning of the columns. Agents read it before taking a ticket."
+    },
     "columns": {
       "type": "array",
       "description": "In display order.",

@@ -36,6 +36,7 @@ const CARD: Check[] = [
 const BOARD: Check[] = [
   ["name", optional(isString)],
   ["key", optional(isString)],
+  ["description", optional(isString)],
   ["columns", listOf(shaped([["id", isString], ["name", isString]]))],
   ["labels", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["priorities", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],

@@ -54,6 +54,7 @@ function normalizeBoard(raw: Partial<Board>): Board {
     id: raw.id!,
     name: raw.name ?? t("board.untitled"),
     ...(raw.key ? { key: raw.key } : {}),
+    ...(raw.description ? { description: raw.description } : {}),
     columns: raw.columns ?? [],
     labels: raw.labels ?? [],
     ...(raw.priorities ? { priorities: raw.priorities } : {}),

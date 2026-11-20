@@ -14,6 +14,9 @@ export const VERSION = typeof __TODOOM_VERSION__ === "string" ? __TODOOM_VERSION
 const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (sortie JSON)
 
   todoom boards [--all]                       tableaux et colonnes (--all : corbeille comprise)
+  todoom board <tableau> [--description <texte>]
+                                              un tableau et sa page de contexte (à lire avant
+                                              de prendre un ticket) ; --description la remplace
   todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]
   todoom show <carte>
   todoom create <tableau> <titre> [--column <nom>] [--description <texte>]
@@ -112,6 +115,11 @@ export async function main(argv: string[]): Promise<number> {
             priorities: prioritiesOf(b).map((p) => p.name),
           })),
       );
+      return 0;
+
+    case "board":
+      need(1, "board <tableau> [--description <texte>]");
+      out(o.description !== undefined ? store().setBoardDescription(rest[0], text(o.description) ?? "") : store().boardDetail(rest[0]));
       return 0;
 
     case "cards": {

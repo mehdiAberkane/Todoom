@@ -221,6 +221,34 @@ export class Store {
     return withDefaults(raw as Card, board);
   }
 
+/** A board with everything an agent needs before taking one of its tickets. */
+  boardDetail(wanted: string) {
+    const b = this.board(wanted);
+    return {
+      id: b.id,
+      name: b.name,
+      key: b.key ?? null,
+      trashed: !!b.archivedAt,
+      description: b.description ?? "",
+      columns: b.columns.map((c) => c.name),
+      labels: b.labels.map((l) => l.name),
+      priorities: prioritiesOf(b).map((p) => p.name),
+    };
+  }
+
+  /** Rewrites the board's context page, keeping every other field of board.json. */
+  setBoardDescription(wanted: string, text: string) {
+    const board = this.board(wanted);
+    const path = join(this.boardDir(board.id), "board.json");
+    const raw = readJson(path) as Board;
+    const description = text.replace(/\s+$/, "");
+    const next = { ...raw, description, updatedAt: nextUpdatedAt(raw.updatedAt) };
+    const problem = boardProblem(next);
+    if (problem) throw new TodoomError(`Tableau refusé (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
+    writeAtomic(path, next);
+    return this.boardDetail(board.id);
+  }
+
   /** The board's key, given now (and written) if it has none yet, by the same rule as the app. */
   private ensureKey(board: Board): Board {
     if (board.key) return board;

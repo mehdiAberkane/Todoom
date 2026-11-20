@@ -28,6 +28,7 @@ import { CardBody } from "./CardTile";
 import { CardModal } from "./CardModal";
 import { LabelManager } from "./LabelManager";
 import { ArchiveModal } from "./ArchiveModal";
+import { BoardContext, contextSummary } from "./BoardContext";
 import { DangerButton, InlineEdit } from "./ui";
 
 type Lists = Record<string, string[]>;
@@ -68,6 +69,7 @@ export function BoardView({
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
   const archived = useMemo(() => allCards.filter((c) => c.archivedAt), [allCards]);
   const [showArchive, setShowArchive] = useState(false);
+  const [showContext, setShowContext] = useState(false);
   const [query, setQuery] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
@@ -292,6 +294,9 @@ export function BoardView({
             {overdue > 0 && <span className="stat-overdue"> · {t("board.overdue", { n: overdue })}</span>}
           </span>
         </div>
+        <button className={`board-context-line ${board.description ? "" : "empty"}`} onClick={() => setShowContext(true)} title={t("board.contextTitle")}>
+          {contextSummary(board.description) ?? t("board.contextEmpty")}
+        </button>
         <div className="board-tools">
           <button className="btn-primary" onClick={startCard} disabled={!board.columns.length} title={t("board.newCardTitle")}>
             {t("board.newCard")}
@@ -333,6 +338,9 @@ export function BoardView({
           </div>
           <button className="btn-ghost" onClick={() => setShowLabels(true)}>
             {t("board.labels")}
+          </button>
+          <button className="btn-ghost" onClick={() => setShowContext(true)} title={t("board.contextTitle")}>
+            {t("board.context")}
           </button>
           <button className="btn-ghost" onClick={() => setShowArchive(true)} title={t("board.archivesTitle")}>
             {t("board.archives")}{archived.length > 0 && ` (${archived.length})`}
@@ -442,6 +450,7 @@ export function BoardView({
           onManageLabels={() => setShowLabels(true)}
         />
       )}
+      {showContext && <BoardContext board={board} onSave={actions.saveBoard} onClose={() => setShowContext(false)} />}
       {showLabels && <LabelManager board={board} onSave={actions.saveBoard} onClose={() => setShowLabels(false)} />}
       {showArchive && (
         <ArchiveModal

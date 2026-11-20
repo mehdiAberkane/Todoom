@@ -17,6 +17,8 @@ export interface Board {
   name: string;
   /** Prefix of the cards' short ids (SOL in SOL-42); given to each board automatically. */
   key?: string;
+  /** Context page: repository, rules, vocabulary, meaning of the columns. Read by agents before taking a ticket. */
+  description?: string;
   columns: Column[];
   labels: Label[];
   /** Priority levels, highest first; absent means the defaults P1, P2, P3. */

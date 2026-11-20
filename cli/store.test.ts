@@ -172,6 +172,15 @@ describe("writes", () => {
     expect(history.map((e) => e.to ?? null)).toEqual(["PC-Main · Claude (login)", null, "PC-Portable", "PC-Main · Claude"]);
   });
 
+  it("reads and writes the board's context, keeping its other fields", () => {
+    expect(store.boardDetail("todoom")).toMatchObject({ name: "Todoom", description: "", columns: ["À faire", "En cours", "A verifier"] });
+    const done = store.setBoardDescription("todoom", "## Dépôt\nC:/projets/todoom\n\n");
+    expect(done.description).toBe("## Dépôt\nC:/projets/todoom");
+    const raw = JSON.parse(readFileSync(join(dir, "boards", "b1", "board.json"), "utf8"));
+    expect(raw.labels).toEqual([{ id: "l1", name: "Bug", color: "#f00" }]);
+    expect(raw.description).toBe("## Dépôt\nC:/projets/todoom");
+  });
+
   it("archives and restores at the bottom of the column", () => {
     const a = store.create("Todoom", "Un");
     const b = store.create("Todoom", "Deux");

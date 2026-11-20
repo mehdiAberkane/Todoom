@@ -32,7 +32,7 @@ La merge request passe par les options de push de GitLab : aucun token n'est né
 
 ## Sécurité
 
-**L'agent exécute du code choisi par le texte d'un ticket.** Claude reçoit le titre, la description et les commentaires, peut modifier les fichiers du dépôt et lancer `go *`. Or `go run`, `go test` et `go generate` exécutent n'importe quel programme. Interdire `git push` ou `git checkout` à Claude n'empêche rien : un programme Go peut pousser, lire ou effacer ce qu'il veut.
+**L'agent exécute du code choisi par le texte d'un ticket.** Claude reçoit le contexte du tableau (« 📖 Contexte » dans Todoom), le titre, la description et les commentaires, peut modifier les fichiers du dépôt et lancer `go *`. Or `go run`, `go test` et `go generate` exécutent n'importe quel programme. Interdire `git push` ou `git checkout` à Claude n'empêche rien : un programme Go peut pousser, lire ou effacer ce qu'il veut.
 
 À qui l'agent fait confiance, donc :
 
