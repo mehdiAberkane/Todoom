@@ -68,6 +68,11 @@ export function CardTile({
       {...attributes}
       {...listeners}
       onClick={() => onOpen(card.id)}
+      onKeyDown={(e) => {
+        // Enter opens the card; the drag sensor keeps Space and the arrows.
+        if (e.key === "Enter" && !isDragging) onOpen(card.id);
+        else listeners?.onKeyDown?.(e);
+      }}
     >
       {unsaved && (
         <div className="unsaved-badge" title="Le disque n'a pas encore accepté la dernière modification : nouvel essai automatique">

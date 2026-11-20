@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
 import type { AppSettings, Board, Card, Presence } from "../types";
-import { LABEL_COLORS, now, reorder, uid } from "./utils";
+import { LABEL_COLORS, nextUpdatedAt, now, reorder, uid } from "./utils";
 import { boardProblem, cardProblem, settingsProblem } from "./validate";
 
 /** A file of the data folder that couldn't be loaded, and why. */
@@ -336,7 +336,7 @@ export function useTodoom(backend: Backend) {
 
   const actions = useMemo(() => {
     const saveCard = (card: Card) => {
-      const saved = { ...card, updatedAt: now() };
+      const saved = { ...card, updatedAt: nextUpdatedAt(card.updatedAt) };
       setData((d) => {
         const list = d.cards[saved.boardId] ?? [];
         const exists = list.some((c) => c.id === saved.id);
@@ -355,7 +355,7 @@ export function useTodoom(backend: Backend) {
     };
 
     const saveBoard = (board: Board) => {
-      const saved = { ...board, updatedAt: now() };
+      const saved = { ...board, updatedAt: nextUpdatedAt(board.updatedAt) };
       setData((d) => ({ ...d, boards: sortBoards(d.boards.map((b) => (b.id === saved.id ? saved : b))) }));
       writeJson(boardPath(saved.id), saved);
     };
@@ -366,7 +366,7 @@ export function useTodoom(backend: Backend) {
       saveBoard,
 
       saveSettings(settings: AppSettings) {
-        const saved = { ...settings, updatedAt: now() };
+        const saved = { ...settings, updatedAt: nextUpdatedAt(settings.updatedAt) };
         setData((d) => ({ ...d, settings: saved }));
         writeJson(SETTINGS_PATH, saved);
       },

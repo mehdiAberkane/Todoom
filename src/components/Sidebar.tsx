@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { useDragSensors } from "../lib/dnd";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Board, Card, Presence } from "../types";
@@ -49,7 +50,7 @@ export function Sidebar(props: Props) {
   const [showTrash, setShowTrash] = useState(false);
   const [name, setName] = useState("");
   // The distance threshold keeps a plain click selecting the board.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useDragSensors();
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;

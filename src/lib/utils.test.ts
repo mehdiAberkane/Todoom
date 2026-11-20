@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { dueStatus, orderBetween, reorder } from "./utils";
+import { dueStatus, nextUpdatedAt, orderBetween, reorder } from "./utils";
 
 describe("orderBetween", () => {
   it("places an item before, after or between its neighbours", () => {
@@ -59,5 +59,25 @@ describe("dueStatus", () => {
     expect(dueStatus("2026-11-20")).toBe("today");
     expect(dueStatus("2026-11-23")).toBe("soon");
     expect(dueStatus("2026-11-24")).toBe("later");
+  });
+});
+
+describe("nextUpdatedAt", () => {
+  const at = (iso: string) => Date.parse(iso);
+
+  it("uses the clock when it is ahead of the version being replaced", () => {
+    expect(nextUpdatedAt("2026-11-20T10:00:00.000Z", at("2026-11-20T10:05:00.000Z"))).toBe("2026-11-20T10:05:00.000Z");
+  });
+
+  it("stays after the replaced version when this machine's clock lags", () => {
+    // The card was last saved by a PC 3 minutes ahead; this edit must still win.
+    expect(nextUpdatedAt("2026-11-20T10:05:00.000Z", at("2026-11-20T10:02:00.000Z"))).toBe("2026-11-20T10:05:00.001Z");
+  });
+
+  it("falls back to the clock for a new or undated item", () => {
+    const clock = at("2026-11-20T10:00:00.000Z");
+    expect(nextUpdatedAt(undefined, clock)).toBe("2026-11-20T10:00:00.000Z");
+    expect(nextUpdatedAt("", clock)).toBe("2026-11-20T10:00:00.000Z");
+    expect(nextUpdatedAt("n'importe quoi", clock)).toBe("2026-11-20T10:00:00.000Z");
   });
 });

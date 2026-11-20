@@ -203,9 +203,9 @@ fn start_watcher(app: &AppHandle, state: &AppState) {
     match debouncer {
         Ok(mut d) => match d.watcher().watch(&root, RecursiveMode::Recursive) {
             Ok(()) => *slot = Some(d),
-            Err(e) => eprintln!("Surveillance impossible de {}: {e}", root.display()),
+            Err(e) => log::error!("surveillance impossible de {} : {e}", root.display()),
         },
-        Err(e) => eprintln!("Initialisation du watcher impossible: {e}"),
+        Err(e) => log::error!("initialisation de la surveillance impossible : {e}"),
     }
 }
 
@@ -377,33 +377,59 @@ fn remove_target(target: &Path) -> Result<(), String> {
     }
 }
 
+/// Errors also go to the log file: the UI shows them, but only until it closes.
+fn logged<T>(what: String, result: Result<T, String>) -> Result<T, String> {
+    if let Err(e) = &result {
+        log::warn!("{what} : {e}");
+    }
+    result
+}
+
 #[tauri::command]
 async fn write_file(app: AppHandle, path: String, content: String) -> Result<(), String> {
-    blocking(app, move |app| {
+    let what = format!("écriture de {path}");
+    let result = blocking(app, move |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
         let target = prepare_write(&root, &path)?;
         remember(&state, &root, &target, false);
         write_atomic(&target, &content)
     })
-    .await
+    .await;
+    logged(what, result)
 }
 
 #[tauri::command]
 async fn remove_path(app: AppHandle, path: String) -> Result<(), String> {
-    blocking(app, move |app| {
+    let what = format!("suppression de {path}");
+    let result = blocking(app, move |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
         let target = prepare_remove(&root, &path)?;
         remember(&state, &root, &target, true);
         remove_target(&target)
     })
-    .await
+    .await;
+    logged(what, result)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Journal in the app's log folder (%LOCALAPPDATA%\fr.devsecopsforce.todoom\logs on
+        // Windows, ~/Library/Logs/fr.devsecopsforce.todoom on macOS), one old file kept.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                    file_name: Some("todoom".into()),
+                }))
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr))
+                .level(log::LevelFilter::Info)
+                .max_file_size(1_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -412,6 +438,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let state = app.state::<AppState>();
             *state.config.lock().unwrap() = load_config(&handle);
+            log::info!("Todoom {} démarré", app.package_info().version);
             start_watcher(&handle, &state);
             // Shows which build is running, e.g. "Todoom v0.2.1".
             if let Some(window) = app.get_webview_window("main") {

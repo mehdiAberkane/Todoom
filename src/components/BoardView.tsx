@@ -1,13 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import {
   closestCenter,
+  closestCorners,
   DndContext,
   DragOverlay,
   MeasuringStrategy,
-  PointerSensor,
   pointerWithin,
-  useSensor,
-  useSensors,
   type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
@@ -17,6 +15,7 @@ import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
+import { useDragSensors } from "../lib/dnd";
 import { ColumnPreview, ColumnView } from "./ColumnView";
 import { CardBody } from "./CardTile";
 import { CardModal } from "./CardModal";
@@ -80,7 +79,7 @@ export function BoardView({
     return Object.keys(listsRef.current).find((col) => listsRef.current[col].includes(cardId));
   };
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useDragSensors();
 
   // Columns only collide with columns; cards prefer the card under the pointer, then the closest card of the hovered column.
   const collision: CollisionDetection = (args) => {
@@ -91,6 +90,8 @@ export function BoardView({
         droppableContainers: args.droppableContainers.filter((c) => String(c.id).startsWith(COL)),
       });
     }
+    // Keyboard drag: no pointer, the arrow keys move the card's rectangle instead.
+    if (!args.pointerCoordinates) return closestCorners(args);
     const hits = pointerWithin(args);
     const cardHits = hits.filter((h) => String(h.id).startsWith(CARD));
     if (cardHits.length) return cardHits;
