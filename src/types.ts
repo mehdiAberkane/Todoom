@@ -133,6 +133,19 @@ export interface HistoryFile {
   events: HistoryEvent[];
 }
 
+/** What an agent watching a board is doing: boards/<board>/agents/<computer>-agent.json, written by the agent. */
+export interface AgentStatus {
+  host: string;
+  agent: string;
+  state: "idle" | "working" | "stopped";
+  card: { id: string; title: string } | null;
+  /** When the current state began. */
+  since: string;
+  /** Last time the agent wrote it; a stale one means the agent stopped without saying so. */
+  heartbeat: string;
+  pollSeconds?: number;
+}
+
 /** App-wide preferences, stored once in the data folder so every machine shares them. */
 export interface AppSettings {
   /** Background image as a compressed JPEG data URL, or null for the plain dark background. */

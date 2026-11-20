@@ -1,17 +1,19 @@
 # Agent Todoom
 
-Surveille un tableau Todoom toutes les 30 secondes. Chaque ticket placé dans « En cours » est confié à Claude Code en mode non interactif, un ticket à la fois :
+Surveille un ou plusieurs tableaux Todoom toutes les 30 secondes. Chaque ticket placé dans « En cours » est confié à Claude Code en mode non interactif, un ticket à la fois :
 
 1. le ticket passe dans la colonne « Agent » (créée automatiquement) ;
-2. l'agent se place sur la branche de base, récupère les merge requests fusionnées sur GitLab, puis crée une branche pour le ticket ;
+2. l'agent se place sur la branche de base, récupère ce qui a été fusionné, puis crée une branche pour le ticket ;
 3. Claude y fait le travail, lance les vérifications prévues, puis commite ;
-4. l'agent pousse la branche sur GitLab et ouvre une merge request vers la branche de base ;
-Une carte « En cours » déjà prise par quelqu'un d'autre (une conversation Claude, un autre PC : champ « Pris par ») est laissée de côté. L'agent prend le ticket quand il commence et le libère quand il a fini.
-
+4. l'agent pousse la branche et ouvre une merge request (GitLab) ou une pull request (GitHub) vers la branche de base ;
 5. le ticket passe dans « A verifier », avec un commentaire signé de l'agent : la branche, les commits, le lien de la merge request et le résumé de Claude. Ses déplacements sont inscrits dans l'historique de la carte, et la branche et la merge request remplissent les champs de la carte. Quand la branche arrive dans la branche de base, la merge request passe en « fusionnée » ;
 6. en cas d'échec, il passe dans « Echec » avec le même compte rendu. C'est le cas si Claude renvoie une erreur ou dépasse le temps maximal, s'il ne produit aucun commit, s'il laisse des modifications non commitées, ou si une commande git ou le push échoue. Rien n'est poussé si le travail de Claude a échoué.
 
-Vous faites ensuite la revue et la fusion sur GitLab, puis vous passez le ticket en « Terminé ». L'agent ne fusionne jamais, et la commande `git push` est interdite à Claude ; ce n'est pas une barrière de sécurité, voir [Sécurité](#sécurité).
+Une carte « En cours » déjà prise par quelqu'un d'autre (une conversation Claude, un autre PC : champ « Pris par ») est laissée de côté. L'agent prend le ticket quand il commence et le libère quand il a fini.
+
+Dans Todoom, l'en-tête du tableau montre l'état de l'agent : « 🤖 en attente », « 🤖 travaille sur TOD-12 », « 🤖 arrêté », ou « muet, arrêté ? » quand il n'a plus donné signe de vie depuis plus de trois minutes (fichier `boards/<id>/agents/<PC>-agent.json`).
+
+Vous faites ensuite la revue et la fusion sur GitLab ou GitHub, puis vous passez le ticket en « Terminé ». L'agent ne fusionne jamais, et la commande `git push` est interdite à Claude ; ce n'est pas une barrière de sécurité, voir [Sécurité](#sécurité).
 
 Pour réessayer un ticket en échec, remettez-le dans « En cours » : l'agent reprend sur la même branche. Si le dépôt a des modifications non commitées, le ticket attend.
 
@@ -32,7 +34,7 @@ La merge request passe par les options de push de GitLab : aucun token n'est né
 
 ## Sécurité
 
-**L'agent exécute du code choisi par le texte d'un ticket.** Claude reçoit le contexte du tableau (« 📖 Contexte » dans Todoom), le titre, la description et les commentaires, peut modifier les fichiers du dépôt et lancer `go *`. Or `go run`, `go test` et `go generate` exécutent n'importe quel programme. Interdire `git push` ou `git checkout` à Claude n'empêche rien : un programme Go peut pousser, lire ou effacer ce qu'il veut.
+**L'agent exécute du code choisi par le texte d'un ticket.** Claude reçoit le contexte du tableau (« 📖 Contexte » dans Todoom), le titre, la description et les commentaires, peut modifier les fichiers du dépôt et lancer les commandes de `tools` (`go *` par défaut). Or `go run`, `go test`, `npm test` ou `npm run` exécutent n'importe quel programme ou script du dépôt. Interdire `git push` ou `git checkout` à Claude n'empêche rien : un tel programme peut pousser, lire ou effacer ce qu'il veut.
 
 À qui l'agent fait confiance, donc :
 
@@ -77,10 +79,26 @@ Copier `config.example.json` en `config.json` et le remplir :
 | `repo` | dépôt git où l'agent travaille |
 | `project` | nom et description courte du projet, donnés à Claude |
 | `checks` | vérifications à lancer avant de commiter |
+| `tools` | commandes que Claude peut lancer en plus de git, au format de Claude Code : `["go *", "gofmt *"]` par défaut, `["npm *", "npx *"]` pour un projet npm. Les commandes git sont gérées par l'agent et refusées ici |
+| `forge` | `gitlab`, `github`, ou `auto` (par défaut : GitHub si l'adresse du dépôt distant contient github.com). Sur GitHub, la pull request est ouverte avec la commande `gh`, si elle est installée et connectée |
 | `base_branch` | branche de départ de chaque ticket et cible des merge requests |
 | `remote` | dépôt distant où pousser (`origin` par défaut) |
 | `poll_seconds`, `ticket_timeout_minutes` | rythme de surveillance et durée maximale d'un ticket |
 | `sandbox` | commande qui fait tourner Claude isolé, par exemple dans un conteneur (vide par défaut, voir [Sécurité](#sécurité)) |
+
+Plusieurs tableaux : mettre leurs réglages dans une liste `boards`. Chaque tableau prend ses propres clés, sinon celles du haut du fichier, sinon les valeurs par défaut. `poll_seconds`, `ticket_timeout_minutes` et `sandbox` valent pour tous. L'ancien format, un seul tableau en haut du fichier, marche toujours.
+
+```json
+{
+  "poll_seconds": 30,
+  "boards": [
+    { "board_dir": "G:\\Mon Drive\\Todoom\\boards\\<id-solaris>", "repo": "C:\\projets\\solaris",
+      "checks": "go vet ./... et go test ./..." },
+    { "board_dir": "G:\\Mon Drive\\Todoom\\boards\\<id-luna>", "repo": "C:\\projets\\luna",
+      "tools": ["npm *", "npx *"], "checks": "npm run lint et npm test", "forge": "github" }
+  ]
+}
+```
 
 `config.json` contient vos chemins et l'ID de votre tableau : il est ignoré par git.
 
@@ -106,6 +124,6 @@ schtasks /Create /TN "Todoom Agent" /SC ONLOGON /RL LIMITED /TR "\"<chemin>\pyth
 
 Pour l'arrêter : `schtasks /End /TN "Todoom Agent"`, et pour le retirer : `schtasks /Delete /TN "Todoom Agent" /F`.
 
-Le journal est dans `agent\agent.log`. Les outils que Claude a le droit d'utiliser sont en haut de `todoom_agent.py`.
+Le journal est dans `agent\agent.log`. Les outils toujours permis (lecture, écriture, `git status/diff/log/add/commit`) sont en haut de `todoom_agent.py` ; le reste vient de `tools`.
 
 Ne lancez l'agent que sur un seul PC à la fois, sinon deux machines peuvent prendre le même ticket.

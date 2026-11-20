@@ -75,6 +75,16 @@ const HISTORY: Check[] = [
   ["events", listOf(shaped([["at", isString], ["field", isString], ["by", AUTHOR], ["from", nullable(isString)], ["to", nullable(isString)]]))],
 ];
 
+const AGENT: Check[] = [
+  ["host", isString],
+  ["agent", isString],
+  ["state", (v) => v === "idle" || v === "working" || v === "stopped"],
+  ["card", nullable(shaped([["id", isString], ["title", isString]]))],
+  ["since", isString],
+  ["heartbeat", isString],
+  ["pollSeconds", optional(isNumber)],
+];
+
 /** Why a data file can't be used; the interface turns the code into a sentence. */
 export interface IssueReason {
   code: "invalid_json" | "not_object" | "missing_id" | "bad_field" | "missing_board" | "unknown_column";
@@ -94,3 +104,4 @@ export const boardProblem = (raw: unknown) => problem(raw, BOARD, true);
 export const settingsProblem = (raw: unknown) => problem(raw, SETTINGS, false);
 export const commentProblem = (raw: unknown) => problem(raw, COMMENT, true);
 export const historyProblem = (raw: unknown) => problem(raw, HISTORY, false);
+export const agentProblem = (raw: unknown) => problem(raw, AGENT, false);

@@ -9,8 +9,11 @@ moves go to the card's history. Comments left on the card are given to Claude,
 so a remark written there reaches the next attempt.
 
 Work happens on a dedicated branch per card, named <type>/<few-words>. Claude
-commits on it; this script then pushes it and opens a merge request on GitLab.
-Nothing is ever merged here: review and merge the request on GitLab.
+commits on it; this script then pushes it and opens a merge request on GitLab,
+or a pull request on GitHub. Nothing is ever merged here: review and merge it there.
+
+One agent can watch several boards, each with its own repository, checks and
+allowed commands. It keeps a status file per board that the app shows.
 
 Settings live in config.json next to this file (see config.example.json).
 
@@ -32,12 +35,19 @@ from pathlib import Path
 
 CONFIG_PATH = Path(__file__).with_name("config.json")
 
-# Filled from config.json by load_config().
+# Settings of the board being handled, set by use() from config.json.
 BOARD_DIR = REPO = None
 PROJECT = ""
 CHECKS = "gofmt, go vet ./... et go test ./..."
 BASE_BRANCH = "main"
 REMOTE = "origin"
+# Commands Claude may run besides git, as in Claude Code's Bash(...) rules.
+TOOLS = ["go *", "gofmt *"]
+FORGE = "gitlab"
+# Every board watched, from config.json.
+TARGETS = []
+
+# Settings shared by all the boards.
 POLL_SECONDS = 30
 TICKET_TIMEOUT = 45 * 60
 # Optional command that runs Claude elsewhere (container, other account), e.g.
@@ -55,12 +65,14 @@ COL_DONE = "A verifier"
 COL_FAILED = "Echec"
 
 # What Claude may do without asking. Anything else is refused in headless mode.
-ALLOWED_TOOLS = [
-    "Read", "Edit", "Write", "Glob", "Grep",
-    "Bash(go *)", "Bash(gofmt *)",
-    "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)",
-    "Bash(git add *)", "Bash(git commit *)",
-]
+BASE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep",
+              "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)",
+              "Bash(git add *)", "Bash(git commit *)"]
+
+
+def allowed_tools():
+    """The base tools, plus the board's own commands (TOOLS), e.g. "npm *" -> Bash(npm *)."""
+    return BASE_TOOLS + [f"Bash({t})" for t in TOOLS]
 DISALLOWED_TOOLS = ["Bash(git push*)", "Bash(git checkout*)", "Bash(git switch*)",
                     "Bash(git merge*)", "Bash(git reset*)", "Bash(git rebase*)"]
 
@@ -308,10 +320,33 @@ def branch_for(card):
 
 
 def push_branch(branch, title):
-    """Pushes the branch and opens a merge request through GitLab push options.
+    """Pushes the branch and opens a merge request (GitLab) or a pull request (GitHub).
 
-    Returns the merge request URL, or the URL to create one, or None if GitLab gave neither.
+    Returns its URL, or the URL to create one, or None when none could be found.
     """
+    return push_github(branch, title) if FORGE == "github" else push_gitlab(branch, title)
+
+
+def push_github(branch, title):
+    """Pushes, then opens the pull request with the GitHub CLI (gh), when it is installed."""
+    cmd = ["git", "push", "-u", REMOTE, branch]
+    proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+    if proc.returncode:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, proc.stdout, proc.stderr)
+    gh = shutil.which("gh")
+    if not gh:
+        log.warning("gh (GitHub CLI) introuvable : pull request à ouvrir à la main")
+        return None
+    pr = subprocess.run([gh, "pr", "create", "--base", BASE_BRANCH, "--head", branch,
+                         "--title", " ".join(title.split()), "--body", "Ouverte par l'agent Todoom."],
+                        cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+    # A pull request that already exists is named, with its address, in the error.
+    found = re.search(r"https://\S+/pull/\d+", (pr.stdout or "") + (pr.stderr or ""))
+    return found.group(0) if found else None
+
+
+def push_gitlab(branch, title):
+    """Pushes the branch and opens a merge request through GitLab push options."""
     one_line_title = " ".join(title.split())
     cmd = ["git", "push", "-u", REMOTE, branch,
            "-o", "merge_request.create",
@@ -362,7 +397,7 @@ def run_claude(card, branch):
     cmd = claude_cmd("-p", prompt,
                      "--output-format", "json",
                      "--permission-mode", "acceptEdits",
-                     "--allowedTools", *ALLOWED_TOOLS,
+                     "--allowedTools", *allowed_tools(),
                      "--disallowedTools", *DISALLOWED_TOOLS)
     proc = subprocess.run(cmd, cwd=REPO, env=claude_env(), capture_output=True, text=True,
                           encoding="utf-8", timeout=TICKET_TIMEOUT)
@@ -400,6 +435,7 @@ def process(card_path, card, cols):
         return
     claim_events = set_claim(card, True)
     move(card_path, card, COL_LOCK, cols)
+    write_status("working", card)
     if claim_events:
         record_history(card, claim_events)
     started = time.monotonic()
@@ -442,7 +478,8 @@ def process(card_path, card, cols):
               f"Branche : {branch or 'aucune'}",
               f"Commits : {commits or 'aucun'}"]
     if pushed:
-        report.append(f"Merge request : {mr_url or 'non créée, à ouvrir à la main sur GitLab'}")
+        forge = "GitHub" if FORGE == "github" else "GitLab"
+        report.append(f"Merge request : {mr_url or f'non créée, à ouvrir à la main sur {forge}'}")
     if dirty:
         report.append("Attention : modifications non commitées laissées sur la branche.")
     report += ["", summary or "(pas de résumé)"]
@@ -461,18 +498,50 @@ def process(card_path, card, cols):
         log.info("    Merge request : %s", mr_url)
     if not ok:
         log.info("    Raison : %s", (summary or "inconnue").splitlines()[0])
+    write_status("idle")
     log.info("En attente du prochain ticket...")
+
+
+STATUS_EVERY = 60
+_status = {}
+
+
+def write_status(state, card=None, force=False):
+    """The agent's state for this board, shown in the app: boards/<id>/agents/<computer>-agent.json.
+
+    Written when the state changes, else at most once a minute, so Drive isn't
+    kept busy; the app treats a status not refreshed for a while as stopped.
+    """
+    key = str(BOARD_DIR)
+    card_info = {"id": card["id"], "title": card.get("title", "")} if card else None
+    last = _status.get(key)
+    changed = not last or last["state"] != state or (last["card"] or {}).get("id") != (card_info or {}).get("id")
+    if not (force or changed or time.time() - last["written"] >= STATUS_EVERY):
+        return
+    since = now() if changed else last["since"]
+    data = {"host": HOST, "agent": AUTHOR["agent"], "state": state, "card": card_info,
+            "since": since, "heartbeat": now(), "pollSeconds": POLL_SECONDS}
+    try:
+        folder = BOARD_DIR / "agents"
+        folder.mkdir(parents=True, exist_ok=True)
+        write_json(folder / f"{WRITER}.json", data)
+    except OSError as e:
+        log.warning("état de l'agent non écrit : %s", e)
+        return
+    _status[key] = {"state": state, "card": card_info, "since": since, "written": time.time()}
 
 
 def tick(dry_run=False):
     board_path = BOARD_DIR / "board.json"
     # A board in Todoom's trash is off limits: no ticket is taken from it.
     if read_json(board_path).get("archivedAt"):
-        if not tick.trash_logged:
-            log.warning("le tableau est dans la corbeille de Todoom : aucun ticket n'est pris")
-            tick.trash_logged = True
+        if BOARD_DIR not in tick.trash_logged:
+            log.warning("le tableau %s est dans la corbeille de Todoom : aucun ticket n'est pris", BOARD_DIR)
+            tick.trash_logged.add(BOARD_DIR)
         return
-    tick.trash_logged = False
+    tick.trash_logged.discard(BOARD_DIR)
+    if not dry_run:
+        write_status("idle")
     if dry_run:
         cols = {c["name"]: c["id"] for c in read_json(board_path)["columns"]}
     else:
@@ -499,27 +568,65 @@ def tick(dry_run=False):
             process(path, card, cols)
 
 
-tick.trash_logged = False
+tick.trash_logged = set()
 tick.held_logged = set()
 
 
+PER_BOARD = ("project", "checks", "base_branch", "remote", "tools", "forge")
+DEFAULTS = {"checks": CHECKS, "base_branch": BASE_BRANCH, "remote": REMOTE, "tools": TOOLS, "forge": "auto"}
+
+
+def strings(value):
+    return isinstance(value, list) and all(isinstance(p, str) for p in value)
+
+
+def make_target(cfg, index):
+    """One watched board, its own settings first, then the top-level ones, then the defaults."""
+    where = f"tableau n° {index + 1}"
+    if not cfg.get("board_dir") or not cfg.get("repo"):
+        sys.exit(f"{where} : « board_dir » et « repo » sont obligatoires.")
+    t = {**DEFAULTS, **cfg}
+    if not strings(t["tools"]):
+        sys.exit(f"{where} : « tools » doit être une liste, par exemple [\"npm *\", \"npx *\"].")
+    if any("git" == tool.split()[0] for tool in t["tools"] if tool.split()):
+        sys.exit(f"{where} : les commandes git sont gérées par l'agent, retire-les de « tools ».")
+    if t["forge"] not in ("auto", "gitlab", "github"):
+        sys.exit(f"{where} : « forge » vaut auto, gitlab ou github.")
+    t["board_dir"], t["repo"] = Path(t["board_dir"]), Path(t["repo"])
+    t.setdefault("project", t["repo"].name)
+    return t
+
+
+def use(t):
+    """Makes `t` the board being handled."""
+    global BOARD_DIR, REPO, PROJECT, CHECKS, BASE_BRANCH, REMOTE, TOOLS, FORGE
+    BOARD_DIR, REPO, PROJECT = t["board_dir"], t["repo"], t["project"]
+    CHECKS, BASE_BRANCH, REMOTE, TOOLS = t["checks"], t["base_branch"], t["remote"], t["tools"]
+    if t["forge"] == "auto":
+        # Guessed once from the remote's address.
+        url = git("remote", "get-url", REMOTE, check=False) if REPO.is_dir() else ""
+        t["forge"] = "github" if "github.com" in url else "gitlab"
+    FORGE = t["forge"]
+
+
 def load_config():
-    global BOARD_DIR, REPO, PROJECT, CHECKS, BASE_BRANCH, REMOTE, POLL_SECONDS, TICKET_TIMEOUT, SANDBOX
+    """config.json holds one board (board_dir, repo… at the top), or several in « boards »."""
+    global POLL_SECONDS, TICKET_TIMEOUT, SANDBOX, TARGETS
     try:
         cfg = read_json(CONFIG_PATH)
     except FileNotFoundError:
         sys.exit(f"{CONFIG_PATH} introuvable : copiez config.example.json et remplissez-le.")
-    BOARD_DIR = Path(cfg["board_dir"])
-    REPO = Path(cfg["repo"])
-    PROJECT = cfg.get("project", REPO.name)
-    CHECKS = cfg.get("checks", CHECKS)
-    BASE_BRANCH = cfg.get("base_branch", BASE_BRANCH)
-    REMOTE = cfg.get("remote", REMOTE)
     POLL_SECONDS = cfg.get("poll_seconds", POLL_SECONDS)
     TICKET_TIMEOUT = cfg.get("ticket_timeout_minutes", TICKET_TIMEOUT // 60) * 60
-    SANDBOX = cfg.get("sandbox", SANDBOX)
-    if not (isinstance(SANDBOX, list) and all(isinstance(p, str) for p in SANDBOX)):
+    SANDBOX = cfg.get("sandbox", [])
+    if not strings(SANDBOX):
         sys.exit("« sandbox » doit être une liste de chaînes, par exemple [\"docker\", \"run\", …].")
+    shared = {k: cfg[k] for k in PER_BOARD if k in cfg}
+    boards = cfg.get("boards")
+    if boards is not None and not (isinstance(boards, list) and boards and all(isinstance(b, dict) for b in boards)):
+        sys.exit("« boards » doit être une liste de tableaux : [{\"board_dir\": …, \"repo\": …}, …].")
+    TARGETS = [make_target({**shared, **b}, i) for i, b in enumerate(boards or [cfg])]
+    use(TARGETS[0])
 
 
 def main():
@@ -530,18 +637,29 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", handlers=handlers)
     dry_run = "--dry-run" in sys.argv
     once = dry_run or "--once" in sys.argv
-    log.info("agent démarré, surveille « %s » de %s", COL_TRIGGER, BOARD_DIR)
+    for t in TARGETS:
+        use(t)
+        log.info("agent démarré, surveille « %s » de %s (%s, %s)", COL_TRIGGER, BOARD_DIR, REPO, FORGE)
     if not SANDBOX:
         log.warning("ATTENTION : Claude s'exécute avec tes droits (fichiers, clés SSH). Un ticket piégé peut "
                     "faire exécuter du code. Voir la section Sécurité de agent/README.md.")
-    while True:
-        try:
-            tick(dry_run)
-        except Exception:
-            log.exception("erreur pendant la surveillance")
-        if once:
-            break
-        time.sleep(POLL_SECONDS)
+    try:
+        while True:
+            for t in TARGETS:
+                use(t)
+                try:
+                    tick(dry_run)
+                except Exception:
+                    log.exception("erreur pendant la surveillance de %s", BOARD_DIR)
+            if once:
+                break
+            time.sleep(POLL_SECONDS)
+    finally:
+        # Best effort: a killed process can't say it stopped; the app sees its status go stale.
+        if not dry_run:
+            for t in TARGETS:
+                use(t)
+                write_status("stopped", force=True)
 
 
 if __name__ == "__main__":

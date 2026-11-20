@@ -29,6 +29,8 @@ import { CardModal } from "./CardModal";
 import { LabelManager } from "./LabelManager";
 import { ArchiveModal } from "./ArchiveModal";
 import { BoardContext, contextSummary } from "./BoardContext";
+import { AgentStatusChips } from "./AgentStatus";
+import type { AgentStatus } from "../types";
 import { DangerButton, InlineEdit } from "./ui";
 
 type Lists = Record<string, string[]>;
@@ -47,6 +49,7 @@ export function BoardView({
   otherKeys,
   comments,
   history,
+  agents = [],
 }: {
   board: Board;
   cards: Card[];
@@ -64,6 +67,8 @@ export function BoardView({
   comments: Record<string, CardComment[]>;
   /** History by card id, then by writer. */
   history: Record<string, Record<string, HistoryEvent[]>>;
+  /** Agents watching this board. */
+  agents?: AgentStatus[];
 }) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
@@ -293,6 +298,7 @@ export function BoardView({
             {tn("board.cards", cards.length)}
             {overdue > 0 && <span className="stat-overdue"> · {t("board.overdue", { n: overdue })}</span>}
           </span>
+          <AgentStatusChips agents={agents} cardById={cardById} refOf={(c) => refOf(board, c)} />
         </div>
         <button className={`board-context-line ${board.description ? "" : "empty"}`} onClick={() => setShowContext(true)} title={t("board.contextTitle")}>
           {contextSummary(board.description) ?? t("board.contextEmpty")}

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
-import type { AppSettings, Board, Card, CardComment, HistoryEvent, LinkType, Presence } from "../types";
+import type { AgentStatus, AppSettings, Board, Card, CardComment, HistoryEvent, LinkType, Presence } from "../types";
 import { LABEL_COLORS, nextUpdatedAt, now, reorder, uid } from "./utils";
-import { boardProblem, cardProblem, commentProblem, historyProblem, settingsProblem, type IssueReason } from "./validate";
+import { agentProblem, boardProblem, cardProblem, commentProblem, historyProblem, settingsProblem, type IssueReason } from "./validate";
 import { changesBetween, commentPath, commentsDir, eventsFor, historyDir, historyPath, writerName } from "./activity";
 import { t } from "./i18n";
 import { inverseOf, withLink, withoutLink } from "./links";
@@ -24,12 +24,14 @@ export interface Data {
   comments: Record<string, CardComment[]>;
   /** History by card id, then by writer (a computer or a tool). */
   history: Record<string, Record<string, HistoryEvent[]>>;
+  /** Agents watching each board, by board id. */
+  agents: Record<string, AgentStatus[]>;
 }
 
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
 export const DEFAULT_SETTINGS: AppSettings = { background: null, backgroundDim: 0.45, language: null, updatedAt: "" };
-const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [], comments: {}, history: {} };
+const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [], comments: {}, history: {}, agents: {} };
 const SETTINGS_PATH = "settings.json";
 // Safety net only: the folder watcher reports other machines' changes as they happen.
 const POLL_MS = 120_000;
@@ -99,7 +101,7 @@ function normalizeCard(raw: Partial<Card>, boardId: string): Card {
   };
 }
 
-type Kind = "board" | "card" | "settings" | "presence" | "comment" | "history";
+type Kind = "board" | "card" | "settings" | "presence" | "comment" | "history" | "agent";
 
 /** Which kind of Todoom file a path is, or null for files Todoom doesn't own. */
 function kindOf(parts: string[]): Kind | null {
@@ -109,6 +111,7 @@ function kindOf(parts: string[]): Kind | null {
   if (parts[0] !== "boards") return null;
   if (parts.length === 3 && parts[2].startsWith("board")) return "board";
   if (parts.length === 4 && parts[2] === "cards") return "card";
+  if (parts.length === 4 && parts[2] === "agents") return "agent";
   if (parts.length === 5 && parts[2] === "comments") return "comment";
   if (parts.length === 5 && parts[2] === "history") return "history";
   return null;
@@ -127,6 +130,7 @@ export function parse(files: FileEntry[]): Data {
   let settings = DEFAULT_SETTINGS;
   const comments = new Map<string, CardComment>();
   const history: Data["history"] = {};
+  const agents: Data["agents"] = {};
 
   for (const file of files) {
     const parts = file.path.split("/");
@@ -153,7 +157,9 @@ export function parse(files: FileEntry[]): Data {
             ? commentProblem(raw)
             : kind === "history"
               ? historyProblem(raw)
-              : settingsProblem(raw);
+              : kind === "agent"
+                ? agentProblem(raw)
+                : settingsProblem(raw);
     if (why) {
       issues.push({ path: file.path, reason: why });
       continue;
@@ -161,6 +167,15 @@ export function parse(files: FileEntry[]): Data {
     if (kind === "comment") {
       // A Drive conflict copy of a comment is the same comment.
       comments.set(raw.id, raw as CardComment);
+      continue;
+    }
+    if (kind === "agent") {
+      // Several agents, one file each; a Drive conflict copy is the same agent: keep the freshest.
+      const list = (agents[parts[1]] ??= []);
+      const status = raw as AgentStatus;
+      const same = list.findIndex((a) => a.host === status.host && a.agent === status.agent);
+      if (same < 0) list.push(status);
+      else if (status.heartbeat > list[same].heartbeat) list[same] = status;
       continue;
     }
     if (kind === "history") {
@@ -207,6 +222,7 @@ export function parse(files: FileEntry[]): Data {
     issues: issues.sort((a, b) => a.path.localeCompare(b.path)),
     comments: groupComments([...comments.values()]),
     history,
+    agents,
   };
 }
 

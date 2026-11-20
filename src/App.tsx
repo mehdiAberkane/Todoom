@@ -167,6 +167,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             onOpenElsewhere={openElsewhere}
             initialOpenCardId={linkedCard}
             comments={data.comments}
+            agents={data.agents[board.id]}
             history={data.history}
           />
         ) : status === "loading" ? (

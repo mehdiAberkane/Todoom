@@ -1,6 +1,7 @@
 """Tests for what the agent hands to Claude. Run: python -m unittest discover -s agent"""
 
 import os
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -121,9 +122,79 @@ class ConfigTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.load({"board_dir": "b", "repo": "r", "sandbox": "docker run img"})
 
+    def test_one_board_at_the_top_still_works_with_the_go_defaults(self):
+        self.load({"board_dir": "b", "repo": "r"})
+        self.assertEqual(len(agent.TARGETS), 1)
+        self.assertEqual(agent.BOARD_DIR, Path("b"))
+        self.assertIn("Bash(go *)", agent.allowed_tools())
+        self.assertEqual(agent.FORGE, "gitlab")
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_several_boards_with_their_own_tools_checks_and_forge(self):
+        self.load({
+            "checks": "go test ./...",
+            "boards": [
+                {"board_dir": "solaris", "repo": "r1"},
+                {"board_dir": "luna", "repo": "r2", "tools": ["npm *", "npx *"], "checks": "npm test", "forge": "github"},
+            ],
+        })
+        self.assertEqual([t["board_dir"] for t in agent.TARGETS], [Path("solaris"), Path("luna")])
+        agent.use(agent.TARGETS[1])
+        self.assertEqual((agent.CHECKS, agent.FORGE), ("npm test", "github"))
+        self.assertIn("Bash(npm *)", agent.allowed_tools())
+        self.assertNotIn("Bash(go *)", agent.allowed_tools())
+        agent.use(agent.TARGETS[0])
+        self.assertEqual(agent.CHECKS, "go test ./...")
+        self.assertIn("Bash(go *)", agent.allowed_tools())
+
+    def test_bad_board_settings_are_refused(self):
+        for cfg in ({"boards": [{"repo": "r"}]},
+                    {"board_dir": "b", "repo": "r", "tools": "npm *"},
+                    {"board_dir": "b", "repo": "r", "tools": ["git push *"]},
+                    {"board_dir": "b", "repo": "r", "forge": "bitbucket"},
+                    {"boards": []}):
+            with self.assertRaises(SystemExit, msg=cfg):
+                self.load(cfg)
+
+
+class GitHubTest(unittest.TestCase):
+    def test_opens_a_pull_request_with_gh_and_reuses_an_existing_one(self):
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        exists = mock.Mock(returncode=1, stdout="",
+                           stderr="a pull request for branch \"fix/x\" already exists:\nhttps://github.com/o/r/pull/3\n")
+        with mock.patch.object(agent, "FORGE", "github"), \
+             mock.patch.object(agent.shutil, "which", return_value="gh"), \
+             mock.patch.object(agent.subprocess, "run", side_effect=[ok, exists]) as run:
+            self.assertEqual(agent.push_branch("fix/x", "Corriger x"), "https://github.com/o/r/pull/3")
+        self.assertEqual(run.call_args_list[0].args[0][:2], ["git", "push"])
+        self.assertEqual(run.call_args_list[1].args[0][:3], ["gh", "pr", "create"])
+
+    def test_without_gh_the_branch_is_pushed_and_the_request_left_to_open(self):
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(agent, "FORGE", "github"), \
+             mock.patch.object(agent.shutil, "which", return_value=None), \
+             mock.patch.object(agent.subprocess, "run", return_value=ok) as run:
+            self.assertIsNone(agent.push_branch("fix/x", "Corriger x"))
+        self.assertEqual(run.call_count, 1)
+
+
+class StatusTest(unittest.TestCase):
+    def test_status_is_written_on_changes_and_as_a_heartbeat(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(agent, "BOARD_DIR", Path(tmp)):
+            agent._status.clear()
+            path = Path(tmp) / "agents" / f"{agent.WRITER}.json"
+            agent.write_status("idle")
+            first = agent.read_json(path)
+            self.assertEqual((first["state"], first["card"]), ("idle", None))
+            path.unlink()
+            agent.write_status("idle")
+            self.assertFalse(path.exists(), "no rewrite within a minute when nothing changed")
+            agent.write_status("working", {"id": "c1", "title": "T"})
+            self.assertEqual(agent.read_json(path)["card"], {"id": "c1", "title": "T"})
+            with mock.patch.object(agent.time, "time", return_value=time.time() + 120):
+                path.unlink()
+                agent.write_status("working", {"id": "c1", "title": "T"})
+            self.assertTrue(path.exists(), "heartbeat after a minute")
 
 
 class ActivityTest(unittest.TestCase):
@@ -198,6 +269,7 @@ class ClaimTest(unittest.TestCase):
         with mock.patch.object(agent, "BOARD_DIR", FakePath("board")), \
              mock.patch.object(agent, "read_json", side_effect=lambda p: files.get(p.name, board)), \
              mock.patch.object(agent, "ensure_columns", return_value=cols), \
+             mock.patch.object(agent, "write_status"), \
              mock.patch.object(agent, "process") as process:
             agent.tick()
         self.assertEqual(sorted(call.args[1]["id"] for call in process.call_args_list), ["a", "b"])
@@ -221,3 +293,7 @@ class ContextTest(unittest.TestCase):
         with mock.patch.object(agent, "read_json", return_value={}), mock.patch.object(agent, "BOARD_DIR", Path("board")):
             self.assertEqual(agent.board_context(), "")
         self.assertIn("{context}Ticket", agent.PROMPT)
+
+
+if __name__ == "__main__":
+    unittest.main()

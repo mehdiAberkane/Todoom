@@ -14,7 +14,7 @@ import { inverseOf, isFinished, isLinkType, withLink, withoutLink } from "../src
 import type { Author, CardComment, HistoryEvent, LinkType } from "../src/types";
 import { deriveKey, nextNumber, parseRef, refOf } from "../src/lib/shortid";
 import { changesBetween, commentPath, eventsFor, historyPath, writerName } from "../src/lib/activity";
-import { commentProblem, historyProblem } from "../src/lib/validate";
+import { agentProblem, commentProblem, historyProblem } from "../src/lib/validate";
 import { MR_STATES, webUrl } from "../src/lib/dev";
 import { claimLabel, mayClaim, newClaim, sameClaimant } from "../src/lib/claim";
 import type { Claim } from "../src/types";
@@ -233,6 +233,8 @@ export class Store {
       columns: b.columns.map((c) => c.name),
       labels: b.labels.map((l) => l.name),
       priorities: prioritiesOf(b).map((p) => p.name),
+      // What the agents watching this board are doing (written by them; a stale heartbeat means stopped).
+      agents: this.jsonFiles(join(this.boardDir(b.id), "agents")).filter((raw) => !agentProblem(raw)),
     };
   }
 
