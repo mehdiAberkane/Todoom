@@ -594,3 +594,19 @@ textarea { resize: vertical; }
 .my-work-col { flex: none; }
 .my-work-col .card { cursor: pointer; }
 .my-work-link { width: 100%; margin-bottom: 10px; }
+
+/* Search every board */
+.global-search-btn { margin: 0 0 10px; width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--muted); }
+.global-search-btn:hover { color: var(--text); border-color: var(--muted); }
+.search-modal { width: min(720px, 100%); align-self: start; margin-top: 8vh; }
+.search-input { width: 100%; font-size: 16px; padding: 10px 12px; }
+.search-results { list-style: none; margin: 10px 0 0; padding: 0; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.search-result { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; }
+.search-result.selected { background: var(--card-hover); border-color: var(--border); }
+.search-result.off .search-title { color: var(--muted); }
+.search-title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-where { font-size: 12px; white-space: nowrap; }
+.search-snippet { grid-column: 1 / -1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-empty { padding: 10px; }
+.search-hint { margin-top: 10px; font-size: 11px; }
+.archived-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: rgba(255, 159, 28, 0.1); border: 1px solid rgba(255, 159, 28, 0.35); font-size: 13px; }

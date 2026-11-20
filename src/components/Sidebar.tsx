@@ -27,6 +27,7 @@ interface Props {
   onMove: (movedId: string, ids: string[]) => void;
   settingsOpen: boolean;
   myWorkOpen: boolean;
+  onOpenSearch: () => void;
   myWorkCount: number;
   onOpenMyWork: () => void;
   onOpenSettings: () => void;
@@ -78,6 +79,9 @@ export function Sidebar(props: Props) {
         <span className="brand-name">TODOOM</span>
       </div>
 
+      <button className="global-search-btn" onClick={props.onOpenSearch} title={t("search.openTitle")}>
+        {t("search.open")}
+      </button>
       <nav className="board-list">
         <button className={`board-link my-work-link ${props.myWorkOpen ? "active" : ""}`} onClick={props.onOpenMyWork} title={t("myWork.linkTitle")}>
           <span className="board-name">{t("myWork.link")}</span>

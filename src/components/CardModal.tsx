@@ -30,6 +30,8 @@ interface Props {
   activity?: ActivityProps;
   /** Take or release the card; left out for a card not saved yet. Written right away, like links. */
   claim?: { onTake: () => void; onRelease: () => void };
+  /** For an archived card: puts it back on the board. */
+  onRestore?: () => void;
 }
 
 /**
@@ -38,7 +40,7 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim, onRestore }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
@@ -181,6 +183,17 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
           ✕
         </button>
       </div>
+
+      {card.archivedAt && (
+        <div className="archived-banner">
+          {t("cardModal.archivedBanner", { date: formatDateTime(card.archivedAt) })}
+          {onRestore && (
+            <button className="btn-primary small" onClick={onRestore}>
+              {t("cardModal.restore")}
+            </button>
+          )}
+        </div>
+      )}
 
       {(incoming.length > 0 || pending.length > 0) && (
         <div className="external-banner">
@@ -385,7 +398,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             {card.updatedAt && <div>{t("cardModal.updated", { date: formatDateTime(card.updatedAt) })}</div>}
           </div>
 
-          {!isNew && (
+          {!isNew && !card.archivedAt && (
             <button className="btn-ghost full" onClick={archive} title={t("cardModal.archiveTitle")}>
               {t("cardModal.archive")}
             </button>

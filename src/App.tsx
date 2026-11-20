@@ -13,6 +13,7 @@ import { BoardView } from "./components/BoardView";
 import { Setup } from "./components/Setup";
 import { SettingsPage } from "./components/SettingsPage";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
+import { GlobalSearch } from "./components/GlobalSearch";
 
 const PRESENCE_WINDOW_MS = 3 * 60_000;
 
@@ -56,6 +57,19 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   const [showSettings, setShowSettings] = useState(false);
   const [showMyWork, setShowMyWork] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+
+  // Ctrl + Shift + F (Cmd on a Mac) searches every board, from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // A card to open once its board shows, after following a link from another board.
   const [linkedCard, setLinkedCard] = useState<string | null>(null);
   const activeBoards = useMemo(() => data.boards.filter((b) => !b.archivedAt), [data.boards]);
@@ -140,6 +154,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         myWorkOpen={showMyWork && !showSettings}
         myWorkCount={myWorkCount}
         onOpenMyWork={() => (setShowMyWork(true), setShowSettings(false))}
+        onOpenSearch={() => setShowSearch(true)}
         onMove={(movedId, ids) => actions.moveBoard(activeBoards, movedId, ids)}
         onSettings={onSettings}
         status={status}
@@ -212,6 +227,9 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
           </div>
         )}
       </main>
+      {showSearch && (
+        <GlobalSearch boards={data.boards} cards={data.cards} comments={data.comments} onOpen={openElsewhere} onClose={() => setShowSearch(false)} />
+      )}
     </div>
   );
 }

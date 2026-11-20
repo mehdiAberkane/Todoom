@@ -279,7 +279,8 @@ export function BoardView({
     setLabelFilter((f) => (f.includes(labelId) ? f.filter((l) => l !== labelId) : [...f, labelId]));
 
   const overdue = cards.filter((c) => dueStatus(c.due) === "overdue").length;
-  const openCard = openCardId ? cardById.get(openCardId) : undefined;
+  // An archived card opens too (from the search, or a link): its editor offers to put it back.
+  const openCard = openCardId ? (cardById.get(openCardId) ?? archived.find((c) => c.id === openCardId)) : undefined;
   const activeCard = activeId?.startsWith(CARD) ? cardById.get(activeId.slice(CARD.length)) : undefined;
   const activeColumn = activeId?.startsWith(COL) ? board.columns.find((c) => c.id === activeId.slice(COL.length)) : undefined;
   const filtering = query.trim() !== "" || labelFilter.length > 0 || priorityFilter.length > 0;
@@ -443,6 +444,7 @@ export function BoardView({
             onDeleteComment: (c) => actions.deleteComment(c, board.id),
           }}
           claim={{ onTake: () => actions.claimCard(openCard), onRelease: () => actions.releaseCard(openCard) }}
+          onRestore={openCard.archivedAt ? () => actions.restoreCard(board, openCard, allCards) : undefined}
         />
       )}
       {newCard && (
