@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { findDataDir, normalize, Store, TodoomError, type CardChanges } from "./store";
 import { serveMcp } from "./mcp";
+import { prioritiesOf } from "../src/lib/priority";
 
 declare const __TODOOM_VERSION__: string;
 export const VERSION = typeof __TODOOM_VERSION__ === "string" ? __TODOOM_VERSION__ : "dev";
@@ -15,9 +16,10 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
   todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]
   todoom show <carte>
   todoom create <tableau> <titre> [--column <nom>] [--description <texte>]
-                [--label <nom>]... [--due AAAA-MM-JJ]
+                [--label <nom>]... [--priority <nom>] [--due AAAA-MM-JJ]
   todoom update <carte> [--title <texte>] [--description <texte>] [--append <texte>]
-                [--label <nom>]... [--unlabel <nom>]... [--due AAAA-MM-JJ | --no-due]
+                [--label <nom>]... [--unlabel <nom>]... [--priority <nom> | --no-priority]
+                [--due AAAA-MM-JJ | --no-due]
   todoom move <carte> <colonne> [--top]
   todoom comment <carte> <texte>
   todoom archive <carte>
@@ -54,6 +56,8 @@ export async function main(argv: string[]): Promise<number> {
       append: { type: "string" },
       label: { type: "string", multiple: true },
       unlabel: { type: "string", multiple: true },
+      priority: { type: "string" },
+      "no-priority": { type: "boolean" },
       due: { type: "string" },
       "no-due": { type: "boolean" },
       top: { type: "boolean" },
@@ -79,7 +83,14 @@ export async function main(argv: string[]): Promise<number> {
       out(
         store()
           .boards(!!o.all)
-          .map((b) => ({ id: b.id, name: b.name, trashed: !!b.archivedAt, columns: b.columns.map((c) => c.name), labels: b.labels.map((l) => l.name) })),
+          .map((b) => ({
+            id: b.id,
+            name: b.name,
+            trashed: !!b.archivedAt,
+            columns: b.columns.map((c) => c.name),
+            labels: b.labels.map((l) => l.name),
+            priorities: prioritiesOf(b).map((p) => p.name),
+          })),
       );
       return 0;
 
@@ -99,7 +110,7 @@ export async function main(argv: string[]): Promise<number> {
       cards.sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order);
       out(cards.map((c) => {
         const v = s.view(c, board);
-        return { id: v.id, column: v.column, title: v.title, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
+        return { id: v.id, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
       }));
       return 0;
     }
@@ -119,6 +130,7 @@ export async function main(argv: string[]): Promise<number> {
           column: o.column,
           description: text(o.description),
           labels: o.label,
+          priority: o.priority ?? null,
           due: o.due ?? null,
         }),
       );
@@ -132,6 +144,7 @@ export async function main(argv: string[]): Promise<number> {
         append: text(o.append),
         addLabels: o.label,
         removeLabels: o.unlabel,
+        priority: o["no-priority"] ? null : o.priority,
         due: o["no-due"] ? null : o.due,
       };
       if (Object.values(changes).every((v) => v === undefined)) throw new TodoomError("Rien à modifier : voir todoom --help");

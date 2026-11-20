@@ -10,6 +10,7 @@ const card = (patch: Partial<Card> = {}): Card => ({
   title: "Ticket",
   description: "",
   labels: [],
+  priority: null,
   due: null,
   checklist: [],
   archivedAt: null,

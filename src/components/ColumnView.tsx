@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Card, Column, Label } from "../types";
+import type { Card, Column, Label, Priority } from "../types";
 import { CardTile } from "./CardTile";
 import { DangerButton, InlineEdit } from "./ui";
 import { emptyColumnLine } from "../lib/utils";
@@ -11,14 +11,16 @@ interface Props {
   column: Column;
   cards: Card[];
   labels: Label[];
+  priorities: Priority[];
   unsavedIds: ReadonlySet<string>;
   onOpen: (id: string) => void;
   onAdd: (title: string) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onSortByPriority: () => void;
 }
 
-export function ColumnView({ column, cards, labels, unsavedIds, onOpen, onAdd, onRename, onDelete }: Props) {
+export function ColumnView({ column, cards, labels, priorities, unsavedIds, onOpen, onAdd, onRename, onDelete, onSortByPriority }: Props) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `col:${column.id}`,
   });
@@ -32,6 +34,11 @@ export function ColumnView({ column, cards, labels, unsavedIds, onOpen, onAdd, o
       <header className="column-head" {...attributes} {...listeners}>
         <InlineEdit value={column.name} onSave={onRename} className="column-title" />
         <span className="count">{cards.length}</span>
+        {cards.some((c) => c.priority) && (
+          <button className="icon-btn" onClick={onSortByPriority} title={t("column.sortPriority")}>
+            ⇅
+          </button>
+        )}
         <DangerButton
           className="icon-btn"
           onConfirm={onDelete}
@@ -44,7 +51,7 @@ export function ColumnView({ column, cards, labels, unsavedIds, onOpen, onAdd, o
       <SortableContext items={cards.map((c) => `card:${c.id}`)} strategy={verticalListSortingStrategy}>
         <div className="card-list">
           {cards.map((c) => (
-            <CardTile key={c.id} card={c} labels={labels} unsaved={unsavedIds.has(c.id)} onOpen={onOpen} />
+            <CardTile key={c.id} card={c} labels={labels} priorities={priorities} unsaved={unsavedIds.has(c.id)} onOpen={onOpen} />
           ))}
           {cards.length === 0 && <div className="empty-col">{emptyColumnLine(column.id)}</div>}
         </div>

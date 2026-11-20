@@ -1,21 +1,20 @@
 import { useState } from "react";
 import type { Board, Label } from "../types";
 import { LABEL_COLORS, uid } from "../lib/utils";
+import { prioritiesOf } from "../lib/priority";
 import { DangerButton, Modal } from "./ui";
 import { t } from "../lib/i18n";
 
+/** The board's labels and priority levels: rename, recolour, add, delete; levels also move up and down. */
 export function LabelManager({ board, onSave, onClose }: { board: Board; onSave: (b: Board) => void; onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState(LABEL_COLORS[5]);
-
-  const update = (labels: Label[]) => onSave({ ...board, labels });
-  const patch = (id: string, p: Partial<Label>) => update(board.labels.map((l) => (l.id === id ? { ...l, ...p } : l)));
-
-  const add = () => {
-    const n = name.trim();
-    if (!n) return;
-    update([...board.labels, { id: uid(), name: n, color }]);
-    setName("");
+  const priorities = prioritiesOf(board);
+  // The first change to the default levels writes them into the board.
+  const savePriorities = (list: Label[]) => onSave({ ...board, priorities: list });
+  const move = (index: number, by: number) => {
+    const list = [...priorities];
+    const [item] = list.splice(index, 1);
+    list.splice(index + by, 0, item);
+    savePriorities(list);
   };
 
   return (
@@ -26,8 +25,59 @@ export function LabelManager({ board, onSave, onClose }: { board: Board; onSave:
           ✕
         </button>
       </div>
+
+      <h4>{t("labels.labels")}</h4>
+      <ItemList items={board.labels} onChange={(labels) => onSave({ ...board, labels })} placeholder={t("labels.new")} defaultColor={LABEL_COLORS[5]} />
+
+      <h4>{t("labels.priorities")}</h4>
+      <ItemList
+        items={priorities}
+        onChange={savePriorities}
+        placeholder={t("labels.newPriority")}
+        defaultColor={LABEL_COLORS[8]}
+        extra={(index) => (
+          <>
+            <button className="icon-btn" disabled={index === 0} onClick={() => move(index, -1)} title={t("labels.up")}>
+              ↑
+            </button>
+            <button className="icon-btn" disabled={index === priorities.length - 1} onClick={() => move(index, 1)} title={t("labels.down")}>
+              ↓
+            </button>
+          </>
+        )}
+      />
+    </Modal>
+  );
+}
+
+function ItemList({
+  items,
+  onChange,
+  placeholder,
+  defaultColor,
+  extra,
+}: {
+  items: Label[];
+  onChange: (items: Label[]) => void;
+  placeholder: string;
+  defaultColor: string;
+  extra?: (index: number) => React.ReactNode;
+}) {
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(defaultColor);
+  const patch = (id: string, p: Partial<Label>) => onChange(items.map((l) => (l.id === id ? { ...l, ...p } : l)));
+
+  const add = () => {
+    const n = name.trim();
+    if (!n) return;
+    onChange([...items, { id: uid(), name: n, color }]);
+    setName("");
+  };
+
+  return (
+    <>
       <ul className="label-list">
-        {board.labels.map((l) => (
+        {items.map((l, index) => (
           <li key={l.id}>
             <ColorPicker value={l.color} onChange={(c) => patch(l.id, { color: c })} />
             <input
@@ -35,7 +85,8 @@ export function LabelManager({ board, onSave, onClose }: { board: Board; onSave:
               onBlur={(e) => e.target.value.trim() && e.target.value !== l.name && patch(l.id, { name: e.target.value.trim() })}
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
             />
-            <DangerButton className="icon-btn" onConfirm={() => update(board.labels.filter((x) => x.id !== l.id))} confirmLabel={t("common.sureQ")}>
+            {extra?.(index)}
+            <DangerButton className="icon-btn" onConfirm={() => onChange(items.filter((x) => x.id !== l.id))} confirmLabel={t("common.sureQ")}>
               🗑
             </DangerButton>
           </li>
@@ -43,17 +94,12 @@ export function LabelManager({ board, onSave, onClose }: { board: Board; onSave:
       </ul>
       <div className="label-new">
         <ColorPicker value={color} onChange={setColor} />
-        <input
-          placeholder={t("labels.new")}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-        />
+        <input placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
         <button className="btn-primary" onClick={add}>
           {t("common.create")}
         </button>
       </div>
-    </Modal>
+    </>
   );
 }
 

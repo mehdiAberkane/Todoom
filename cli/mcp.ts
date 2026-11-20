@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { normalize, Store, TodoomError } from "./store";
+import { prioritiesOf } from "../src/lib/priority";
 
 declare const __TODOOM_VERSION__: string;
 const VERSION = typeof __TODOOM_VERSION__ === "string" ? __TODOOM_VERSION__ : "dev";
@@ -34,7 +35,7 @@ export function createServer(dir: string): McpServer {
     "list_boards",
     {
       title: "List boards",
-      description: "Todoom boards with their columns (in board order) and labels.",
+      description: "Todoom boards with their columns (in board order), labels and priority levels (highest first).",
       inputSchema: { includeTrashed: z.boolean().optional().describe("Also list boards in the trash") },
       annotations: readOnly,
     },
@@ -42,7 +43,14 @@ export function createServer(dir: string): McpServer {
       run(() =>
         store
           .boards(!!includeTrashed)
-          .map((b) => ({ id: b.id, name: b.name, trashed: !!b.archivedAt, columns: b.columns.map((c) => c.name), labels: b.labels.map((l) => l.name) })),
+          .map((b) => ({
+            id: b.id,
+            name: b.name,
+            trashed: !!b.archivedAt,
+            columns: b.columns.map((c) => c.name),
+            labels: b.labels.map((l) => l.name),
+            priorities: prioritiesOf(b).map((p) => p.name),
+          })),
       ),
   );
 
@@ -73,7 +81,7 @@ export function createServer(dir: string): McpServer {
           .sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order)
           .map((c) => {
             const v = store.view(c, board);
-            return { id: v.id, column: v.column, title: v.title, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
+            return { id: v.id, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
           });
       }),
   );
@@ -104,11 +112,13 @@ export function createServer(dir: string): McpServer {
         column: z.string().optional().describe("Column name; the first column if left out"),
         description: z.string().optional(),
         labels: z.array(z.string()).optional().describe("Label names; they must exist on the board"),
+        priority: z.string().optional().describe("Priority level name, e.g. P1; see list_boards"),
         due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Due date, YYYY-MM-DD"),
       },
       annotations: writes,
     },
-    ({ board, title, column, description, labels, due }) => run(() => store.create(board, title, { column, description, labels, due })),
+    ({ board, title, column, description, labels, priority, due }) =>
+      run(() => store.create(board, title, { column, description, labels, priority, due })),
   );
 
   server.registerTool(
@@ -124,6 +134,7 @@ export function createServer(dir: string): McpServer {
         append: z.string().optional().describe("Added at the end of the description, after a blank line"),
         addLabels: z.array(z.string()).optional().describe("Label names to add"),
         removeLabels: z.array(z.string()).optional().describe("Label names to remove"),
+        priority: z.string().nullable().optional().describe("Priority level name, or null to remove it"),
         due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("YYYY-MM-DD, or null to remove the due date"),
       },
       annotations: writes,

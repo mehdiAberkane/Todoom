@@ -3,6 +3,7 @@ import type { Board, Card } from "../types";
 import { addDays, dueStatus, formatDateTime, formatDue, now, uid } from "../lib/utils";
 import { conflicts, mergeEdits, rebase, type Field } from "../lib/merge";
 import { t } from "../lib/i18n";
+import { priorityOf, prioritiesOf } from "../lib/priority";
 
 const fieldLabel = (f: Field) => t(`field.${f}`);
 import { Modal } from "./ui";
@@ -222,6 +223,25 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
           </select>
 
           <h4>
+            {t("field.priority")}
+            <button className="link" onClick={onManageLabels}>
+              {t("cardModal.manageLabels")}
+            </button>
+          </h4>
+          <div className="label-picker">
+            {prioritiesOf(board).map((p) => (
+              <button
+                key={p.id}
+                className={`filter-chip priority-chip ${draft.priority === p.id ? "on" : ""}`}
+                style={{ "--chip": p.color } as React.CSSProperties}
+                onClick={() => set({ priority: draft.priority === p.id ? null : p.id })}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+
+          <h4>
             {t("field.labels")}
             <button className="link" onClick={onManageLabels}>
               {t("cardModal.manageLabels")}
@@ -288,6 +308,8 @@ function describe(field: Field, card: Card, board: Board): string {
       return card.labels.map((id) => board.labels.find((l) => l.id === id)?.name).filter(Boolean).join(", ") || t("describe.none");
     case "due":
       return card.due ? formatDue(card.due) : t("describe.none");
+    case "priority":
+      return priorityOf(board, card)?.name ?? t("describe.none");
     case "checklist": {
       const done = card.checklist.filter((i) => i.done).length;
       return t("describe.checklist", { n: card.checklist.length, done, items: card.checklist.map((i) => i.text).join(" · ") });

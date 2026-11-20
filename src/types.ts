@@ -4,6 +4,9 @@ export interface Label {
   color: string;
 }
 
+/** A priority level of a board; same shape as a label. */
+export type Priority = Label;
+
 export interface Column {
   id: string;
   name: string;
@@ -14,6 +17,8 @@ export interface Board {
   name: string;
   columns: Column[];
   labels: Label[];
+  /** Priority levels, highest first; absent means the defaults P1, P2, P3. */
+  priorities?: Priority[];
   /** Fractional position in the sidebar; absent on boards created before reordering existed. */
   order?: number;
   /** Set when the board is in the trash: hidden, restorable, deleted for good after a while. */
@@ -37,6 +42,8 @@ export interface Card {
   title: string;
   description: string;
   labels: string[];
+  /** Id of one of the board's priority levels, or null. */
+  priority: string | null;
   /** YYYY-MM-DD */
   due: string | null;
   checklist: ChecklistItem[];

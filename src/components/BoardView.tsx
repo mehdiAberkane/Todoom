@@ -15,6 +15,7 @@ import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
+import { byPriority, prioritiesOf } from "../lib/priority";
 import { useDragSensors } from "../lib/dnd";
 import { t, tn } from "../lib/i18n";
 import { TRASH_DAYS } from "../lib/store";
@@ -47,6 +48,8 @@ export function BoardView({
   const [showArchive, setShowArchive] = useState(false);
   const [query, setQuery] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
+  const priorities = prioritiesOf(board);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [newCard, setNewCard] = useState<Card | null>(null);
   const [showLabels, setShowLabels] = useState(false);
@@ -60,7 +63,8 @@ export function BoardView({
     const q = query.trim().toLowerCase();
     const visible = (c: Card) =>
       (!q || c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)) &&
-      labelFilter.every((l) => c.labels.includes(l));
+      labelFilter.every((l) => c.labels.includes(l)) &&
+      (!priorityFilter.length || (!!c.priority && priorityFilter.includes(c.priority)));
     const lists: Lists = Object.fromEntries(board.columns.map((c) => [c.id, []]));
     const fallback = board.columns[0]?.id;
     for (const c of [...cards].sort((a, b) => a.order - b.order)) {
@@ -70,7 +74,7 @@ export function BoardView({
       if (col) lists[col].push(c.id);
     }
     return lists;
-  }, [cards, board.columns, query, labelFilter]);
+  }, [cards, board.columns, query, labelFilter, priorityFilter]);
 
   const lists = dragLists ?? computed;
   const listsRef = useRef(lists);
@@ -204,6 +208,17 @@ export function BoardView({
   const renameColumn = (columnId: string, name: string) =>
     actions.saveBoard({ ...board, columns: board.columns.map((c) => (c.id === columnId ? { ...c, name } : c)) });
 
+  // Rewrites the positions of the column's cards: highest priority first, then the current order.
+  const sortByPriority = (columnId: string) => {
+    const sorted = byPriority(board, cards.filter((c) => c.columnId === columnId));
+    sorted.forEach((c, i) => {
+      if (c.order !== i) actions.saveCard({ ...c, order: i });
+    });
+  };
+
+  const togglePriority = (id: string) =>
+    setPriorityFilter((f) => (f.includes(id) ? f.filter((p) => p !== id) : [...f, id]));
+
   const toggleFilter = (labelId: string) =>
     setLabelFilter((f) => (f.includes(labelId) ? f.filter((l) => l !== labelId) : [...f, labelId]));
 
@@ -211,7 +226,7 @@ export function BoardView({
   const openCard = openCardId ? cardById.get(openCardId) : undefined;
   const activeCard = activeId?.startsWith(CARD) ? cardById.get(activeId.slice(CARD.length)) : undefined;
   const activeColumn = activeId?.startsWith(COL) ? board.columns.find((c) => c.id === activeId.slice(COL.length)) : undefined;
-  const filtering = query.trim() !== "" || labelFilter.length > 0;
+  const filtering = query.trim() !== "" || labelFilter.length > 0 || priorityFilter.length > 0;
 
   return (
     <div className="board">
@@ -234,6 +249,18 @@ export function BoardView({
             onChange={(e) => setQuery(e.target.value)}
           />
           <div className="label-filters">
+            {priorities.map((p) => (
+              <button
+                key={p.id}
+                className={`filter-chip priority-chip ${priorityFilter.includes(p.id) ? "on" : ""}`}
+                style={{ "--chip": p.color } as React.CSSProperties}
+                onClick={() => togglePriority(p.id)}
+                title={t("card.priority", { name: p.name })}
+              >
+                {p.name}
+              </button>
+            ))}
+            {priorities.length > 0 && board.labels.length > 0 && <span className="filter-sep" />}
             {board.labels.map((l) => (
               <button
                 key={l.id}
@@ -245,7 +272,7 @@ export function BoardView({
               </button>
             ))}
             {filtering && (
-              <button className="btn-ghost small" onClick={() => (setQuery(""), setLabelFilter([]))}>
+              <button className="btn-ghost small" onClick={() => (setQuery(""), setLabelFilter([]), setPriorityFilter([]))}>
                 {t("board.clearFilters")}
               </button>
             )}
@@ -283,11 +310,13 @@ export function BoardView({
                 column={col}
                 cards={(lists[col.id] ?? []).map((id) => cardById.get(id)!).filter(Boolean)}
                 labels={board.labels}
+                priorities={priorities}
                 unsavedIds={unsavedIds}
                 onOpen={setOpenCardId}
                 onAdd={(title) => addCard(col.id, title)}
                 onRename={(name) => renameColumn(col.id, name)}
                 onDelete={() => actions.deleteColumn(board, col.id, cards)}
+                onSortByPriority={() => sortByPriority(col.id)}
               />
             ))}
           </SortableContext>
@@ -308,7 +337,7 @@ export function BoardView({
         <DragOverlay>
           {activeCard && (
             <div className="card overlay">
-              <CardBody card={activeCard} labels={board.labels} />
+              <CardBody card={activeCard} labels={board.labels} priorities={priorities} />
             </div>
           )}
           {activeColumn && <ColumnPreview column={activeColumn} count={lists[activeColumn.id]?.length ?? 0} />}

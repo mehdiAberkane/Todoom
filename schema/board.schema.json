@@ -58,6 +58,30 @@
         }
       }
     },
+    "priorities": {
+      "type": "array",
+      "description": "Priority levels, highest first. When absent, the levels are P1, P2, P3 with ids p1, p2, p3.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string",
+            "description": "CSS color, e.g. #ff4d2e."
+          }
+        }
+      }
+    },
     "order": {
       "type": "number",
       "description": "Position in the sidebar, lowest first."

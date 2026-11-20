@@ -39,17 +39,17 @@ noms possibles quand un nom n'est pas reconnu.
 
 | Commande | Effet |
 |---|---|
-| `todoom boards [--all]` | tableaux, colonnes et étiquettes (`--all` : corbeille comprise) |
+| `todoom boards [--all]` | tableaux, colonnes, étiquettes et niveaux de priorité (`--all` : corbeille comprise) |
 | `todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]` | cartes, colonne par colonne, sans description |
 | `todoom show <carte>` | une carte entière |
-| `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
-| `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--due … \| --no-due]` | modifie les champs donnés, garde les autres |
+| `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
+| `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--priority … \| --no-priority] [--due … \| --no-due]` | modifie les champs donnés, garde les autres |
 | `todoom move <carte> <colonne> [--top]` | déplace en bas (ou en haut) d'une colonne |
 | `todoom comment <carte> <texte>` | ajoute une note datée et signée du nom du PC à la fin de la description |
 | `todoom archive <carte>` / `todoom restore <carte>` | archive, ou remet en bas de sa colonne |
 | `todoom mcp` | lance le serveur MCP |
 
-- **Noms** : tableaux, colonnes et étiquettes se désignent par leur nom. Casse et
+- **Noms** : tableaux, colonnes, étiquettes et priorités se désignent par leur nom. Casse et
   accents sont ignorés, et un début de nom suffit s'il est unique :
   `todoom move <carte> "en cours"`.
 - **Cartes** : par leur identifiant, ou un début unique d'au moins 4 caractères.

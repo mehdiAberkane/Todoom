@@ -86,6 +86,14 @@ describe("writes", () => {
     expect(c.description).toMatch(/^Début\n\n--- .+ · PC-TEST ---\nFait\.$/);
   });
 
+  it("sets and clears a priority by name, default levels included", () => {
+    const a = store.create("Todoom", "Un", { priority: "p2" });
+    expect(a.priority).toBe("P2");
+    expect(onDisk(a.id).priority).toBe("p2");
+    expect(store.update(a.id, { priority: null }).priority).toBeNull();
+    expect(() => store.update(a.id, { priority: "P9" })).toThrow(/Priorité.*P1/);
+  });
+
   it("archives and restores at the bottom of the column", () => {
     const a = store.create("Todoom", "Un");
     const b = store.create("Todoom", "Deux");

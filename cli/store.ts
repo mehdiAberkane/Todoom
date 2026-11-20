@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { Board, Card, Column } from "../src/types";
 import { boardProblem, cardProblem } from "../src/lib/validate";
 import { nextUpdatedAt, uid } from "../src/lib/ids";
+import { prioritiesOf, priorityOf } from "../src/lib/priority";
 
 export class TodoomError extends Error {}
 
@@ -81,6 +82,7 @@ export interface CardView {
   title: string;
   description: string;
   labels: string[];
+  priority: string | null;
   due: string | null;
   checklist: Card["checklist"];
   order: number;
@@ -97,6 +99,8 @@ export interface CardChanges {
   append?: string;
   addLabels?: string[];
   removeLabels?: string[];
+  /** Name of one of the board's priority levels, or null to remove it. */
+  priority?: string | null;
   /** YYYY-MM-DD, or null to remove it. */
   due?: string | null;
 }
@@ -186,6 +190,7 @@ export class Store {
       title: card.title,
       description: card.description,
       labels: card.labels.map((id) => board.labels.find((l) => l.id === id)?.name ?? id),
+      priority: priorityOf(board, card)?.name ?? null,
       due: card.due,
       checklist: card.checklist,
       order: card.order,
@@ -203,6 +208,10 @@ export class Store {
       .map((c) => c.order);
     if (!orders.length) return 0;
     return where === "top" ? Math.min(...orders) - 1 : Math.max(...orders) + 1;
+  }
+
+  private priorityId(board: Board, name: string | null | undefined): string | null {
+    return name ? byName(prioritiesOf(board), name, `Priorité (tableau « ${board.name} »)`).id : null;
   }
 
   private labelIds(board: Board, names: string[]): string[] {
@@ -225,7 +234,7 @@ export class Store {
   create(
     boardName: string,
     title: string,
-    opts: { column?: string; description?: string; labels?: string[]; due?: string | null } = {},
+    opts: { column?: string; description?: string; labels?: string[]; priority?: string | null; due?: string | null } = {},
   ): CardView {
     const board = this.board(boardName);
     if (board.archivedAt) throw new TodoomError(`Le tableau « ${board.name} » est dans la corbeille`);
@@ -240,6 +249,7 @@ export class Store {
       title: title.trim(),
       description: opts.description ?? "",
       labels: this.labelIds(board, opts.labels ?? []),
+      priority: this.priorityId(board, opts.priority),
       due: opts.due ?? null,
       checklist: [],
       archivedAt: null,
@@ -264,6 +274,7 @@ export class Store {
       title: changes.title !== undefined ? changes.title.trim() : card.title,
       description,
       labels,
+      priority: changes.priority !== undefined ? this.priorityId(board, changes.priority) : card.priority,
       due: changes.due !== undefined ? changes.due : card.due,
     };
     return this.view(this.save(board, next, card), board);
@@ -318,6 +329,7 @@ function withDefaults(raw: Card, board: Board): Card {
     title: raw.title ?? "",
     description: raw.description ?? "",
     labels: raw.labels ?? [],
+    priority: raw.priority ?? null,
     due: raw.due ?? null,
     checklist: raw.checklist ?? [],
     archivedAt: raw.archivedAt ?? null,

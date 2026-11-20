@@ -502,3 +502,8 @@ textarea { resize: vertical; }
 
 .check-ok { color: var(--ok); }
 .check-failed { color: var(--accent-2); cursor: help; }
+
+/* Priority: outlined in its colour, so it doesn't read as one more label. */
+.card-priority { font-size: 10px; font-weight: 800; color: var(--prio); border: 1.5px solid var(--prio); border-radius: 4px; padding: 0 5px; line-height: 14px; }
+.priority-chip { font-weight: 700; }
+.filter-sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px; }
