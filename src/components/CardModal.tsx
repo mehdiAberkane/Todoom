@@ -10,6 +10,7 @@ import { Modal } from "./ui";
 import { LinkSection, Mentions, type LinkProps } from "./LinkSection";
 import { ActivitySection, type ActivityProps } from "./ActivitySection";
 import { branchUrl, MR_STATES, webUrl } from "../lib/dev";
+import { claimLabel } from "../lib/claim";
 import { openExternal } from "../lib/open";
 import type { MergeRequestState } from "../types";
 
@@ -27,6 +28,8 @@ interface Props {
   cardRef?: string | null;
   /** Comments and history; left out for a card not saved yet. */
   activity?: ActivityProps;
+  /** Take or release the card; left out for a card not saved yet. Written right away, like links. */
+  claim?: { onTake: () => void; onRelease: () => void };
 }
 
 /**
@@ -35,7 +38,7 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
@@ -243,6 +246,29 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
         </div>
 
         <aside className="modal-side">
+          {claim && (
+            <>
+              <h4>{t("field.claimedBy")}</h4>
+              <div className="claim-row">
+                {card.claimedBy ? (
+                  <span className="claim-who" title={t("claim.since", { date: formatDateTime(card.claimedBy.at) })}>
+                    👤 {claimLabel(card.claimedBy)}
+                  </span>
+                ) : (
+                  <span className="muted">{t("claim.nobody")}</span>
+                )}
+                {card.claimedBy ? (
+                  <button className="btn-ghost small" onClick={claim.onRelease} title={t("claim.releaseTitle")}>
+                    {t("claim.release")}
+                  </button>
+                ) : (
+                  <button className="btn-ghost small" onClick={claim.onTake} title={t("claim.takeTitle")}>
+                    {t("claim.take")}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
           <h4>{t("field.columnId")}</h4>
           <select value={draft.columnId} onChange={(e) => set({ columnId: e.target.value })}>
             {board.columns.map((c) => (

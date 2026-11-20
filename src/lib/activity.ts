@@ -8,6 +8,7 @@
 
 import type { Author, Board, Card, CardComment, HistoryEvent } from "../types";
 import { priorityOf } from "./priority";
+import { claimLabel } from "./claim";
 
 /** File-safe name of a writer of history files. */
 export const writerName = (host: string, suffix?: string) =>
@@ -45,6 +46,8 @@ export function changesBetween(prev: Card | undefined, next: Card, board: Board)
   if ((prev.branch ?? null) !== (next.branch ?? null)) out.push({ field: "branch", from: prev.branch ?? null, to: next.branch ?? null });
   const mr = (c: Card) => (c.mergeRequest ? `${c.mergeRequest.state} ${c.mergeRequest.url}` : null);
   if (mr(prev) !== mr(next)) out.push({ field: "mergeRequest", from: mr(prev), to: mr(next) });
+  const who = (c: Card) => (c.claimedBy ? claimLabel(c.claimedBy) : null);
+  if (who(prev) !== who(next)) out.push({ field: "claimedBy", from: who(prev), to: who(next) });
   return out;
 }
 

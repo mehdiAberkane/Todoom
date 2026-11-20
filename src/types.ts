@@ -73,6 +73,8 @@ export interface Card {
   /** Git branch of the work on this card. */
   branch: string | null;
   mergeRequest: MergeRequest | null;
+  /** Who is working on the card, or null when nobody is. */
+  claimedBy: Claim | null;
   /** Set when the card is archived: it leaves the board but can be restored. */
   archivedAt: string | null;
   createdAt: string;
@@ -84,6 +86,11 @@ export interface Author {
   host: string;
   agent?: string;
   conversation?: string;
+}
+
+/** Who took a card, and when: also a lock other agents and conversations respect. */
+export interface Claim extends Author {
+  at: string;
 }
 
 /** A comment on a card: boards/<board>/comments/<card>/<id>.json. */
@@ -105,7 +112,8 @@ export type HistoryField =
   | "description"
   | "archived"
   | "branch"
-  | "mergeRequest";
+  | "mergeRequest"
+  | "claimedBy";
 
 /** One change of a card. from/to are names as they were at the time. */
 export interface HistoryEvent {

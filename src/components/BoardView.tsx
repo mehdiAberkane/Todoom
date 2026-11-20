@@ -428,6 +428,7 @@ export function BoardView({
             onComment: (text) => actions.addComment(openCard, text),
             onDeleteComment: (c) => actions.deleteComment(c, board.id),
           }}
+          claim={{ onTake: () => actions.claimCard(openCard), onRelease: () => actions.releaseCard(openCard) }}
         />
       )}
       {newCard && (

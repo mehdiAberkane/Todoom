@@ -172,3 +172,42 @@ class DevFieldsTest(unittest.TestCase):
             self.assertEqual(agent.read_json(card_path)["mergeRequest"]["state"], "merged")
             history = agent.read_json(board / "history" / "mw0card" / f"{agent.WRITER}.json")
             self.assertEqual(history["events"][-1]["to"], f"merged {url}")
+
+
+class ClaimTest(unittest.TestCase):
+    """A card taken by someone else is left alone; the agent takes and releases the ones it works on."""
+
+    def test_cards_held_by_someone_else_are_skipped(self):
+        cols = {"En cours": "c1", "Agent": "c2", "A verifier": "c3", "Echec": "c4"}
+        board = {"columns": [{"id": v, "name": k} for k, v in cols.items()]}
+        mine = {"id": "a", "columnId": "c1", "claimedBy": {**agent.AUTHOR, "at": "x"}}
+        free = {"id": "b", "columnId": "c1"}
+        theirs = {"id": "c", "title": "C", "columnId": "c1", "claimedBy": {"host": agent.HOST, "agent": "Claude", "at": "x"}}
+        files = {"board.json": board, "a.json": mine, "b.json": free, "c.json": theirs}
+
+        class FakePath:
+            def __init__(self, name):
+                self.name = name
+
+            def __truediv__(self, other):
+                return FakePath(other)
+
+            def glob(self, _):
+                return [FakePath(n) for n in ("a.json", "b.json", "c.json")]
+
+        with mock.patch.object(agent, "BOARD_DIR", FakePath("board")), \
+             mock.patch.object(agent, "read_json", side_effect=lambda p: files.get(p.name, board)), \
+             mock.patch.object(agent, "ensure_columns", return_value=cols), \
+             mock.patch.object(agent, "process") as process:
+            agent.tick()
+        self.assertEqual(sorted(call.args[1]["id"] for call in process.call_args_list), ["a", "b"])
+
+    def test_take_and_release_are_recorded(self):
+        card = {"id": "x"}
+        taken = agent.set_claim(card, True)
+        self.assertEqual(card["claimedBy"]["agent"], "todoom-agent")
+        self.assertEqual(taken[0]["field"], "claimedBy")
+        self.assertEqual(agent.set_claim(card, True), [])
+        released = agent.set_claim(card, False)
+        self.assertIsNone(card["claimedBy"])
+        self.assertIsNone(released[0]["to"])

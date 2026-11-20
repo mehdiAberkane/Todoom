@@ -27,6 +27,7 @@ const CARD: Check[] = [
   ["links", listOf(shaped([["type", isString], ["cardId", isString]]))],
   ["branch", nullable(isString)],
   ["mergeRequest", nullable(shaped([["url", isString], ["state", (v) => v === "open" || v === "merged" || v === "closed"]]))],
+  ["claimedBy", nullable(shaped([["host", isString], ["at", isString], ["agent", optional(isString)], ["conversation", optional(isString)]]))],
   ["archivedAt", nullable(isString)],
   ["createdAt", optional(isString)],
   ["updatedAt", optional(isString)],

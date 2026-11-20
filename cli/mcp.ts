@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { identity, normalize, Store, TodoomError } from "./store";
 import { prioritiesOf } from "../src/lib/priority";
+import { claimLabel } from "../src/lib/claim";
 
 declare const __TODOOM_VERSION__: string;
 const VERSION = typeof __TODOOM_VERSION__ === "string" ? __TODOOM_VERSION__ : "dev";
@@ -83,7 +84,17 @@ export function createServer(dir: string): McpServer {
           .sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order)
           .map((c) => {
             const v = store.view(c, board);
-            return { id: v.id, ref: v.ref, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
+            return {
+              id: v.id,
+              ref: v.ref,
+              column: v.column,
+              title: v.title,
+              priority: v.priority,
+              labels: v.labels,
+              due: v.due,
+              claimedBy: v.claimedBy ? claimLabel(v.claimedBy) : null,
+              updatedAt: v.updatedAt,
+            };
           });
       }),
   );
@@ -190,6 +201,41 @@ export function createServer(dir: string): McpServer {
       annotations: { ...writes, idempotentHint: true },
     },
     ({ card, other }) => run(() => store.unlink(card, other)),
+  );
+
+  const conversation = z
+    .string()
+    .optional()
+    .describe("A short name for this conversation (e.g. its topic), so two Claude conversations on the same computer don't take the same card");
+
+  server.registerTool(
+    "claim_card",
+    {
+      title: "Take a card",
+      description:
+        "Marks the card as being worked on by this computer and this conversation, and optionally moves it (e.g. to « En cours »). " +
+        "Refused when someone else (another computer, agent or conversation) holds it: then leave it, unless the user says otherwise. " +
+        "Take a card before working on it, and release it when done.",
+      inputSchema: {
+        card: z.string().describe("Card short id (SOL-42) or id"),
+        column: z.string().optional().describe("Column to move the card to at the same time"),
+        conversation,
+        force: z.boolean().optional().describe("Take it even if someone else holds it; only when the user asks"),
+      },
+      annotations: writes,
+    },
+    ({ card, column, conversation: c, force }) => run(() => store.claim(card, { column, conversation: c, force })),
+  );
+
+  server.registerTool(
+    "release_card",
+    {
+      title: "Release a card",
+      description: "Nobody works on the card any more. Only its holder may release it, unless forced.",
+      inputSchema: { card: z.string().describe("Card short id (SOL-42) or id"), conversation, force: z.boolean().optional() },
+      annotations: { ...writes, idempotentHint: true },
+    },
+    ({ card, conversation: c, force }) => run(() => store.release(card, { conversation: c, force })),
   );
 
   server.registerTool(

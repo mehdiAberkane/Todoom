@@ -62,7 +62,8 @@
               "description",
               "archived",
               "branch",
-              "mergeRequest"
+              "mergeRequest",
+              "claimedBy"
             ]
           },
           "from": {

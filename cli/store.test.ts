@@ -155,6 +155,23 @@ describe("writes", () => {
     expect(() => store.update(b.id, { mrState: "merged" })).toThrow(/adresse/);
   });
 
+  it("takes a card as a lock, moves it on the way, and releases it", () => {
+    const claude = new Store(dir, { tool: "mcp", author: { host: "PC-Main", agent: "Claude" } });
+    const other = new Store(dir, { tool: "cli", author: { host: "PC-Portable" } });
+    const a = claude.create("Todoom", "Un");
+    const taken = claude.claim(a.id, { column: "en cours", conversation: "login" });
+    expect(taken).toMatchObject({ column: "En cours", claimedBy: { host: "PC-Main", agent: "Claude", conversation: "login" } });
+    expect(() => other.claim(a.id)).toThrow("déjà pris par PC-Main · Claude (login)");
+    expect(() => claude.claim(a.id, { conversation: "export" })).toThrow(/déjà pris/);
+    expect(() => other.release(a.id)).toThrow(/pas par toi/);
+    expect(claude.claim(a.id, { conversation: "login" }).claimedBy?.conversation).toBe("login");
+    expect(claude.release(a.id, { conversation: "login" }).claimedBy).toBeNull();
+    expect(other.claim(a.id).claimedBy?.host).toBe("PC-Portable");
+    expect(claude.claim(a.id, { force: true }).claimedBy?.agent).toBe("Claude");
+    const history = claude.history(claude.board("Todoom"), a.id).filter((e) => e.field === "claimedBy");
+    expect(history.map((e) => e.to ?? null)).toEqual(["PC-Main · Claude (login)", null, "PC-Portable", "PC-Main · Claude"]);
+  });
+
   it("archives and restores at the bottom of the column", () => {
     const a = store.create("Todoom", "Un");
     const b = store.create("Todoom", "Deux");

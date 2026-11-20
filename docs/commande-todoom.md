@@ -47,6 +47,8 @@ noms possibles quand un nom n'est pas reconnu.
 | `todoom move <carte> <colonne> [--top]` | déplace en bas (ou en haut) d'une colonne |
 | `todoom link <carte> <type> <autre carte>` | lie deux cartes, même sur deux tableaux, et écrit le lien sur les deux. Types : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` |
 | `todoom unlink <carte> <autre carte>` | retire le lien des deux cartes |
+| `todoom claim <carte> [--move <colonne>] [--conversation <nom>] [--force]` | prend le ticket (« Pris par » : ce PC, l'agent, la conversation), en le déplaçant au passage ; refusé s'il est pris par quelqu'un d'autre |
+| `todoom release <carte> [--force]` | libère le ticket ; seul celui qui l'a pris peut le libérer, sauf `--force` |
 | `todoom comment <carte> <texte>` | ajoute un commentaire daté, signé du nom du PC (et de l'agent avec `--as` ou `TODOOM_AGENT`) |
 | `todoom archive <carte>` / `todoom restore <carte>` | archive, ou remet en bas de sa colonne |
 | `todoom mcp` | lance le serveur MCP |
@@ -68,7 +70,7 @@ ou la variable `TODOOM_AGENT` (le serveur MCP signe « Claude » par défaut), e
 ## Serveur MCP pour Claude
 
 `todoom mcp` expose les mêmes opérations comme outils : `list_boards`, `list_cards`,
-`get_card`, `create_card`, `update_card`, `move_card`, `link_cards`, `unlink_cards`, `add_comment`,
+`get_card`, `create_card`, `update_card`, `move_card`, `claim_card`, `release_card`, `link_cards`, `unlink_cards`, `add_comment`,
 `archive_card`, `restore_card`.
 
 Pour Claude Code, une fois pour toutes sur chaque PC :
@@ -89,7 +91,14 @@ Les tickets de ce projet sont sur le tableau Todoom « <Nom du tableau> ».
 Utilise les outils MCP todoom (ou la commande `todoom`, sortie JSON) ; n'écris
 jamais les fichiers JSON du dossier Todoom à la main.
 
-- Au début d'un ticket : `move_card` vers « En cours ».
+- Au début d'un ticket : `claim_card` avec `column` « En cours » et `conversation`
+  (un nom court pour cette conversation). S'il est refusé parce qu'un autre
+  l'a déjà pris, n'y touche pas et dis-le-moi.
 - À la fin : `add_comment` avec le compte rendu (ce qui a été fait, comment le
-  vérifier), puis `move_card` vers « A verifier ».
+  vérifier), `move_card` vers « A verifier », puis `release_card`.
 ```
+
+« Pris par » est aussi un verrou : l'agent ne prend pas une carte « En cours »
+prise par une conversation ou un autre PC. Drive met quelques secondes à porter
+un changement d'un PC à l'autre : deux PC qui prennent la même carte dans cet
+intervalle peuvent tous deux la croire à eux.

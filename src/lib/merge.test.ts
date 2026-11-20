@@ -16,6 +16,7 @@ const card = (patch: Partial<Card> = {}): Card => ({
   links: [],
   branch: null,
   mergeRequest: null,
+  claimedBy: null,
   archivedAt: null,
   createdAt: "2026-11-16T10:00:00.000Z",
   updatedAt: "2026-11-16T10:00:00.000Z",

@@ -6,6 +6,7 @@ import { boardProblem, cardProblem, commentProblem, historyProblem, settingsProb
 import { changesBetween, commentPath, commentsDir, eventsFor, historyDir, historyPath, writerName } from "./activity";
 import { t } from "./i18n";
 import { inverseOf, withLink, withoutLink } from "./links";
+import { newClaim } from "./claim";
 
 /** A file of the data folder that couldn't be loaded, and why. */
 export interface FileIssue {
@@ -86,6 +87,7 @@ function normalizeCard(raw: Partial<Card>, boardId: string): Card {
     links: raw.links ?? [],
     branch: raw.branch ?? null,
     mergeRequest: raw.mergeRequest ?? null,
+    claimedBy: raw.claimedBy ?? null,
     archivedAt: raw.archivedAt ?? null,
     createdAt: raw.createdAt ?? now(),
     updatedAt: raw.updatedAt ?? "",
@@ -516,6 +518,15 @@ export function useTodoom(backend: Backend) {
       },
 
       /** Removes the link from `from`, and from the other card when it is still there. */
+      /** This computer works on the card (by hand: no agent, no conversation). */
+      claimCard(card: Card) {
+        saveCard({ ...card, claimedBy: newClaim({ host: hostRef.current }) });
+      },
+
+      releaseCard(card: Card) {
+        saveCard({ ...card, claimedBy: null });
+      },
+
       unlinkCards(from: Card, to: Card | undefined, toId: string) {
         saveCard(withoutLink(from, toId));
         if (to && to.links.some((l) => l.cardId === from.id)) saveCard(withoutLink(to, from.id));
@@ -576,6 +587,7 @@ function blankCard(board: Board, columnId: string, title: string, order: number,
     links: [],
     branch: null,
     mergeRequest: null,
+    claimedBy: null,
     archivedAt: null,
     createdAt: t,
     updatedAt: t,

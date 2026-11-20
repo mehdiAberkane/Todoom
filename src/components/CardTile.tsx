@@ -4,6 +4,8 @@ import type { Card, Label, Priority } from "../types";
 import { dueStatus, formatDue } from "../lib/utils";
 import { t } from "../lib/i18n";
 import { mrLabel } from "../lib/dev";
+import { claimLabel } from "../lib/claim";
+import { formatDateTime } from "../lib/utils";
 
 export function CardBody({
   card,
@@ -52,7 +54,7 @@ export function CardBody({
         {cardRef && <span className="card-ref">{cardRef}</span>}
         {card.title}
       </div>
-      {(card.due || total > 0 || card.description || card.links.length > 0 || commentCount > 0 || card.branch || card.mergeRequest) && (
+      {(card.due || total > 0 || card.description || card.links.length > 0 || commentCount > 0 || card.branch || card.mergeRequest || card.claimedBy) && (
         <div className="card-badges">
           {blockers.length > 0 && (
             <span className="badge badge-blocked" title={t("card.blockedTitle", { titles: blockers.join(", ") })}>
@@ -67,6 +69,14 @@ export function CardBody({
           {total > 0 && (
             <span className={`badge ${done === total ? "badge-done" : ""}`} title={t("card.checklist")}>
               ☑ {done}/{total}
+            </span>
+          )}
+          {card.claimedBy && (
+            <span
+              className="badge badge-claim"
+              title={t("card.claimedTitle", { who: claimLabel(card.claimedBy), date: formatDateTime(card.claimedBy.at) })}
+            >
+              👤 {[card.claimedBy.host, card.claimedBy.agent].filter(Boolean).join(" · ")}
             </span>
           )}
           {card.mergeRequest ? (

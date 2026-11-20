@@ -189,6 +189,30 @@ def record_history(card, events):
     write_json(path, {"cardId": card["id"], "writer": WRITER, "events": earlier + events})
 
 
+def claim_label(c):
+    label = " · ".join(p for p in (c.get("host"), c.get("agent")) if p)
+    return f"{label} ({c['conversation']})" if c.get("conversation") else label
+
+
+def held_by_other(card):
+    """The card is taken by another computer, agent or conversation: it's theirs, not ours."""
+    c = card.get("claimedBy")
+    if not isinstance(c, dict):
+        return False
+    return (c.get("host"), c.get("agent"), c.get("conversation")) != (AUTHOR["host"], AUTHOR["agent"], None)
+
+
+def set_claim(card, taken):
+    """Takes (or releases) the card for this agent; returns the history event, if any."""
+    before = card.get("claimedBy")
+    after = {**AUTHOR, "at": now()} if taken else None
+    card["claimedBy"] = after
+    if bool(before) == bool(after):
+        return []
+    return [{"at": now(), "by": AUTHOR, "field": "claimedBy",
+             "from": claim_label(before) if before else None, "to": claim_label(after) if after else None}]
+
+
 def mr_text(mr):
     return f"{mr['state']} {mr['url']}" if mr else None
 
@@ -365,7 +389,10 @@ def process(card_path, card, cols):
     if git("status", "--porcelain", "--untracked-files=no"):
         log.warning("dépôt modifié, ticket « %s » laissé en attente", title)
         return
+    claim_events = set_claim(card, True)
     move(card_path, card, COL_LOCK, cols)
+    if claim_events:
+        record_history(card, claim_events)
     started = time.monotonic()
     log.info("=== NOUVEAU TICKET : « %s »", title)
 
@@ -415,6 +442,7 @@ def process(card_path, card, cols):
     latest = read_json(card_path)
     dev_events = set_dev(latest, branch if branch and git("branch", "--list", branch, check=False) else None,
                          mr_url if pushed else None)
+    dev_events += set_claim(latest, False)
     move(card_path, latest, column, cols)
     if dev_events:
         record_history(latest, dev_events)
@@ -448,6 +476,12 @@ def tick(dry_run=False):
             continue
         # Archived cards keep their column in Todoom but are off the board.
         if card.get("columnId") == cols[COL_TRIGGER] and not card.get("archivedAt"):
+            # Taken by a conversation or another computer: it's being worked on elsewhere.
+            if held_by_other(card):
+                if card["id"] not in tick.held_logged:
+                    log.info("« %s » est pris par %s : laissé", card.get("title"), claim_label(card["claimedBy"]))
+                    tick.held_logged.add(card["id"])
+                continue
             pending.append((card.get("order", 0), path, card))
     for _, path, card in sorted(pending, key=lambda p: p[0]):
         if dry_run:
@@ -457,6 +491,7 @@ def tick(dry_run=False):
 
 
 tick.trash_logged = False
+tick.held_logged = set()
 
 
 def load_config():

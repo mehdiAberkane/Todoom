@@ -138,6 +138,33 @@
         }
       }
     },
+    "claimedBy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Who is working on the card, also a lock: agents and conversations don't take a card someone else holds. null when nobody is.",
+      "required": [
+        "host",
+        "at"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "Name of the computer."
+        },
+        "agent": {
+          "type": "string"
+        },
+        "conversation": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "description": "ISO date when it was taken."
+        }
+      }
+    },
     "archivedAt": {
       "type": [
         "string",

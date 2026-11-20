@@ -6,6 +6,8 @@ Surveille un tableau Todoom toutes les 30 secondes. Chaque ticket placé dans «
 2. l'agent se place sur la branche de base, récupère les merge requests fusionnées sur GitLab, puis crée une branche pour le ticket ;
 3. Claude y fait le travail, lance les vérifications prévues, puis commite ;
 4. l'agent pousse la branche sur GitLab et ouvre une merge request vers la branche de base ;
+Une carte « En cours » déjà prise par quelqu'un d'autre (une conversation Claude, un autre PC : champ « Pris par ») est laissée de côté. L'agent prend le ticket quand il commence et le libère quand il a fini.
+
 5. le ticket passe dans « A verifier », avec un commentaire signé de l'agent : la branche, les commits, le lien de la merge request et le résumé de Claude. Ses déplacements sont inscrits dans l'historique de la carte, et la branche et la merge request remplissent les champs de la carte. Quand la branche arrive dans la branche de base, la merge request passe en « fusionnée » ;
 6. en cas d'échec, il passe dans « Echec » avec le même compte rendu. C'est le cas si Claude renvoie une erreur ou dépasse le temps maximal, s'il ne produit aucun commit, s'il laisse des modifications non commitées, ou si une commande git ou le push échoue. Rien n'est poussé si le travail de Claude a échoué.
 

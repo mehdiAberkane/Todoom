@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { findDataDir, identity, normalize, Store, TodoomError, type CardChanges } from "./store";
 import { serveMcp } from "./mcp";
 import { prioritiesOf } from "../src/lib/priority";
+import { claimLabel } from "../src/lib/claim";
 
 declare const __TODOOM_VERSION__: string;
 export const VERSION = typeof __TODOOM_VERSION__ === "string" ? __TODOOM_VERSION__ : "dev";
@@ -25,6 +26,9 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
   todoom link <carte> <type> <autre carte>    type : depends-on, blocks, duplicate-of,
                                               duplicated-by, relates-to (écrit sur les deux cartes)
   todoom unlink <carte> <autre carte>
+  todoom claim <carte> [--move <colonne>] [--conversation <nom>] [--force]
+                                              prendre le ticket (refusé s'il est pris par un autre)
+  todoom release <carte> [--force]            le libérer
   todoom comment <carte> <texte>              commentaire daté et signé (PC, TODOOM_AGENT)
   todoom archive <carte>
   todoom restore <carte>
@@ -70,6 +74,9 @@ export async function main(argv: string[]): Promise<number> {
       mr: { type: "string" },
       "mr-state": { type: "string" },
       "no-mr": { type: "boolean" },
+      move: { type: "string" },
+      conversation: { type: "string" },
+      force: { type: "boolean" },
       due: { type: "string" },
       "no-due": { type: "boolean" },
       top: { type: "boolean" },
@@ -123,7 +130,17 @@ export async function main(argv: string[]): Promise<number> {
       cards.sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order);
       out(cards.map((c) => {
         const v = s.view(c, board);
-        return { id: v.id, ref: v.ref, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
+        return {
+          id: v.id,
+          ref: v.ref,
+          column: v.column,
+          title: v.title,
+          priority: v.priority,
+          labels: v.labels,
+          due: v.due,
+          claimedBy: v.claimedBy ? claimLabel(v.claimedBy) : null,
+          updatedAt: v.updatedAt,
+        };
       }));
       return 0;
     }
@@ -181,6 +198,16 @@ export async function main(argv: string[]): Promise<number> {
     case "unlink":
       need(2, "unlink <carte> <autre carte>");
       out(store().unlink(rest[0], rest[1]));
+      return 0;
+
+    case "claim":
+      need(1, "claim <carte> [--move <colonne>] [--force]");
+      out(store().claim(rest[0], { column: o.move, force: o.force, conversation: o.conversation ?? process.env.TODOOM_CONVERSATION }));
+      return 0;
+
+    case "release":
+      need(1, "release <carte> [--force]");
+      out(store().release(rest[0], { force: o.force, conversation: o.conversation ?? process.env.TODOOM_CONVERSATION }));
       return 0;
 
     case "comment":

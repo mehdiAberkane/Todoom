@@ -29,6 +29,7 @@ const card: Card = {
   links: [],
   branch: null,
   mergeRequest: null,
+  claimedBy: null,
   archivedAt: null,
   createdAt: "",
   updatedAt: "",

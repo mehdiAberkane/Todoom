@@ -16,6 +16,8 @@ import { deriveKey, nextNumber, parseRef, refOf } from "../src/lib/shortid";
 import { changesBetween, commentPath, eventsFor, historyPath, writerName } from "../src/lib/activity";
 import { commentProblem, historyProblem } from "../src/lib/validate";
 import { MR_STATES, webUrl } from "../src/lib/dev";
+import { claimLabel, mayClaim, newClaim, sameClaimant } from "../src/lib/claim";
+import type { Claim } from "../src/types";
 import type { MergeRequest, MergeRequestState } from "../src/types";
 
 export class TodoomError extends Error {}
@@ -97,6 +99,7 @@ export interface CardView {
   links: Card["links"];
   branch: string | null;
   mergeRequest: MergeRequest | null;
+  claimedBy: Claim | null;
   order: number;
   archived: boolean;
   archivedAt: string | null;
@@ -249,6 +252,7 @@ export class Store {
       links: card.links,
       branch: card.branch,
       mergeRequest: card.mergeRequest,
+      claimedBy: card.claimedBy,
       order: card.order,
       archived: !!card.archivedAt,
       archivedAt: card.archivedAt,
@@ -360,6 +364,7 @@ export class Store {
       links: [],
       branch: null,
       mergeRequest: null,
+      claimedBy: null,
       archivedAt: null,
       createdAt: at,
       updatedAt: at,
@@ -467,6 +472,39 @@ export class Store {
     return this.detail(saved, a.board);
   }
 
+  /**
+   * Takes the card: this computer, agent and conversation work on it. Refused
+   * when someone else holds it, unless forced. Optionally moves it at the same
+   * time, so "take and put in En cours" is one write.
+   */
+  claim(cardId: string, opts: { column?: string; force?: boolean; conversation?: string } = {}): CardView {
+    const { card, board } = this.card(cardId);
+    const who = { ...this.who.author, ...(opts.conversation ? { conversation: opts.conversation } : {}) };
+    if (!mayClaim(card.claimedBy, who, opts.force)) {
+      const ref = refOf(board, card) ?? card.id;
+      throw new TodoomError(
+        `${ref} est déjà pris par ${claimLabel(card.claimedBy!)} depuis ${card.claimedBy!.at} : laisse-le, ou force avec --force (force: true).`,
+      );
+    }
+    let next: Card = { ...card, claimedBy: newClaim(who) };
+    if (opts.column) {
+      const column = this.column(board, opts.column);
+      if (column.id !== card.columnId) next = { ...next, columnId: column.id, order: this.position(board, column.id, "bottom", card.id) };
+    }
+    return this.view(this.save(board, next, card), board);
+  }
+
+  /** Nobody works on the card any more. Only its holder may release it, unless forced. */
+  release(cardId: string, opts: { force?: boolean; conversation?: string } = {}): CardView {
+    const { card, board } = this.card(cardId);
+    if (!card.claimedBy) return this.view(card, board);
+    const who = { ...this.who.author, ...(opts.conversation ? { conversation: opts.conversation } : {}) };
+    if (!opts.force && !sameClaimant(card.claimedBy, who)) {
+      throw new TodoomError(`Pris par ${claimLabel(card.claimedBy)}, pas par toi : force avec --force (force: true) pour le libérer.`);
+    }
+    return this.view(this.save(board, { ...card, claimedBy: null }, card), board);
+  }
+
   /** Adds a comment, dated and signed (computer, agent, conversation), in a file of its own. */
   comment(cardId: string, text: string): CardComment & { ref: string | null } {
     if (!text.trim()) throw new TodoomError("Le commentaire est vide");
@@ -534,6 +572,7 @@ function withDefaults(raw: Card, board: Board): Card {
     links: raw.links ?? [],
     branch: raw.branch ?? null,
     mergeRequest: raw.mergeRequest ?? null,
+    claimedBy: raw.claimedBy ?? null,
     archivedAt: raw.archivedAt ?? null,
     createdAt: raw.createdAt ?? "",
     updatedAt: raw.updatedAt ?? "",
