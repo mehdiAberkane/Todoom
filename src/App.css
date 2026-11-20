@@ -490,3 +490,12 @@ textarea { resize: vertical; }
   color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
+
+/* Stays in view at the bottom of the card editor, even when it scrolls. */
+.modal-foot {
+  position: sticky; bottom: -22px; z-index: 1;
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin: 16px -22px -22px; padding: 12px 22px 16px;
+  background: var(--panel); border-top: 1px solid var(--border);
+  border-radius: 0 0 14px 14px;
+}

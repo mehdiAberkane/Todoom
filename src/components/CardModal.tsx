@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Board, Card } from "../types";
 import { addDays, dueStatus, formatDateTime, formatDue, now, uid } from "../lib/utils";
 import { conflicts, mergeEdits, rebase, type Field } from "../lib/merge";
@@ -59,6 +59,18 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
     }
   };
   const close = () => leave(false);
+  // Ctrl + Enter (Cmd + Enter on a Mac) saves from any field, like the button.
+  const closeRef = useRef<(() => void) | null>(close);
+  closeRef.current = resolving ? null : close; // not while choosing between versions
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || !closeRef.current) return;
+      e.preventDefault();
+      closeRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // Keeps any pending edits; archiving is reversible, so no confirmation.
   const archive = () => leave(true);
 
@@ -249,6 +261,12 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
             {t("cardModal.archive")}
           </button>
         </aside>
+      </div>
+
+      <div className="modal-foot">
+        <button className="btn-primary" onClick={close} title={t("cardModal.saveTitle")}>
+          {t("cardModal.save")}
+        </button>
       </div>
     </Modal>
   );
