@@ -13,6 +13,19 @@ describe("loading the data folder", () => {
     expect(data.issues).toEqual([]);
   });
 
+  it("keeps the most recent of the Drive conflict copies of a card and a board", () => {
+    const data = parse(
+      files({
+        "boards/b1/cards/c1.json": card({ title: "ancienne", updatedAt: "2026-11-01T10:00:00Z" }),
+        "boards/b1/cards/c1 (1).json": card({ title: "récente", updatedAt: "2026-11-02T10:00:00Z" }),
+        "boards/b1/board (1).json": JSON.stringify({ ...board, name: "Renommé", updatedAt: "2" }),
+      }),
+    );
+    expect(data.cards.b1.map((c) => c.title)).toEqual(["récente"]);
+    expect(data.boards.map((b) => b.name)).toEqual(["Renommé"]);
+    expect(data.issues).toEqual([]);
+  });
+
   it("reports a half-synced file instead of dropping it silently", () => {
     const data = parse(files({ "boards/b1/cards/c1.json": '{"id":"c1","title":"Car' }));
     expect(data.cards.b1).toEqual([]);

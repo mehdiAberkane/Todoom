@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
 import type { AppSettings, Board, Card, Presence } from "../types";
-import { LABEL_COLORS, now, orderBetween, uid } from "./utils";
+import { LABEL_COLORS, now, reorder, uid } from "./utils";
 import { boardProblem, cardProblem, settingsProblem } from "./validate";
 
 /** A file of the data folder that couldn't be loaded, and why. */
@@ -269,19 +269,10 @@ export function useTodoom(backend: Backend) {
       /** `ids` is the full sidebar order after the drop; only the moved board is rewritten when possible. */
       moveBoard(boards: Board[], movedId: string, ids: string[]) {
         const byId = new Map(boards.map((b) => [b.id, b]));
-        const i = ids.indexOf(movedId);
-        const moved = byId.get(movedId);
-        if (!moved || i < 0) return;
-        const orderOf = (id: string | undefined) => (id ? byId.get(id)?.order : undefined);
-        const order = boards.every((b) => b.order !== undefined) ? orderBetween(orderOf(ids[i - 1]), orderOf(ids[i + 1])) : null;
-        if (order !== null) {
-          saveBoard({ ...moved, order });
-          return;
-        }
-        ids.forEach((id, index) => {
+        for (const [id, order] of reorder(ids, movedId, (id) => byId.get(id)?.order)) {
           const b = byId.get(id);
-          if (b && b.order !== index) saveBoard({ ...b, order: index });
-        });
+          if (b) saveBoard({ ...b, order });
+        }
       },
 
       createBoard(name: string, existing: Board[]): Board {

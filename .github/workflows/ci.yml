@@ -1,0 +1,70 @@
+# Checks every push to main and every pull request: build, tests (interface,
+# Rust, agent), Clippy and the dependency audits. The release workflow runs it
+# too and only publishes when it passes.
+# Actions are pinned to a commit SHA like in release.yml; Dependabot updates them.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_call' }}
+
+jobs:
+  checks:
+    # Windows: the platform Todoom and its agent run on, and Tauri builds there
+    # without extra system packages.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          components: clippy
+
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci --ignore-scripts
+
+      - name: Build the interface (type check included)
+        run: npm run build
+
+      - name: Interface tests
+        run: npm test
+
+      - name: npm dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      - name: Rust dependency audit
+        working-directory: src-tauri
+        shell: bash
+        run: |
+          cargo audit --version >/dev/null 2>&1 || cargo install cargo-audit --locked
+          cargo audit
+
+      - name: Agent tests
+        run: python -m unittest discover -s agent -v

@@ -8,7 +8,8 @@
 #   comment; Dependabot (.github/dependabot.yml) proposes the updates;
 # - npm install scripts don't run, so no dependency executes code before the
 #   signing steps;
-# - only the two steps that sign receive the key.
+# - only the two steps that sign receive the key;
+# - the checks of ci.yml (tests, Clippy, audits) must pass first.
 # Replacing a leaked key: docs/cle-de-signature.md.
 name: Release
 
@@ -19,7 +20,14 @@ on:
 permissions: {}
 
 jobs:
+  # Same checks as on every push: nothing is built or signed unless they pass.
+  checks:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   build:
+    needs: checks
     permissions:
       contents: write # create the release and upload the installers
     strategy:

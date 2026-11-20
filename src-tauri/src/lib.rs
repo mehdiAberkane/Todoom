@@ -134,10 +134,10 @@ fn check_data_dir(path: &Path) -> Result<(), String> {
     }
     let lower = |p: &Path| p.to_string_lossy().to_lowercase().trim_end_matches(['\\', '/']).to_string();
     let target = lower(path);
-    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
-        if target == lower(Path::new(&home)) {
-            return Err(format!("{shown} est ton dossier personnel : choisis un sous-dossier dédié."));
-        }
+    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+        && target == lower(Path::new(&home))
+    {
+        return Err(format!("{shown} est ton dossier personnel : choisis un sous-dossier dédié."));
     }
     let mut system: Vec<PathBuf> = ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"]
         .iter()
@@ -335,29 +335,56 @@ fn refuse_unreadable(target: &Path, rel: &str) -> Result<(), String> {
     }
 }
 
+/// Checks a path the UI wants to write and returns where it lives, its folder created.
+fn prepare_write(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    if !allowed(rel, Access::Write) {
+        return Err(format!("Écriture refusée : {rel} n'est pas un fichier de données Todoom."));
+    }
+    let target = resolve(root, rel)?;
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    refuse_unreadable(&target, rel)?;
+    Ok(target)
+}
+
 /// Writes through a temp file + rename so a half-written file never gets synced.
+fn write_atomic(target: &Path, content: &str) -> Result<(), String> {
+    let tmp = target.with_extension("json.tmp");
+    fs::write(&tmp, content).map_err(|e| e.to_string())?;
+    if fs::rename(&tmp, target).is_err() {
+        // Some virtual drives refuse renames over existing files.
+        let _ = fs::remove_file(&tmp);
+        fs::write(target, content).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn prepare_remove(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    if !allowed(rel, Access::Remove) {
+        return Err(format!("Suppression refusée : {rel} n'est pas une carte ni un tableau Todoom."));
+    }
+    resolve(root, rel)
+}
+
+fn remove_target(target: &Path) -> Result<(), String> {
+    if target.is_dir() {
+        fs::remove_dir_all(target).map_err(|e| e.to_string())
+    } else if target.exists() {
+        fs::remove_file(target).map_err(|e| e.to_string())
+    } else {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 async fn write_file(app: AppHandle, path: String, content: String) -> Result<(), String> {
     blocking(app, move |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
-        if !allowed(&path, Access::Write) {
-            return Err(format!("Écriture refusée : {path} n'est pas un fichier de données Todoom."));
-        }
-        let target = resolve(&root, &path)?;
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        refuse_unreadable(&target, &path)?;
+        let target = prepare_write(&root, &path)?;
         remember(&state, &root, &target, false);
-        let tmp = target.with_extension("json.tmp");
-        fs::write(&tmp, &content).map_err(|e| e.to_string())?;
-        if fs::rename(&tmp, &target).is_err() {
-            // Some virtual drives refuse renames over existing files.
-            let _ = fs::remove_file(&tmp);
-            fs::write(&target, &content).map_err(|e| e.to_string())?;
-        }
-        Ok(())
+        write_atomic(&target, &content)
     })
     .await
 }
@@ -367,18 +394,9 @@ async fn remove_path(app: AppHandle, path: String) -> Result<(), String> {
     blocking(app, move |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
-        if !allowed(&path, Access::Remove) {
-            return Err(format!("Suppression refusée : {path} n'est pas une carte ni un tableau Todoom."));
-        }
-        let target = resolve(&root, &path)?;
+        let target = prepare_remove(&root, &path)?;
         remember(&state, &root, &target, true);
-        if target.is_dir() {
-            fs::remove_dir_all(&target).map_err(|e| e.to_string())
-        } else if target.exists() {
-            fs::remove_file(&target).map_err(|e| e.to_string())
-        } else {
-            Ok(())
-        }
+        remove_target(&target)
     })
     .await
 }
@@ -494,6 +512,41 @@ mod tests {
             assert!(check_data_dir(Path::new(&std::env::var("HOME").unwrap())).is_err());
             assert!(check_data_dir(&Path::new(&std::env::var("HOME").unwrap()).join("Todoom")).is_ok());
         }
+    }
+
+    #[test]
+    fn writes_and_removes_cards_and_boards_in_the_data_folder() {
+        let root = std::env::temp_dir().join(format!("todoom-io-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let write = |rel: &str, content: &str| prepare_write(&root, rel).and_then(|t| write_atomic(&t, content));
+        let remove = |rel: &str| prepare_remove(&root, rel).and_then(|t| remove_target(&t));
+
+        // Creates the folders, then overwrites in place, leaving no temp file behind.
+        write("boards/b1/cards/c1.json", r#"{"id":"c1","title":"v1"}"#).unwrap();
+        write("boards/b1/cards/c1.json", r#"{"id":"c1","title":"v2"}"#).unwrap();
+        write("boards/b1/board.json", r#"{"id":"b1"}"#).unwrap();
+        let card = root.join("boards/b1/cards/c1.json");
+        assert_eq!(fs::read_to_string(&card).unwrap(), r#"{"id":"c1","title":"v2"}"#);
+        assert!(!root.join("boards/b1/cards/c1.json.tmp").exists());
+
+        // Refused before touching the disk.
+        assert!(write("../outside.json", "{}").is_err());
+        assert!(!root.parent().unwrap().join("outside.json").exists());
+        fs::write(root.join("boards/b1/cards/broken.json"), "{coupé").unwrap();
+        assert!(write("boards/b1/cards/broken.json", "{}").is_err());
+        assert_eq!(fs::read_to_string(root.join("boards/b1/cards/broken.json")).unwrap(), "{coupé");
+        assert!(remove("boards").is_err());
+        assert!(remove("boards/b1/board.json").is_err());
+
+        // A card, then a whole board; removing something already gone is fine.
+        remove("boards/b1/cards/c1.json").unwrap();
+        assert!(!card.exists());
+        remove("boards/b1/cards/c1.json").unwrap();
+        remove("boards/b1").unwrap();
+        assert!(!root.join("boards/b1").exists());
+
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

@@ -16,7 +16,7 @@ import {
 import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
-import { dueStatus, orderBetween, uid } from "../lib/utils";
+import { dueStatus, reorder, uid } from "../lib/utils";
 import { ColumnPreview, ColumnView } from "./ColumnView";
 import { CardBody } from "./CardTile";
 import { CardModal } from "./CardModal";
@@ -155,16 +155,12 @@ export function BoardView({ board, cards: allCards, actions }: { board: Board; c
 
     const unchanged = card.columnId === col && list.join() === (computed[col] ?? []).join();
     if (!unchanged) {
-      const i = list.indexOf(cardId);
-      const orderOf = (id: string | undefined) => (id ? cardById.get(id)?.order : undefined);
-      const order = orderBetween(orderOf(list[i - 1]), orderOf(list[i + 1]));
-      if (order !== null) {
-        actions.saveCard({ ...card, columnId: col, order });
-      } else {
-        list.forEach((id, idx) => {
-          const c = cardById.get(id);
-          if (c) actions.saveCard({ ...c, columnId: col, order: idx });
-        });
+      const updates = new Map(reorder(list, cardId, (id) => cardById.get(id)?.order));
+      // A card dropped in another column changes even if its position number doesn't.
+      if (!updates.has(cardId)) updates.set(cardId, card.order);
+      for (const [id, order] of updates) {
+        const c = cardById.get(id);
+        if (c) actions.saveCard({ ...c, columnId: col, order });
       }
     }
     endDrag();

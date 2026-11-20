@@ -16,6 +16,22 @@ export function orderBetween(prev?: number, next?: number): number | null {
   return mid > prev && mid < next ? mid : null;
 }
 
+/**
+ * New positions once `movedId` sits at its place in `ids` (the whole list after
+ * the drop). Usually only the moved item changes, to the midpoint of its
+ * neighbours. When they are too close, or an item has no position yet, the list
+ * is renumbered 0, 1, 2… and only the items whose position changes are returned.
+ */
+export function reorder(ids: string[], movedId: string, orderOf: (id: string) => number | undefined): [string, number][] {
+  const i = ids.indexOf(movedId);
+  if (i < 0) return [];
+  if (ids.every((id) => orderOf(id) !== undefined)) {
+    const order = orderBetween(i > 0 ? orderOf(ids[i - 1]) : undefined, i < ids.length - 1 ? orderOf(ids[i + 1]) : undefined);
+    if (order !== null) return [[movedId, order]];
+  }
+  return ids.flatMap((id, index): [string, number][] => (orderOf(id) === index ? [] : [[id, index]]));
+}
+
 export function toISODate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

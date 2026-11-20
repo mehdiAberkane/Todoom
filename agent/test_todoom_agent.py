@@ -37,6 +37,55 @@ class ClaudeCmdTest(unittest.TestCase):
         self.assertEqual(cmd, ["docker", "run", "--rm", "-v", f"{Path('C:/clone')}:/work", "img", "claude", "-p", "x"])
 
 
+class BranchNameTest(unittest.TestCase):
+    def card(self, title, description=""):
+        return {"id": "mw0abcdef123", "title": title, "description": description}
+
+    def test_guess_picks_the_type_from_keywords_and_drops_accents(self):
+        self.assertEqual(agent.guess_branch(self.card("Corriger le crash au démarrage")), "bugfix/corriger-crash-demarrage")
+        self.assertEqual(agent.guess_branch(self.card("Faille de sécurité dans l'export")), "security/faille-securite-export")
+        self.assertEqual(agent.guess_branch(self.card("Ajouter un export CSV")), "feature/ajouter-export-csv")
+        self.assertEqual(agent.guess_branch(self.card("!!!")), "feature/ticket")
+
+    def test_a_bad_suggestion_from_claude_falls_back_to_the_guess(self):
+        for answer in ("bugfix/crash-demarrage", "Voici le nom : feature/x", "feature/Avec Espaces", ""):
+            proc = mock.Mock(stdout=answer + "\n")
+            with mock.patch.object(agent.subprocess, "run", return_value=proc):
+                name = agent.suggest_branch(self.card("Corriger le crash au démarrage"))
+            expected = answer if answer == "bugfix/crash-demarrage" else "bugfix/corriger-crash-demarrage"
+            self.assertEqual(name, expected, answer)
+
+    def test_claude_unavailable_falls_back_to_the_guess(self):
+        with mock.patch.object(agent.subprocess, "run", side_effect=OSError("claude introuvable")):
+            self.assertEqual(agent.suggest_branch(self.card("Ajouter un export CSV")), "feature/ajouter-export-csv")
+
+
+class ResumeTest(unittest.TestCase):
+    """A failed ticket sent back to « En cours » resumes on the branch named in its report."""
+
+    def test_reuses_the_branch_of_the_last_attempt_when_it_still_exists(self):
+        card = {"id": "mw0abcdef123", "title": "Ajouter un export CSV",
+                "description": "Le ticket\n\n--- Agent (ÉCHEC) ---\nBranche : feature/old\n\n--- Agent (ÉCHEC) ---\nBranche : feature/export-csv"}
+        local = {"feature/export-csv"}
+        with mock.patch.object(agent, "git", side_effect=lambda *a, **k: a[-1] if a[:2] == ("branch", "--list") and a[-1] in local else ""):
+            self.assertEqual(agent.branch_for(card), "feature/export-csv")
+
+    def test_picks_a_new_name_with_a_suffix_when_it_is_taken(self):
+        card = {"id": "mw0abcdef123", "title": "Ajouter un export CSV", "description": ""}
+        with mock.patch.object(agent, "suggest_branch", return_value="feature/export-csv"), \
+             mock.patch.object(agent, "branch_exists", return_value=True):
+            self.assertEqual(agent.branch_for(card), "feature/export-csv-def123")
+
+
+class VerdictTest(unittest.TestCase):
+    def test_success_needs_commits_and_a_clean_tree(self):
+        self.assertEqual(agent.verdict(True, "fait", "abc1234 Ajoute l'export", ""), (True, "fait"))
+        self.assertEqual(agent.verdict(True, "", "", ""), (False, "Aucun commit produit."))
+        self.assertEqual(agent.verdict(True, "fini", "", ""), (False, "fini"))
+        self.assertEqual(agent.verdict(True, "fait", "abc1234 x", " M main.go"), (False, "fait"))
+        self.assertEqual(agent.verdict(False, "erreur", "abc1234 x", ""), (False, "erreur"))
+
+
 class ConfigTest(unittest.TestCase):
     def load(self, cfg):
         with mock.patch.object(agent, "read_json", return_value=cfg):

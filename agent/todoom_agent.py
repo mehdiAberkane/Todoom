@@ -260,6 +260,13 @@ def update_base():
         log.info("%s mis à jour : %s nouveau(x) commit(s)", BASE_BRANCH, new_commits)
 
 
+def verdict(ok, summary, commits, dirty):
+    """No commit or leftover edits means the ticket is not done, even if Claude exited cleanly."""
+    if ok and not commits:
+        return False, summary or "Aucun commit produit."
+    return ok and not dirty, summary
+
+
 def process(card_path, card, cols):
     title = card["title"]
     if git("status", "--porcelain", "--untracked-files=no"):
@@ -289,10 +296,7 @@ def process(card_path, card, cols):
     if not dirty:
         git("switch", BASE_BRANCH, check=False)
 
-    # No commit or leftover edits means the ticket is not done, even if Claude exited cleanly.
-    if ok and not commits:
-        ok, summary = False, summary or "Aucun commit produit."
-    ok = ok and not dirty
+    ok, summary = verdict(ok, summary, commits, dirty)
 
     pushed = False
     if ok:
