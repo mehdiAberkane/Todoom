@@ -9,6 +9,9 @@ const fieldLabel = (f: Field) => t(`field.${f}`);
 import { Modal } from "./ui";
 import { LinkSection, Mentions, type LinkProps } from "./LinkSection";
 import { ActivitySection, type ActivityProps } from "./ActivitySection";
+import { branchUrl, MR_STATES, webUrl } from "../lib/dev";
+import { openExternal } from "../lib/open";
+import type { MergeRequestState } from "../types";
 
 interface Props {
   card: Card;
@@ -50,7 +53,15 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
     setIncoming((prev) => [...new Set([...prev, ...r.incoming])]);
   }, [card]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cleaned = () => ({ ...draft, title: draft.title.trim() || base.title || t("cardModal.untitled") });
+  // A merge request whose address isn't a web address is dropped rather than saved.
+  const cleaned = () => ({
+    ...draft,
+    title: draft.title.trim() || base.title || t("cardModal.untitled"),
+    branch: draft.branch?.trim() || null,
+    mergeRequest: draft.mergeRequest && webUrl(draft.mergeRequest.url) ? { ...draft.mergeRequest, url: webUrl(draft.mergeRequest.url)! } : null,
+  });
+  const mrUrlOk = !draft.mergeRequest?.url.trim() || !!webUrl(draft.mergeRequest.url);
+  const branchLink = branchUrl(draft.branch, draft.mergeRequest && webUrl(draft.mergeRequest.url) ? draft.mergeRequest : null);
   const pending = conflicts(base, cleaned(), card);
 
   const finish = (archive: boolean, theirs: ReadonlySet<Field>) => {
@@ -296,6 +307,53 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             )}
           </div>
 
+          <h4>{t("field.branch")}</h4>
+          <div className="git-row">
+            <input
+              value={draft.branch ?? ""}
+              placeholder={t("git.branchPlaceholder")}
+              spellCheck={false}
+              onChange={(e) => set({ branch: e.target.value || null })}
+            />
+            {branchLink && (
+              <button className="icon-btn" onClick={() => openExternal(branchLink)} title={t("git.open")}>
+                ↗
+              </button>
+            )}
+          </div>
+
+          <h4>{t("field.mergeRequest")}</h4>
+          <div className="git-row">
+            <input
+              className={mrUrlOk ? "" : "invalid"}
+              value={draft.mergeRequest?.url ?? ""}
+              placeholder={t("git.mrPlaceholder")}
+              spellCheck={false}
+              title={mrUrlOk ? undefined : t("git.mrInvalid")}
+              onChange={(e) =>
+                set({ mergeRequest: e.target.value ? { url: e.target.value, state: draft.mergeRequest?.state ?? "open" } : null })
+              }
+            />
+            {draft.mergeRequest && mrUrlOk && (
+              <button className="icon-btn" onClick={() => openExternal(draft.mergeRequest!.url)} title={t("git.open")}>
+                ↗
+              </button>
+            )}
+          </div>
+          {draft.mergeRequest && (
+            <select
+              className={`mr-state mr-${draft.mergeRequest.state}`}
+              value={draft.mergeRequest.state}
+              onChange={(e) => set({ mergeRequest: { ...draft.mergeRequest!, state: e.target.value as MergeRequestState } })}
+            >
+              {MR_STATES.map((s) => (
+                <option key={s} value={s}>
+                  {t(`mr.${s}`)}
+                </option>
+              ))}
+            </select>
+          )}
+
           <div className="meta">
             <div>{t("cardModal.created", { date: formatDateTime(card.createdAt) })}</div>
             {card.updatedAt && <div>{t("cardModal.updated", { date: formatDateTime(card.updatedAt) })}</div>}
@@ -359,6 +417,10 @@ function describe(field: Field, card: Card, board: Board): string {
       return card.due ? formatDue(card.due) : t("describe.none");
     case "priority":
       return priorityOf(board, card)?.name ?? t("describe.none");
+    case "branch":
+      return card.branch ?? t("describe.none");
+    case "mergeRequest":
+      return card.mergeRequest ? `${card.mergeRequest.url} (${t(`mr.${card.mergeRequest.state}`)})` : t("describe.none");
     case "checklist": {
       const done = card.checklist.filter((i) => i.done).length;
       return t("describe.checklist", { n: card.checklist.length, done, items: card.checklist.map((i) => i.text).join(" · ") });

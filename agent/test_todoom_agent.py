@@ -147,3 +147,28 @@ class ActivityTest(unittest.TestCase):
             self.assertEqual(agent.read_json(card_path)["description"], "Le ticket")
             history = agent.read_json(board / "history" / "mw0card" / f"{agent.WRITER}.json")
             self.assertEqual([(e["field"], e["from"], e["to"]) for e in history["events"]], [("column", "En cours", "Agent")])
+
+
+class DevFieldsTest(unittest.TestCase):
+    """The agent fills the branch and merge request, and marks it merged once in the base branch."""
+
+    def test_branch_and_merge_request_are_filled_then_marked_merged(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            board = Path(tmp)
+            (board / "cards").mkdir()
+            card_path = board / "cards" / "mw0card.json"
+            card = {"id": "mw0card", "title": "T", "description": "", "columnId": "c1"}
+            url = "https://gitlab.example.com/g/p/-/merge_requests/7"
+            events = agent.set_dev(card, "feature/export", url)
+            self.assertEqual(card["branch"], "feature/export")
+            self.assertEqual(card["mergeRequest"], {"url": url, "state": "open"})
+            self.assertEqual([e["field"] for e in events], ["branch", "mergeRequest"])
+            self.assertEqual(agent.set_dev(card, "feature/export", url), [])
+            agent.write_json(card_path, card)
+            merged = lambda *a, **k: "  feature/export" if a[:2] == ("branch", "--merged") else ""
+            with mock.patch.object(agent, "BOARD_DIR", board), mock.patch.object(agent, "git", side_effect=merged):
+                agent.mark_merged()
+            self.assertEqual(agent.read_json(card_path)["mergeRequest"]["state"], "merged")
+            history = agent.read_json(board / "history" / "mw0card" / f"{agent.WRITER}.json")
+            self.assertEqual(history["events"][-1]["to"], f"merged {url}")

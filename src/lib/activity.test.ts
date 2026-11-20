@@ -27,6 +27,8 @@ const card: Card = {
   due: null,
   checklist: [],
   links: [],
+  branch: null,
+  mergeRequest: null,
   archivedAt: null,
   createdAt: "",
   updatedAt: "",

@@ -189,6 +189,47 @@ def record_history(card, events):
     write_json(path, {"cardId": card["id"], "writer": WRITER, "events": earlier + events})
 
 
+def mr_text(mr):
+    return f"{mr['state']} {mr['url']}" if mr else None
+
+
+def set_dev(card, branch, mr_url):
+    """Fills the card's branch and merge request fields; returns the history events."""
+    events = []
+    if branch and card.get("branch") != branch:
+        events.append({"at": now(), "by": AUTHOR, "field": "branch", "from": card.get("branch"), "to": branch})
+        card["branch"] = branch
+    old = card.get("mergeRequest")
+    if mr_url and (old or {}).get("url") != mr_url:
+        card["mergeRequest"] = {"url": mr_url, "state": "open"}
+        events.append({"at": now(), "by": AUTHOR, "field": "mergeRequest", "from": mr_text(old), "to": mr_text(card["mergeRequest"])})
+    return events
+
+
+def mark_merged():
+    """Open merge requests whose branch is now in the base branch are marked merged.
+
+    Called once the local base branch has caught up with the remote, so a request
+    merged on GitLab shows as merged in Todoom without anyone touching the card.
+    """
+    for path in (BOARD_DIR / "cards").glob("*.json"):
+        try:
+            card = read_json(path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        mr, branch = card.get("mergeRequest"), card.get("branch")
+        if not (isinstance(mr, dict) and mr.get("state") == "open" and branch):
+            continue
+        if not git("branch", "--merged", BASE_BRANCH, "--list", branch, check=False):
+            continue
+        card["mergeRequest"] = {**mr, "state": "merged"}
+        card["updatedAt"] = now()
+        write_json(path, card)
+        record_history(card, [{"at": card["updatedAt"], "by": AUTHOR, "field": "mergeRequest",
+                               "from": mr_text(mr), "to": mr_text(card["mergeRequest"])}])
+        log.info("merge request fusionnée : « %s » (%s)", card.get("title"), branch)
+
+
 def move(card_path, card, column, cols):
     """Moves the card to the column named `column` (cols: name -> id) and records it."""
     names = {v: k for k, v in cols.items()}
@@ -309,6 +350,7 @@ def update_base():
         log.info("%s déjà à jour", BASE_BRANCH)
     else:
         log.info("%s mis à jour : %s nouveau(x) commit(s)", BASE_BRANCH, new_commits)
+        mark_merged()
 
 
 def verdict(ok, summary, commits, dirty):
@@ -370,7 +412,12 @@ def process(card_path, card, cols):
     report += ["", summary or "(pas de résumé)"]
     add_comment(card, "\n".join(report))
     column = COL_DONE if ok else COL_FAILED
-    move(card_path, read_json(card_path), column, cols)
+    latest = read_json(card_path)
+    dev_events = set_dev(latest, branch if branch and git("branch", "--list", branch, check=False) else None,
+                         mr_url if pushed else None)
+    move(card_path, latest, column, cols)
+    if dev_events:
+        record_history(latest, dev_events)
     minutes, seconds = divmod(int(time.monotonic() - started), 60)
     log.info("=== TICKET TERMINÉ (%s, %d min %02d s) : « %s » -> %s", status, minutes, seconds, title, column)
     if mr_url:

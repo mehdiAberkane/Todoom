@@ -550,3 +550,13 @@ textarea { resize: vertical; }
 .comment-head .icon-btn { margin-left: auto; }
 .comment-text { white-space: pre-wrap; word-break: break-word; }
 .activity .event { font-size: 12px; padding-left: 10px; border-left: 2px solid var(--border); }
+
+/* Branch and merge request */
+.git-row { display: flex; gap: 4px; align-items: center; }
+.git-row input { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.git-row input.invalid { border-color: var(--accent); }
+.mr-state { margin-top: 6px; width: 100%; }
+.mr-open { color: var(--accent-2); }
+.mr-merged { color: #b58cff; }
+.mr-closed { color: var(--muted); }
+.badge-mr { font-weight: 600; }

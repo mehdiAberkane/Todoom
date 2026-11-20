@@ -44,6 +44,14 @@ export interface CardLink {
   cardId: string;
 }
 
+export type MergeRequestState = "open" | "merged" | "closed";
+
+export interface MergeRequest {
+  /** Web address of the merge request (GitLab) or pull request (GitHub). */
+  url: string;
+  state: MergeRequestState;
+}
+
 export interface Card {
   id: string;
   /** Short number on its board: 42 in SOL-42. Absent until given one. */
@@ -62,6 +70,9 @@ export interface Card {
   checklist: ChecklistItem[];
   /** Links to other cards; each link is also stored, reversed, on the other card. */
   links: CardLink[];
+  /** Git branch of the work on this card. */
+  branch: string | null;
+  mergeRequest: MergeRequest | null;
   /** Set when the card is archived: it leaves the board but can be restored. */
   archivedAt: string | null;
   createdAt: string;
@@ -84,7 +95,17 @@ export interface CardComment {
   text: string;
 }
 
-export type HistoryField = "created" | "column" | "title" | "priority" | "labels" | "due" | "description" | "archived";
+export type HistoryField =
+  | "created"
+  | "column"
+  | "title"
+  | "priority"
+  | "labels"
+  | "due"
+  | "description"
+  | "archived"
+  | "branch"
+  | "mergeRequest";
 
 /** One change of a card. from/to are names as they were at the time. */
 export interface HistoryEvent {

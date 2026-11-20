@@ -14,6 +14,8 @@ const card = (patch: Partial<Card> = {}): Card => ({
   due: null,
   checklist: [],
   links: [],
+  branch: null,
+  mergeRequest: null,
   archivedAt: null,
   createdAt: "2026-11-16T10:00:00.000Z",
   updatedAt: "2026-11-16T10:00:00.000Z",

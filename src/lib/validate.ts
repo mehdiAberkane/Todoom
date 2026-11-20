@@ -25,6 +25,8 @@ const CARD: Check[] = [
   ["due", nullable(isString)],
   ["checklist", listOf(shaped([["id", isString], ["text", isString], ["done", (v) => typeof v === "boolean"]]))],
   ["links", listOf(shaped([["type", isString], ["cardId", isString]]))],
+  ["branch", nullable(isString)],
+  ["mergeRequest", nullable(shaped([["url", isString], ["state", (v) => v === "open" || v === "merged" || v === "closed"]]))],
   ["archivedAt", nullable(isString)],
   ["createdAt", optional(isString)],
   ["updatedAt", optional(isString)],

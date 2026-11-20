@@ -42,6 +42,9 @@ export function changesBetween(prev: Card | undefined, next: Card, board: Board)
   if (prev.due !== next.due) out.push({ field: "due", from: prev.due, to: next.due });
   if (prev.description !== next.description) out.push({ field: "description" });
   if (!prev.archivedAt !== !next.archivedAt) out.push({ field: "archived", to: next.archivedAt ? "archived" : null });
+  if ((prev.branch ?? null) !== (next.branch ?? null)) out.push({ field: "branch", from: prev.branch ?? null, to: next.branch ?? null });
+  const mr = (c: Card) => (c.mergeRequest ? `${c.mergeRequest.state} ${c.mergeRequest.url}` : null);
+  if (mr(prev) !== mr(next)) out.push({ field: "mergeRequest", from: mr(prev), to: mr(next) });
   return out;
 }
 

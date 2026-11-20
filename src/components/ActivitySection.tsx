@@ -4,6 +4,8 @@ import { authorLabel } from "../lib/activity";
 import { formatDateTime, localGet, localSet } from "../lib/utils";
 import { t } from "../lib/i18n";
 import { DangerButton } from "./ui";
+import { mrLabel, MR_STATES } from "../lib/dev";
+import type { MergeRequestState } from "../types";
 
 export interface ActivityProps {
   comments: CardComment[];
@@ -102,6 +104,14 @@ export function ActivitySection({ comments, history, onComment, onDeleteComment 
   );
 }
 
+/** "open https://…/-/merge_requests/12" → "!12 ouverte". */
+function mrText(value: string | null | undefined): string {
+  if (!value) return t("describe.none");
+  const [state, url = ""] = value.split(" ");
+  const known = MR_STATES.includes(state as MergeRequestState);
+  return `${mrLabel(url)} ${known ? t(`mr.${state as MergeRequestState}`) : state}`;
+}
+
 function describeEvent(e: HistoryEvent): string {
   const v = (x: string | null | undefined) => x || t("describe.none");
   switch (e.field) {
@@ -116,7 +126,10 @@ function describeEvent(e: HistoryEvent): string {
     case "priority":
     case "labels":
     case "due":
+    case "branch":
       return t(`history.${e.field}`, { from: v(e.from), to: v(e.to) });
+    case "mergeRequest":
+      return t("history.mergeRequest", { from: mrText(e.from), to: mrText(e.to) });
     default:
       return String(e.field);
   }

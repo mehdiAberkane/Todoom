@@ -24,6 +24,8 @@ const card = (id: string, boardId: string, columnId: string, patch: Partial<Card
   due: null,
   checklist: [],
   links: [],
+  branch: null,
+  mergeRequest: null,
   archivedAt: null,
   createdAt: "",
   updatedAt: "",

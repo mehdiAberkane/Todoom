@@ -43,7 +43,7 @@ noms possibles quand un nom n'est pas reconnu.
 | `todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]` | cartes, colonne par colonne, sans description |
 | `todoom show <carte>` | une carte entière, avec ses commentaires, son historique et ses liens (titre, tableau, colonne, terminée ou non) |
 | `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
-| `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--priority … \| --no-priority] [--due … \| --no-due]` | modifie les champs donnés, garde les autres |
+| `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--priority … \| --no-priority] [--due … \| --no-due] [--branch … \| --no-branch] [--mr <adresse>] [--mr-state open\|merged\|closed] [--no-mr]` | modifie les champs donnés, garde les autres ; une merge request garde son état quand son adresse change |
 | `todoom move <carte> <colonne> [--top]` | déplace en bas (ou en haut) d'une colonne |
 | `todoom link <carte> <type> <autre carte>` | lie deux cartes, même sur deux tableaux, et écrit le lien sur les deux. Types : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` |
 | `todoom unlink <carte> <autre carte>` | retire le lien des deux cartes |

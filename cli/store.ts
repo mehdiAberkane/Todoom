@@ -15,6 +15,8 @@ import type { Author, CardComment, HistoryEvent, LinkType } from "../src/types";
 import { deriveKey, nextNumber, parseRef, refOf } from "../src/lib/shortid";
 import { changesBetween, commentPath, eventsFor, historyPath, writerName } from "../src/lib/activity";
 import { commentProblem, historyProblem } from "../src/lib/validate";
+import { MR_STATES, webUrl } from "../src/lib/dev";
+import type { MergeRequest, MergeRequestState } from "../src/types";
 
 export class TodoomError extends Error {}
 
@@ -93,6 +95,8 @@ export interface CardView {
   due: string | null;
   checklist: Card["checklist"];
   links: Card["links"];
+  branch: string | null;
+  mergeRequest: MergeRequest | null;
   order: number;
   archived: boolean;
   archivedAt: string | null;
@@ -111,6 +115,11 @@ export interface CardChanges {
   priority?: string | null;
   /** YYYY-MM-DD, or null to remove it. */
   due?: string | null;
+  /** Git branch name, or null to remove it. */
+  branch?: string | null;
+  /** Web address of the merge request, or null to remove it. */
+  mrUrl?: string | null;
+  mrState?: string;
 }
 
 /**
@@ -238,6 +247,8 @@ export class Store {
       due: card.due,
       checklist: card.checklist,
       links: card.links,
+      branch: card.branch,
+      mergeRequest: card.mergeRequest,
       order: card.order,
       archived: !!card.archivedAt,
       archivedAt: card.archivedAt,
@@ -347,6 +358,8 @@ export class Store {
       due: opts.due ?? null,
       checklist: [],
       links: [],
+      branch: null,
+      mergeRequest: null,
       archivedAt: null,
       createdAt: at,
       updatedAt: at,
@@ -371,6 +384,8 @@ export class Store {
       labels,
       priority: changes.priority !== undefined ? this.priorityId(board, changes.priority) : card.priority,
       due: changes.due !== undefined ? changes.due : card.due,
+      branch: changes.branch !== undefined ? changes.branch?.trim() || null : card.branch,
+      mergeRequest: mergeRequestAfter(card.mergeRequest, changes),
     };
     return this.view(this.save(board, next, card), board);
   }
@@ -479,6 +494,25 @@ export function linkType(name: string): LinkType {
   return kind;
 }
 
+/** The merge request once the changes are applied: a new address keeps the state, or starts open. */
+function mergeRequestAfter(current: MergeRequest | null, changes: CardChanges): MergeRequest | null {
+  if (changes.mrState !== undefined && !MR_STATES.includes(changes.mrState as MergeRequestState)) {
+    throw new TodoomError(`État de merge request inconnu : ${changes.mrState}. Choix : ${MR_STATES.join(", ")}`);
+  }
+  const state = changes.mrState as MergeRequestState | undefined;
+  if (changes.mrUrl === null) return null;
+  if (changes.mrUrl !== undefined) {
+    const url = webUrl(changes.mrUrl);
+    if (!url) throw new TodoomError(`Adresse de merge request invalide : ${changes.mrUrl} (https://… attendu)`);
+    return { url, state: state ?? current?.state ?? "open" };
+  }
+  if (state) {
+    if (!current) throw new TodoomError("La carte n'a pas de merge request : donne aussi son adresse");
+    return { ...current, state };
+  }
+  return current;
+}
+
 function joinParagraphs(text: string, extra: string): string {
   const head = text.replace(/\s+$/, "");
   return head ? `${head}\n\n${extra.trim()}` : extra.trim();
@@ -498,6 +532,8 @@ function withDefaults(raw: Card, board: Board): Card {
     due: raw.due ?? null,
     checklist: raw.checklist ?? [],
     links: raw.links ?? [],
+    branch: raw.branch ?? null,
+    mergeRequest: raw.mergeRequest ?? null,
     archivedAt: raw.archivedAt ?? null,
     createdAt: raw.createdAt ?? "",
     updatedAt: raw.updatedAt ?? "",

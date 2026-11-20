@@ -107,6 +107,37 @@
         }
       }
     },
+    "branch": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Git branch of the work on this card."
+    },
+    "mergeRequest": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "url",
+        "state"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Web address (https://) of the merge request or pull request."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "open",
+            "merged",
+            "closed"
+          ]
+        }
+      }
+    },
     "archivedAt": {
       "type": [
         "string",

@@ -138,10 +138,14 @@ export function createServer(dir: string): McpServer {
         removeLabels: z.array(z.string()).optional().describe("Label names to remove"),
         priority: z.string().nullable().optional().describe("Priority level name, or null to remove it"),
         due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("YYYY-MM-DD, or null to remove the due date"),
+        branch: z.string().nullable().optional().describe("Git branch of the work, or null to remove it"),
+        mergeRequestUrl: z.string().nullable().optional().describe("Web address of the merge request / pull request, or null to remove it"),
+        mergeRequestState: z.enum(["open", "merged", "closed"]).optional(),
       },
       annotations: writes,
     },
-    ({ card, ...changes }) => run(() => store.update(card, changes)),
+    ({ card, mergeRequestUrl, mergeRequestState, ...changes }) =>
+      run(() => store.update(card, { ...changes, mrUrl: mergeRequestUrl, mrState: mergeRequestState })),
   );
 
   server.registerTool(

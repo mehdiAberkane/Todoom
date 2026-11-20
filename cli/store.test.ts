@@ -142,6 +142,19 @@ describe("writes", () => {
     expect(() => store.card("TOD-99")).toThrow(/introuvable/);
   });
 
+  it("sets the branch and the merge request, which keeps its state when its address changes", () => {
+    const a = store.create("Todoom", "Un");
+    const url = "https://gitlab.com/g/p/-/merge_requests/4";
+    expect(store.update(a.id, { branch: " feature/x ", mrUrl: url })).toMatchObject({ branch: "feature/x", mergeRequest: { url, state: "open" } });
+    expect(store.update(a.id, { mrState: "merged" }).mergeRequest).toEqual({ url, state: "merged" });
+    expect(store.update(a.id, { mrUrl: url + "0" }).mergeRequest?.state).toBe("merged");
+    expect(() => store.update(a.id, { mrUrl: "javascript:alert(1)" })).toThrow(/invalide/);
+    expect(() => store.update(a.id, { mrState: "done" })).toThrow(/inconnu/);
+    expect(store.update(a.id, { branch: null, mrUrl: null })).toMatchObject({ branch: null, mergeRequest: null });
+    const b = store.create("Todoom", "Deux");
+    expect(() => store.update(b.id, { mrState: "merged" })).toThrow(/adresse/);
+  });
+
   it("archives and restores at the bottom of the column", () => {
     const a = store.create("Todoom", "Un");
     const b = store.create("Todoom", "Deux");

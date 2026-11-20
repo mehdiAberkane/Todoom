@@ -1,7 +1,7 @@
 import type { Card } from "../types";
 
 /** Fields the card editor can change. Everything else (order, dates…) always comes from the latest file. */
-export const EDITABLE = ["title", "description", "columnId", "labels", "priority", "due", "checklist"] as const;
+export const EDITABLE = ["title", "description", "columnId", "labels", "priority", "due", "checklist", "branch", "mergeRequest"] as const;
 export type Field = (typeof EDITABLE)[number];
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

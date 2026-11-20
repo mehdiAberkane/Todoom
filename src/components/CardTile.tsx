@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Card, Label, Priority } from "../types";
 import { dueStatus, formatDue } from "../lib/utils";
 import { t } from "../lib/i18n";
+import { mrLabel } from "../lib/dev";
 
 export function CardBody({
   card,
@@ -51,7 +52,7 @@ export function CardBody({
         {cardRef && <span className="card-ref">{cardRef}</span>}
         {card.title}
       </div>
-      {(card.due || total > 0 || card.description || card.links.length > 0 || commentCount > 0) && (
+      {(card.due || total > 0 || card.description || card.links.length > 0 || commentCount > 0 || card.branch || card.mergeRequest) && (
         <div className="card-badges">
           {blockers.length > 0 && (
             <span className="badge badge-blocked" title={t("card.blockedTitle", { titles: blockers.join(", ") })}>
@@ -67,6 +68,20 @@ export function CardBody({
             <span className={`badge ${done === total ? "badge-done" : ""}`} title={t("card.checklist")}>
               ☑ {done}/{total}
             </span>
+          )}
+          {card.mergeRequest ? (
+            <span
+              className={`badge badge-mr mr-${card.mergeRequest.state}`}
+              title={t("card.mrTitle", { label: mrLabel(card.mergeRequest.url), state: t(`mr.${card.mergeRequest.state}`) })}
+            >
+              ⑂ {mrLabel(card.mergeRequest.url)} {t(`mr.${card.mergeRequest.state}`)}
+            </span>
+          ) : (
+            card.branch && (
+              <span className="badge" title={t("card.branchTitle", { name: card.branch })}>
+                ⑂
+              </span>
+            )
           )}
           {card.links.length > 0 && (
             <span className="badge" title={t("card.linksTitle")}>

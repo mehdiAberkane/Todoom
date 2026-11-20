@@ -19,7 +19,8 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
                 [--label <nom>]... [--priority <nom>] [--due AAAA-MM-JJ]
   todoom update <carte> [--title <texte>] [--description <texte>] [--append <texte>]
                 [--label <nom>]... [--unlabel <nom>]... [--priority <nom> | --no-priority]
-                [--due AAAA-MM-JJ | --no-due]
+                [--due AAAA-MM-JJ | --no-due] [--branch <nom> | --no-branch]
+                [--mr <adresse>] [--mr-state open|merged|closed] [--no-mr]
   todoom move <carte> <colonne> [--top]
   todoom link <carte> <type> <autre carte>    type : depends-on, blocks, duplicate-of,
                                               duplicated-by, relates-to (écrit sur les deux cartes)
@@ -64,6 +65,11 @@ export async function main(argv: string[]): Promise<number> {
       unlabel: { type: "string", multiple: true },
       priority: { type: "string" },
       "no-priority": { type: "boolean" },
+      branch: { type: "string" },
+      "no-branch": { type: "boolean" },
+      mr: { type: "string" },
+      "mr-state": { type: "string" },
+      "no-mr": { type: "boolean" },
       due: { type: "string" },
       "no-due": { type: "boolean" },
       top: { type: "boolean" },
@@ -152,6 +158,9 @@ export async function main(argv: string[]): Promise<number> {
         addLabels: o.label,
         removeLabels: o.unlabel,
         priority: o["no-priority"] ? null : o.priority,
+        branch: o["no-branch"] ? null : o.branch,
+        mrUrl: o["no-mr"] ? null : o.mr,
+        mrState: o["mr-state"],
         due: o["no-due"] ? null : o.due,
       };
       if (Object.values(changes).every((v) => v === undefined)) throw new TodoomError("Rien à modifier : voir todoom --help");
