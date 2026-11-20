@@ -12,6 +12,7 @@ import { nextUpdatedAt, uid } from "../src/lib/ids";
 import { prioritiesOf, priorityOf } from "../src/lib/priority";
 import { inverseOf, isFinished, isLinkType, withLink, withoutLink } from "../src/lib/links";
 import type { LinkType } from "../src/types";
+import { deriveKey, nextNumber, parseRef, refOf } from "../src/lib/shortid";
 
 export class TodoomError extends Error {}
 
@@ -77,6 +78,8 @@ function writeAtomic(path: string, data: unknown) {
 /** A card with names instead of ids, for people and agents. */
 export interface CardView {
   id: string;
+  /** Short id such as SOL-42, or null while the app hasn't numbered the card yet. */
+  ref: string | null;
   board: string;
   boardId: string;
   column: string | null;
@@ -158,8 +161,15 @@ export class Store {
     return cards.sort((a, b) => a.order - b.order);
   }
 
-  /** A card by id (or a unique start of its id), on any board. */
+  /** A card by its short id (SOL-42), its id, or a unique start of its id, on any board. */
   card(wanted: string): { card: Card; board: Board } {
+    const ref = parseRef(wanted);
+    if (ref) {
+      const board = this.boards(true).find((b) => b.key?.toUpperCase() === ref.key);
+      const card = board && this.cards(board).find((c) => c.number === ref.number);
+      if (board && card) return { card, board };
+      throw new TodoomError(`Carte « ${wanted} » introuvable`);
+    }
     const id = wanted.trim();
     if (!/^[\w-]+$/.test(id)) throw new TodoomError(`Identifiant de carte invalide : ${wanted}`);
     const found: { card: Card; board: Board }[] = [];
@@ -179,6 +189,16 @@ export class Store {
     return withDefaults(raw as Card, board);
   }
 
+  /** The board's key, given now (and written) if it has none yet, by the same rule as the app. */
+  private ensureKey(board: Board): Board {
+    if (board.key) return board;
+    const key = deriveKey(board.name, this.boards(true).map((b) => b.key).filter((k): k is string => !!k));
+    const path = join(this.boardDir(board.id), "board.json");
+    const raw = readJson(path) as Board;
+    writeAtomic(path, { ...raw, key, updatedAt: nextUpdatedAt(raw.updatedAt) });
+    return { ...board, key };
+  }
+
   column(board: Board, wanted: string): Column {
     return byName(board.columns, wanted, `Colonne (tableau « ${board.name} »)`);
   }
@@ -186,6 +206,7 @@ export class Store {
   view(card: Card, board: Board): CardView {
     return {
       id: card.id,
+      ref: refOf(board, card),
       board: board.name,
       boardId: board.id,
       column: board.columns.find((c) => c.id === card.columnId)?.name ?? null,
@@ -240,13 +261,15 @@ export class Store {
     title: string,
     opts: { column?: string; description?: string; labels?: string[]; priority?: string | null; due?: string | null } = {},
   ): CardView {
-    const board = this.board(boardName);
-    if (board.archivedAt) throw new TodoomError(`Le tableau « ${board.name} » est dans la corbeille`);
+    const found = this.board(boardName);
+    if (found.archivedAt) throw new TodoomError(`Le tableau « ${found.name} » est dans la corbeille`);
+    const board = this.ensureKey(found);
     const column = opts.column ? this.column(board, opts.column) : board.columns[0];
     if (!column) throw new TodoomError(`Le tableau « ${board.name} » n'a aucune colonne`);
     const at = new Date().toISOString();
     const card: Card = {
       id: uid(),
+      number: nextNumber(this.cards(board)),
       boardId: board.id,
       columnId: column.id,
       order: this.position(board, column.id, "bottom"),
@@ -316,6 +339,7 @@ export class Store {
         return {
           type: l.type,
           cardId: l.cardId,
+          ref: refOf(other.board, other.card),
           title: other.card.title,
           board: other.board.name,
           column: other.board.columns.find((c) => c.id === other.card.columnId)?.name ?? null,
@@ -342,7 +366,14 @@ export class Store {
   /** Removes the link between two cards, from both. */
   unlink(cardId: string, otherId: string) {
     const a = this.card(cardId);
-    const target = a.card.links.find((l) => l.cardId === otherId || (otherId.length >= 4 && l.cardId.startsWith(otherId)));
+    // The other card may be gone: then only its raw id (or a start of it) can name it.
+    let otherFull = otherId;
+    try {
+      otherFull = this.card(otherId).card.id;
+    } catch {
+      /* not found: match the raw id below */
+    }
+    const target = a.card.links.find((l) => l.cardId === otherFull || (otherId.length >= 4 && l.cardId.startsWith(otherId)));
     if (!target) throw new TodoomError(`Pas de lien entre ${a.card.id} et ${otherId}`);
     const saved = this.save(a.board, withoutLink(a.card, target.cardId), a.card);
     try {

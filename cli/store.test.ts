@@ -103,7 +103,7 @@ describe("writes", () => {
     const a = store.create("Todoom", "Un");
     const b = store.create("Nyx", "Autre");
     const linked = store.link(a.id, "depends-on", b.id);
-    expect(linked.links).toEqual([{ type: "dependsOn", cardId: b.id, title: "Autre", board: "Nyx", column: "À faire", finished: false }]);
+    expect(linked.links).toEqual([{ type: "dependsOn", cardId: b.id, ref: "NYX-1", title: "Autre", board: "Nyx", column: "À faire", finished: false }]);
     expect(store.card(b.id).card.links).toEqual([{ type: "blocks", cardId: a.id }]);
     store.move(b.id, "terminé");
     expect(store.detail(store.card(a.id).card, store.board("Todoom")).links[0]).toMatchObject({ finished: true });
@@ -111,6 +111,17 @@ describe("writes", () => {
     expect(store.card(b.id).card.links).toEqual([]);
     expect(() => store.link(a.id, "depends-on", a.id)).toThrow(/elle-même/);
     expect(() => store.link(a.id, "parent", b.id)).toThrow(/Type de lien/);
+  });
+
+  it("gives the board a key and each new card the next number, found by its short id", () => {
+    const a = store.create("Todoom", "Un");
+    const b = store.create("Todoom", "Deux");
+    expect([a.ref, b.ref]).toEqual(["TOD-1", "TOD-2"]);
+    expect(JSON.parse(readFileSync(join(dir, "boards", "b1", "board.json"), "utf8")).key).toBe("TOD");
+    store.archive(b.id);
+    expect(store.create("Todoom", "Trois").ref).toBe("TOD-3");
+    expect(store.card("tod-2").card.title).toBe("Deux");
+    expect(() => store.card("TOD-99")).toThrow(/introuvable/);
   });
 
   it("archives and restores at the bottom of the column", () => {

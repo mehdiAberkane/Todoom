@@ -31,7 +31,8 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
 
 Tableaux, colonnes et étiquettes se désignent par leur nom : casse et accents
 ignorés, un début de nom suffit s'il est unique. Une carte se désigne par son
-identifiant (ou un début unique d'au moins 4 caractères).
+identifiant court (SOL-42), son identifiant, ou un début unique d'au moins
+4 caractères de celui-ci.
 Un texte égal à « - » est lu sur l'entrée standard.
 
 Options communes : --dir <dossier> (sinon TODOOM_DIR, sinon le dossier choisi
@@ -89,6 +90,7 @@ export async function main(argv: string[]): Promise<number> {
           .map((b) => ({
             id: b.id,
             name: b.name,
+            key: b.key ?? null,
             trashed: !!b.archivedAt,
             columns: b.columns.map((c) => c.name),
             labels: b.labels.map((l) => l.name),
@@ -113,7 +115,7 @@ export async function main(argv: string[]): Promise<number> {
       cards.sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order);
       out(cards.map((c) => {
         const v = s.view(c, board);
-        return { id: v.id, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
+        return { id: v.id, ref: v.ref, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
       }));
       return 0;
     }

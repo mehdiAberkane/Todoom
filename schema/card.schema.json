@@ -13,6 +13,11 @@
       "minLength": 1,
       "description": "Also the file name, without .json."
     },
+    "number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Short number on its board: 42 in SOL-42 (the prefix is the board's key). New cards take one more than the highest of the board, archived cards included. Todoom numbers cards that have none, and renumbers the newer of two cards sharing a number."
+    },
     "boardId": {
       "type": "string",
       "description": "Informative: the board is the folder the file is in."

@@ -17,6 +17,7 @@ import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
 import { byPriority, prioritiesOf } from "../lib/priority";
 import { openBlockers, type Located } from "../lib/links";
+import { cleanKey, nextNumber, parseRef, refOf } from "../lib/shortid";
 import { useDragSensors } from "../lib/dnd";
 import { t, tn } from "../lib/i18n";
 import { TRASH_DAYS } from "../lib/store";
@@ -40,6 +41,7 @@ export function BoardView({
   index,
   onOpenElsewhere,
   initialOpenCardId = null,
+  otherKeys,
 }: {
   board: Board;
   cards: Card[];
@@ -51,6 +53,8 @@ export function BoardView({
   onOpenElsewhere: (boardId: string, cardId: string) => void;
   /** Card to open when the board shows, after following a link from another board. */
   initialOpenCardId?: string | null;
+  /** Keys of the other boards, which this one can't take. */
+  otherKeys: string[];
 }) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
@@ -81,8 +85,11 @@ export function BoardView({
 
   const computed = useMemo<Lists>(() => {
     const q = query.trim().toLowerCase();
+    // « 42 » or « SOL-42 » finds the card by its number.
+    const ref = parseRef(q) ?? (/^\d+$/.test(q) ? { key: board.key ?? "", number: Number(q) } : null);
+    const byRef = (c: Card) => !!ref && c.number === ref.number && (!board.key || ref.key === board.key);
     const visible = (c: Card) =>
-      (!q || c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)) &&
+      (!q || byRef(c) || c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)) &&
       labelFilter.every((l) => c.labels.includes(l)) &&
       (!priorityFilter.length || (!!c.priority && priorityFilter.includes(c.priority)));
     const lists: Lists = Object.fromEntries(board.columns.map((c) => [c.id, []]));
@@ -94,7 +101,7 @@ export function BoardView({
       if (col) lists[col].push(c.id);
     }
     return lists;
-  }, [cards, board.columns, query, labelFilter, priorityFilter]);
+  }, [cards, board.columns, board.key, query, labelFilter, priorityFilter]);
 
   const lists = dragLists ?? computed;
   const listsRef = useRef(lists);
@@ -207,16 +214,30 @@ export function BoardView({
   const nextOrder = (columnId: string) =>
     cards.filter((c) => c.columnId === columnId).reduce((m, c) => Math.max(m, c.order), -1) + 1;
 
-  const addCard = (columnId: string, title: string) => actions.newCard(board, columnId, title, nextOrder(columnId));
+  // Numbers count archived cards too, so an id is never given twice.
+  const addCard = (columnId: string, title: string) =>
+    actions.newCard(board, columnId, title, nextOrder(columnId), nextNumber(allCards));
+
+  const [keyError, setKeyError] = useState(false);
+  const saveKey = (input: string) => {
+    const key = cleanKey(input);
+    const ok = !!key && !otherKeys.some((k) => k.toUpperCase() === key);
+    setKeyError(!ok);
+    if (ok && key !== board.key) actions.saveBoard({ ...board, key });
+  };
 
   // Opens the editor on a blank card in the first column; it is written on save.
   const startCard = () => {
     const first = board.columns[0];
-    if (first) setNewCard(actions.draftCard(board, first.id, "", nextOrder(first.id)));
+    if (first) setNewCard(actions.draftCard(board, first.id, "", nextOrder(first.id), nextNumber(allCards)));
   };
   // At the bottom of whichever column was picked in the editor.
   const saveNewCard = (card: Card) =>
-    actions.saveCard(card.columnId === newCard?.columnId ? card : { ...card, order: nextOrder(card.columnId) });
+    actions.saveCard({
+      ...card,
+      number: nextNumber(allCards),
+      order: card.columnId === newCard?.columnId ? card.order : nextOrder(card.columnId),
+    });
 
   const addColumn = () => {
     const name = newColumn.trim();
@@ -253,6 +274,11 @@ export function BoardView({
       <header className="board-head">
         <div className="board-title-row">
           <InlineEdit value={board.name} onSave={(name) => actions.saveBoard({ ...board, name })} className="board-title" />
+          {board.key && (
+            <span className={`board-key ${keyError ? "invalid" : ""}`} title={keyError ? t("board.keyInvalid") : t("board.keyTitle", { key: board.key })}>
+              <InlineEdit value={board.key} onSave={saveKey} />
+            </span>
+          )}
           <span className="board-stats">
             {tn("board.cards", cards.length)}
             {overdue > 0 && <span className="stat-overdue"> · {t("board.overdue", { n: overdue })}</span>}
@@ -332,6 +358,7 @@ export function BoardView({
                 labels={board.labels}
                 priorities={priorities}
                 blockers={blockers}
+                boardKey={board.key}
                 unsavedIds={unsavedIds}
                 onOpen={setOpenCardId}
                 onAdd={(title) => addCard(col.id, title)}
@@ -358,7 +385,13 @@ export function BoardView({
         <DragOverlay>
           {activeCard && (
             <div className="card overlay">
-              <CardBody card={activeCard} labels={board.labels} priorities={priorities} blockers={blockers.get(activeCard.id)} />
+              <CardBody
+                card={activeCard}
+                cardRef={refOf(board, activeCard)}
+                labels={board.labels}
+                priorities={priorities}
+                blockers={blockers.get(activeCard.id)}
+              />
             </div>
           )}
           {activeColumn && <ColumnPreview column={activeColumn} count={lists[activeColumn.id]?.length ?? 0} />}
@@ -370,6 +403,7 @@ export function BoardView({
           key={openCard.id}
           card={openCard}
           board={board}
+          cardRef={refOf(board, openCard)}
           onSave={actions.saveCard}
           onClose={() => setOpenCardId(null)}
           onManageLabels={() => setShowLabels(true)}

@@ -3,6 +3,7 @@ import "./App.css";
 import { backend } from "./lib/backend";
 import { expiredBoards, useTodoom } from "./lib/store";
 import { indexCards } from "./lib/links";
+import { deriveKey, numbering } from "./lib/shortid";
 import { useUpdater } from "./lib/updater";
 import { useCloseGuard } from "./lib/closeGuard";
 import { getLang, setLang, systemLang, t } from "./lib/i18n";
@@ -66,6 +67,22 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       actions.purgeBoard(b.id);
     }
   }, [data.boards, status, actions]);
+  // Every board gets a key and every card a number (SOL-42). Same rules on every
+  // computer, so two of them doing it at once write the same thing.
+  useEffect(() => {
+    if (status === "loading") return;
+    const taken = new Set(data.boards.map((b) => b.key).filter((k): k is string => !!k));
+    for (const b of data.boards) {
+      if (b.archivedAt) continue;
+      if (!b.key) {
+        const key = deriveKey(b.name, taken);
+        taken.add(key);
+        actions.saveBoard({ ...b, key });
+      }
+      for (const { card, number } of numbering(data.cards[b.id] ?? [])) actions.saveCard({ ...card, number });
+    }
+  }, [data.boards, data.cards, status, actions]);
+
   const openBoard = (id: string) => {
     setBoardId(id);
     setShowSettings(false);
@@ -146,6 +163,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             actions={actions}
             unsavedIds={unsavedIds}
             index={cardIndex}
+            otherKeys={data.boards.filter((b) => b.id !== board.id && b.key).map((b) => b.key!)}
             onOpenElsewhere={openElsewhere}
             initialOpenCardId={linkedCard}
           />

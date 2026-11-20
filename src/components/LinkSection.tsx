@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Card, LinkType } from "../types";
 import { isFinished, LINK_TYPES, type Located } from "../lib/links";
+import { refOf, refsIn } from "../lib/shortid";
 import { t } from "../lib/i18n";
 
 const MAX_RESULTS = 8;
@@ -29,7 +30,7 @@ export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps
     const linked = new Set(card.links.map((l) => l.cardId));
     return [...index.values()]
       .filter(({ card: c, board }) => c.id !== card.id && !linked.has(c.id) && !c.archivedAt && !board.archivedAt)
-      .filter(({ card: c }) => plain(c.title).includes(q) || c.id.startsWith(query.trim()))
+      .filter(({ card: c, board }) => plain(c.title).includes(q) || c.id.startsWith(query.trim()) || plain(refOf(board, c) ?? "") === q)
       .sort((a, b) => Number(b.board.id === self?.board.id) - Number(a.board.id === self?.board.id))
       .slice(0, MAX_RESULTS);
   }, [query, index, card.id, card.links, self?.board.id]);
@@ -60,6 +61,7 @@ export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps
                         onClick={() => onOpen(target.board.id, target.card.id)}
                         title={target.card.title}
                       >
+                        {refOf(target.board, target.card) && <span className="card-ref">{refOf(target.board, target.card)}</span>}
                         {target.card.title}
                       </button>
                     ) : (
@@ -107,7 +109,10 @@ export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps
               {results.map(({ card: c, board }) => (
                 <li key={c.id}>
                   <button onClick={() => link(c)}>
-                    <span>{c.title}</span>
+                    <span>
+                      {refOf(board, c) && <span className="card-ref">{refOf(board, c)}</span>}
+                      {c.title}
+                    </span>
                     {board.id !== self?.board.id && <span className="muted">{board.name}</span>}
                   </button>
                 </li>
@@ -118,5 +123,42 @@ export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps
         </div>
       </div>
     </>
+  );
+}
+
+/** Ids such as SOL-42 written in the description, as links to those cards. */
+export function Mentions({
+  text,
+  selfId,
+  index,
+  onOpen,
+}: {
+  text: string;
+  selfId: string;
+  index: Map<string, Located>;
+  onOpen: (boardId: string, cardId: string) => void;
+}) {
+  const found = useMemo(() => {
+    const refs = refsIn(text);
+    if (!refs.length) return [];
+    const byRef = new Map<string, Located>();
+    for (const l of index.values()) {
+      const ref = refOf(l.board, l.card);
+      if (ref) byRef.set(ref, l);
+    }
+    return refs.map((r) => byRef.get(r)).filter((l): l is Located => !!l && l.card.id !== selfId);
+  }, [text, index, selfId]);
+
+  if (!found.length) return null;
+  return (
+    <div className="mentions">
+      <span className="muted">{t("cardModal.mentions")}</span>
+      {found.map(({ card, board }) => (
+        <button key={card.id} className="link-target" disabled={!!board.archivedAt} onClick={() => onOpen(board.id, card.id)} title={card.title}>
+          <span className="card-ref">{refOf(board, card)}</span>
+          {card.title}
+        </button>
+      ))}
+    </div>
   );
 }

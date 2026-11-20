@@ -54,7 +54,7 @@ noms possibles quand un nom n'est pas reconnu.
 - **Noms** : tableaux, colonnes, étiquettes et priorités se désignent par leur nom. Casse et
   accents sont ignorés, et un début de nom suffit s'il est unique :
   `todoom move <carte> "en cours"`.
-- **Cartes** : par leur identifiant, ou un début unique d'au moins 4 caractères.
+- **Cartes** : par leur identifiant court (`SOL-42`, casse ignorée), leur identifiant, ou un début unique d'au moins 4 caractères de celui-ci. Les réponses donnent l'identifiant court dans `ref`.
 - **Liens** : une carte qui dépend d'une carte non terminée est marquée « Bloquée » sur le tableau. Une carte compte comme terminée quand elle est archivée ou dans une colonne nommée « Terminé », « Done », « Fait »…
 - **Texte long** : `-` à la place du texte le lit sur l'entrée standard :
   `Get-Content rapport.md | todoom comment <carte> -`.

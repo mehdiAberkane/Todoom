@@ -16,6 +16,11 @@
     "name": {
       "type": "string"
     },
+    "key": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]{0,5}$",
+      "description": "Prefix of the cards' short ids (SOL in SOL-42), unique among boards. Given automatically from the name when missing."
+    },
     "columns": {
       "type": "array",
       "description": "In display order.",

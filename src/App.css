@@ -529,3 +529,12 @@ textarea { resize: vertical; }
 .link-results button:hover { background: var(--card-hover); }
 .link-results button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge-blocked { color: #ff6b57; background: rgba(255, 77, 46, 0.14); font-weight: 600; }
+
+/* Short ids (SOL-42) */
+.card-ref { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.card-ref-chip { flex: none; align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-variant-numeric: tabular-nums; }
+.card-ref-chip:hover { color: var(--text); border-color: var(--muted); }
+.board-key { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+.board-key.invalid { border-color: var(--accent); color: var(--accent); }
+.board-key .inline-edit-input { width: 7ch; font-size: 12px; text-transform: uppercase; }
+.mentions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 6px; font-size: 12px; }

@@ -15,6 +15,7 @@ const listOf = (ok: (v: unknown) => boolean) => (v: unknown) => v === undefined 
 const shaped = (checks: Check[]) => (v: unknown) => isObject(v) && checks.every(([f, ok]) => ok(v[f]));
 
 const CARD: Check[] = [
+  ["number", optional(isNumber)],
   ["title", optional(isString)],
   ["description", optional(isString)],
   ["columnId", optional(isString)],
@@ -31,6 +32,7 @@ const CARD: Check[] = [
 
 const BOARD: Check[] = [
   ["name", optional(isString)],
+  ["key", optional(isString)],
   ["columns", listOf(shaped([["id", isString], ["name", isString]]))],
   ["labels", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["priorities", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],

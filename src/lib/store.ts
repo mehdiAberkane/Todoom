@@ -47,6 +47,7 @@ function normalizeBoard(raw: Partial<Board>): Board {
   return {
     id: raw.id!,
     name: raw.name ?? t("board.untitled"),
+    ...(raw.key ? { key: raw.key } : {}),
     columns: raw.columns ?? [],
     labels: raw.labels ?? [],
     ...(raw.priorities ? { priorities: raw.priorities } : {}),
@@ -67,6 +68,7 @@ function sortBoards(boards: Board[]): Board[] {
 function normalizeCard(raw: Partial<Card>, boardId: string): Card {
   return {
     id: raw.id!,
+    ...(typeof raw.number === "number" ? { number: raw.number } : {}),
     boardId,
     columnId: raw.columnId ?? "",
     order: typeof raw.order === "number" ? raw.order : 0,
@@ -455,8 +457,8 @@ export function useTodoom(backend: Backend) {
         saveBoard({ ...board, columns: board.columns.filter((c) => c.id !== columnId) });
       },
 
-      newCard(board: Board, columnId: string, title: string, order: number): Card {
-        const card = blankCard(board, columnId, title, order);
+      newCard(board: Board, columnId: string, title: string, order: number, number?: number): Card {
+        const card = blankCard(board, columnId, title, order, number);
         saveCard(card);
         return card;
       },
@@ -472,10 +474,11 @@ export function useTodoom(backend: Backend) {
   return { data, status, error, host, actions, reload, unsaved, unsavedIds, failures, nextRetry, retryNow };
 }
 
-function blankCard(board: Board, columnId: string, title: string, order: number): Card {
+function blankCard(board: Board, columnId: string, title: string, order: number, number?: number): Card {
   const t = now();
   return {
     id: uid(),
+    ...(number ? { number } : {}),
     boardId: board.id,
     columnId,
     order,

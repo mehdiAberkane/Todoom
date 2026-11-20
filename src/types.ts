@@ -15,6 +15,8 @@ export interface Column {
 export interface Board {
   id: string;
   name: string;
+  /** Prefix of the cards' short ids (SOL in SOL-42); given to each board automatically. */
+  key?: string;
   columns: Column[];
   labels: Label[];
   /** Priority levels, highest first; absent means the defaults P1, P2, P3. */
@@ -44,6 +46,8 @@ export interface CardLink {
 
 export interface Card {
   id: string;
+  /** Short number on its board: 42 in SOL-42. Absent until given one. */
+  number?: number;
   boardId: string;
   columnId: string;
   /** Fractional position inside the column: moving a card rewrites only that card. */

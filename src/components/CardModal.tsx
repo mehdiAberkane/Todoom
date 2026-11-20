@@ -7,7 +7,7 @@ import { priorityOf, prioritiesOf } from "../lib/priority";
 
 const fieldLabel = (f: Field) => t(`field.${f}`);
 import { Modal } from "./ui";
-import { LinkSection, type LinkProps } from "./LinkSection";
+import { LinkSection, Mentions, type LinkProps } from "./LinkSection";
 
 interface Props {
   card: Card;
@@ -19,6 +19,8 @@ interface Props {
   isNew?: boolean;
   /** Links to other cards; left out for a card not saved yet. */
   links?: LinkProps;
+  /** Short id such as SOL-42. */
+  cardRef?: string | null;
 }
 
 /**
@@ -27,7 +29,7 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
@@ -149,6 +151,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
   return (
     <Modal onClose={close} className="card-modal">
       <div className="modal-head">
+        {cardRef && <CopyRef value={cardRef} />}
         <textarea
           className="modal-title"
           rows={1}
@@ -187,6 +190,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             value={draft.description}
             onChange={(e) => set({ description: e.target.value })}
           />
+          {links && <Mentions text={draft.description} selfId={card.id} index={links.index} onOpen={openLinked} />}
 
           <h4>
             {t("field.checklist")} {total > 0 && <span className="muted">{done}/{total}</span>}
@@ -307,6 +311,36 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** The card's short id; a click copies it, to paste in a commit, a merge request or another ticket. */
+function CopyRef({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(value);
+      ok = true;
+    } catch {
+      // Some webviews refuse the clipboard API; the older copy command still works there.
+      const area = document.createElement("textarea");
+      area.value = value;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      ok = document.execCommand("copy");
+      area.remove();
+    }
+    if (!ok) return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+  return (
+    <button className="card-ref-chip" onClick={copy} title={t("card.copyRef")}>
+      {copied ? `✓ ${t("card.copied")}` : value}
+    </button>
   );
 }
 

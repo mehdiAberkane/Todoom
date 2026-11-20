@@ -11,7 +11,7 @@ const VERSION = typeof __TODOOM_VERSION__ === "string" ? __TODOOM_VERSION__ : "d
 
 const NAMES =
   "Boards, columns and labels are given by name (case and accents ignored; a unique start of the name is enough). " +
-  "A card is given by its id.";
+  "A card is given by its short id (e.g. SOL-42) or its id.";
 
 type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
 
@@ -46,6 +46,7 @@ export function createServer(dir: string): McpServer {
           .map((b) => ({
             id: b.id,
             name: b.name,
+            key: b.key ?? null,
             trashed: !!b.archivedAt,
             columns: b.columns.map((c) => c.name),
             labels: b.labels.map((l) => l.name),
@@ -81,7 +82,7 @@ export function createServer(dir: string): McpServer {
           .sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order)
           .map((c) => {
             const v = store.view(c, board);
-            return { id: v.id, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
+            return { id: v.id, ref: v.ref, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, updatedAt: v.updatedAt };
           });
       }),
   );
@@ -91,7 +92,7 @@ export function createServer(dir: string): McpServer {
     {
       title: "Get a card",
       description: "A card with its description, priority, labels, due date, checklist and links (with the linked cards' titles, boards, columns and whether they are finished).",
-      inputSchema: { card: z.string().describe("Card id") },
+      inputSchema: { card: z.string().describe("Card short id (SOL-42) or id") },
       annotations: readOnly,
     },
     ({ card }) =>
@@ -128,7 +129,7 @@ export function createServer(dir: string): McpServer {
       description:
         "Changes the fields given and keeps the others. To add a report or a note, prefer add_comment over rewriting the description.",
       inputSchema: {
-        card: z.string().describe("Card id"),
+        card: z.string().describe("Card short id (SOL-42) or id"),
         title: z.string().min(1).optional(),
         description: z.string().optional().describe("Replaces the whole description"),
         append: z.string().optional().describe("Added at the end of the description, after a blank line"),
@@ -148,7 +149,7 @@ export function createServer(dir: string): McpServer {
       title: "Move a card",
       description: `Moves a card to a column of its board, at the bottom (or the top). ${NAMES}`,
       inputSchema: {
-        card: z.string().describe("Card id"),
+        card: z.string().describe("Card short id (SOL-42) or id"),
         column: z.string().describe("Column name, e.g. « En cours »"),
         position: z.enum(["top", "bottom"]).optional(),
       },
@@ -166,7 +167,7 @@ export function createServer(dir: string): McpServer {
         "card dependsOn other also writes other blocks card. A card with an unfinished dependsOn is shown as blocked. " +
         "Replaces any other link between the same two cards.",
       inputSchema: {
-        card: z.string().describe("Card id"),
+        card: z.string().describe("Card short id (SOL-42) or id"),
         type: z.enum(["dependsOn", "blocks", "duplicateOf", "duplicatedBy", "relatesTo"]),
         other: z.string().describe("Id of the other card"),
       },
@@ -180,7 +181,7 @@ export function createServer(dir: string): McpServer {
     {
       title: "Unlink two cards",
       description: "Removes the link between two cards, from both.",
-      inputSchema: { card: z.string().describe("Card id"), other: z.string().describe("Id of the other card") },
+      inputSchema: { card: z.string().describe("Card short id (SOL-42) or id"), other: z.string().describe("Id of the other card") },
       annotations: { ...writes, idempotentHint: true },
     },
     ({ card, other }) => run(() => store.unlink(card, other)),
@@ -191,7 +192,7 @@ export function createServer(dir: string): McpServer {
     {
       title: "Comment on a card",
       description: "Adds a dated note signed with this computer's name at the end of the card's description: reports, findings, questions.",
-      inputSchema: { card: z.string().describe("Card id"), text: z.string().min(1) },
+      inputSchema: { card: z.string().describe("Card short id (SOL-42) or id"), text: z.string().min(1) },
       annotations: writes,
     },
     ({ card, text }) => run(() => store.comment(card, text)),
@@ -202,7 +203,7 @@ export function createServer(dir: string): McpServer {
     {
       title: "Archive a card",
       description: "Takes a card off the board; it stays in the board's archive and can be restored.",
-      inputSchema: { card: z.string().describe("Card id") },
+      inputSchema: { card: z.string().describe("Card short id (SOL-42) or id") },
       annotations: { ...writes, idempotentHint: true },
     },
     ({ card }) => run(() => store.archive(card)),
@@ -213,7 +214,7 @@ export function createServer(dir: string): McpServer {
     {
       title: "Restore a card",
       description: "Puts an archived card back at the bottom of its column.",
-      inputSchema: { card: z.string().describe("Card id") },
+      inputSchema: { card: z.string().describe("Card short id (SOL-42) or id") },
       annotations: { ...writes, idempotentHint: true },
     },
     ({ card }) => run(() => store.restore(card)),

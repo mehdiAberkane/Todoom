@@ -6,11 +6,14 @@ import { t } from "../lib/i18n";
 
 export function CardBody({
   card,
+  cardRef,
   labels,
   priorities,
   blockers = [],
 }: {
   card: Card;
+  /** Short id such as SOL-42. */
+  cardRef?: string | null;
   labels: Label[];
   priorities: Priority[];
   /** Titles of the unfinished cards this one depends on. */
@@ -42,7 +45,10 @@ export function CardBody({
           ))}
         </div>
       )}
-      <div className="card-title">{card.title}</div>
+      <div className="card-title">
+        {cardRef && <span className="card-ref">{cardRef}</span>}
+        {card.title}
+      </div>
       {(card.due || total > 0 || card.description || card.links.length > 0) && (
         <div className="card-badges">
           {blockers.length > 0 && (
@@ -78,6 +84,7 @@ export function CardBody({
 
 export function CardTile({
   card,
+  cardRef,
   labels,
   priorities,
   blockers,
@@ -85,6 +92,7 @@ export function CardTile({
   onOpen,
 }: {
   card: Card;
+  cardRef?: string | null;
   labels: Label[];
   priorities: Priority[];
   blockers?: string[];
@@ -115,7 +123,7 @@ export function CardTile({
           {t("card.unsaved")}
         </div>
       )}
-      <CardBody card={card} labels={labels} priorities={priorities} blockers={blockers} />
+      <CardBody card={card} cardRef={cardRef} labels={labels} priorities={priorities} blockers={blockers} />
     </article>
   );
 }
