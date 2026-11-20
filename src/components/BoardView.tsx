@@ -48,6 +48,7 @@ export function BoardView({
   const [query, setQuery] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [newCard, setNewCard] = useState<Card | null>(null);
   const [showLabels, setShowLabels] = useState(false);
   const [newColumn, setNewColumn] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -179,10 +180,19 @@ export function BoardView({
     endDrag();
   };
 
-  const addCard = (columnId: string, title: string) => {
-    const last = cards.filter((c) => c.columnId === columnId).reduce((m, c) => Math.max(m, c.order), -1);
-    actions.newCard(board, columnId, title, last + 1);
+  const nextOrder = (columnId: string) =>
+    cards.filter((c) => c.columnId === columnId).reduce((m, c) => Math.max(m, c.order), -1) + 1;
+
+  const addCard = (columnId: string, title: string) => actions.newCard(board, columnId, title, nextOrder(columnId));
+
+  // Opens the editor on a blank card in the first column; it is written on save.
+  const startCard = () => {
+    const first = board.columns[0];
+    if (first) setNewCard(actions.draftCard(board, first.id, "", nextOrder(first.id)));
   };
+  // At the bottom of whichever column was picked in the editor.
+  const saveNewCard = (card: Card) =>
+    actions.saveCard(card.columnId === newCard?.columnId ? card : { ...card, order: nextOrder(card.columnId) });
 
   const addColumn = () => {
     const name = newColumn.trim();
@@ -214,6 +224,9 @@ export function BoardView({
           </span>
         </div>
         <div className="board-tools">
+          <button className="btn-primary" onClick={startCard} disabled={!board.columns.length} title={t("board.newCardTitle")}>
+            {t("board.newCard")}
+          </button>
           <input
             className="search"
             placeholder={t("board.search")}
@@ -309,6 +322,17 @@ export function BoardView({
           board={board}
           onSave={actions.saveCard}
           onClose={() => setOpenCardId(null)}
+          onManageLabels={() => setShowLabels(true)}
+        />
+      )}
+      {newCard && (
+        <CardModal
+          key={newCard.id}
+          card={newCard}
+          board={board}
+          isNew
+          onSave={saveNewCard}
+          onClose={() => setNewCard(null)}
           onManageLabels={() => setShowLabels(true)}
         />
       )}

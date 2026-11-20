@@ -13,6 +13,8 @@ interface Props {
   onSave: (card: Card) => void;
   onClose: () => void;
   onManageLabels: () => void;
+  /** A card not on the board yet: closing without typing anything creates nothing. */
+  isNew?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
@@ -39,11 +41,13 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
     setIncoming((prev) => [...new Set([...prev, ...r.incoming])]);
   }, [card]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cleaned = () => ({ ...draft, title: draft.title.trim() || base.title });
+  const cleaned = () => ({ ...draft, title: draft.title.trim() || base.title || t("cardModal.untitled") });
   const pending = conflicts(base, cleaned(), card);
 
   const finish = (archive: boolean, theirs: ReadonlySet<Field>) => {
-    const merged = mergeEdits(base, cleaned(), card, theirs);
+    // A new card only exists once something was put in it; picking a column alone isn't enough.
+    const empty = isNew && !mergeEdits(base, { ...draft, columnId: base.columnId }, card, theirs);
+    const merged = empty ? null : mergeEdits(base, cleaned(), card, theirs);
     if (archive) onSave({ ...(merged ?? card), archivedAt: now() });
     else if (merged) onSave(merged);
     onClose();
@@ -141,6 +145,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
           value={draft.title}
           onChange={(e) => set({ title: e.target.value.replace(/\n/g, " ") })}
           placeholder={t("cardModal.title")}
+          autoFocus={isNew}
         />
         <button className="icon-btn" onClick={close} title={t("common.closeEsc")}>
           ✕
@@ -257,9 +262,11 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
             {card.updatedAt && <div>{t("cardModal.updated", { date: formatDateTime(card.updatedAt) })}</div>}
           </div>
 
-          <button className="btn-ghost full" onClick={archive} title={t("cardModal.archiveTitle")}>
-            {t("cardModal.archive")}
-          </button>
+          {!isNew && (
+            <button className="btn-ghost full" onClick={archive} title={t("cardModal.archiveTitle")}>
+              {t("cardModal.archive")}
+            </button>
+          )}
         </aside>
       </div>
 

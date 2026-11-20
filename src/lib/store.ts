@@ -440,24 +440,13 @@ export function useTodoom(backend: Backend) {
       },
 
       newCard(board: Board, columnId: string, title: string, order: number): Card {
-        const t = now();
-        const card: Card = {
-          id: uid(),
-          boardId: board.id,
-          columnId,
-          order,
-          title,
-          description: "",
-          labels: [],
-          due: null,
-          checklist: [],
-          archivedAt: null,
-          createdAt: t,
-          updatedAt: t,
-        };
+        const card = blankCard(board, columnId, title, order);
         saveCard(card);
         return card;
       },
+
+      /** A card not written yet, for the editor to fill in before the first save. */
+      draftCard: blankCard,
     };
   }, [writeJson, removePath]);
 
@@ -465,6 +454,24 @@ export function useTodoom(backend: Backend) {
   const unsavedIds = useMemo(() => new Set(unsaved.map(idOfPath).filter((id): id is string => !!id)), [unsaved]);
 
   return { data, status, error, host, actions, reload, unsaved, unsavedIds, failures, nextRetry, retryNow };
+}
+
+function blankCard(board: Board, columnId: string, title: string, order: number): Card {
+  const t = now();
+  return {
+    id: uid(),
+    boardId: board.id,
+    columnId,
+    order,
+    title,
+    description: "",
+    labels: [],
+    due: null,
+    checklist: [],
+    archivedAt: null,
+    createdAt: t,
+    updatedAt: t,
+  };
 }
 
 export type Actions = ReturnType<typeof useTodoom>["actions"];
