@@ -21,6 +21,9 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
                 [--label <nom>]... [--unlabel <nom>]... [--priority <nom> | --no-priority]
                 [--due AAAA-MM-JJ | --no-due]
   todoom move <carte> <colonne> [--top]
+  todoom link <carte> <type> <autre carte>    type : depends-on, blocks, duplicate-of,
+                                              duplicated-by, relates-to (écrit sur les deux cartes)
+  todoom unlink <carte> <autre carte>
   todoom comment <carte> <texte>
   todoom archive <carte>
   todoom restore <carte>
@@ -119,7 +122,7 @@ export async function main(argv: string[]): Promise<number> {
       need(1, "show <carte>");
       const s = store();
       const { card, board } = s.card(rest[0]);
-      out(s.view(card, board));
+      out(s.detail(card, board));
       return 0;
     }
 
@@ -155,6 +158,16 @@ export async function main(argv: string[]): Promise<number> {
     case "move":
       need(2, "move <carte> <colonne> [--top]");
       out(store().move(rest[0], rest.slice(1).join(" "), o.top ? "top" : "bottom"));
+      return 0;
+
+    case "link":
+      need(3, "link <carte> <type> <autre carte>");
+      out(store().link(rest[0], rest[1], rest[2]));
+      return 0;
+
+    case "unlink":
+      need(2, "unlink <carte> <autre carte>");
+      out(store().unlink(rest[0], rest[1]));
       return 0;
 
     case "comment":

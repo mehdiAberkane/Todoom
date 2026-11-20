@@ -4,7 +4,18 @@ import type { Card, Label, Priority } from "../types";
 import { dueStatus, formatDue } from "../lib/utils";
 import { t } from "../lib/i18n";
 
-export function CardBody({ card, labels, priorities }: { card: Card; labels: Label[]; priorities: Priority[] }) {
+export function CardBody({
+  card,
+  labels,
+  priorities,
+  blockers = [],
+}: {
+  card: Card;
+  labels: Label[];
+  priorities: Priority[];
+  /** Titles of the unfinished cards this one depends on. */
+  blockers?: string[];
+}) {
   const cardLabels = card.labels.map((id) => labels.find((l) => l.id === id)).filter((l): l is Label => !!l);
   const priority = card.priority ? priorities.find((p) => p.id === card.priority) : undefined;
   const done = card.checklist.filter((i) => i.done).length;
@@ -32,8 +43,13 @@ export function CardBody({ card, labels, priorities }: { card: Card; labels: Lab
         </div>
       )}
       <div className="card-title">{card.title}</div>
-      {(card.due || total > 0 || card.description) && (
+      {(card.due || total > 0 || card.description || card.links.length > 0) && (
         <div className="card-badges">
+          {blockers.length > 0 && (
+            <span className="badge badge-blocked" title={t("card.blockedTitle", { titles: blockers.join(", ") })}>
+              {t("card.blocked")}
+            </span>
+          )}
           {card.due && (
             <span className={`badge due-${due}`} title={t("card.due")}>
               {due === "overdue" ? "🔥" : "📅"} {formatDue(card.due)}
@@ -42,6 +58,11 @@ export function CardBody({ card, labels, priorities }: { card: Card; labels: Lab
           {total > 0 && (
             <span className={`badge ${done === total ? "badge-done" : ""}`} title={t("card.checklist")}>
               ☑ {done}/{total}
+            </span>
+          )}
+          {card.links.length > 0 && (
+            <span className="badge" title={t("card.linksTitle")}>
+              🔗 {card.links.length}
             </span>
           )}
           {card.description && (
@@ -59,12 +80,14 @@ export function CardTile({
   card,
   labels,
   priorities,
+  blockers,
   unsaved,
   onOpen,
 }: {
   card: Card;
   labels: Label[];
   priorities: Priority[];
+  blockers?: string[];
   /** The disk hasn't confirmed the last change of this card yet. */
   unsaved: boolean;
   onOpen: (id: string) => void;
@@ -92,7 +115,7 @@ export function CardTile({
           {t("card.unsaved")}
         </div>
       )}
-      <CardBody card={card} labels={labels} priorities={priorities} />
+      <CardBody card={card} labels={labels} priorities={priorities} blockers={blockers} />
     </article>
   );
 }

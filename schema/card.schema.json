@@ -75,6 +75,33 @@
         }
       }
     },
+    "links": {
+      "type": "array",
+      "description": "Links to other cards, on any board. Each link is also stored, reversed, on the other card: dependsOn <-> blocks, duplicateOf <-> duplicatedBy, relatesTo <-> relatesTo. Write both sides, or use the todoom command (todoom link).",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "cardId"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "dependsOn",
+              "blocks",
+              "duplicateOf",
+              "duplicatedBy",
+              "relatesTo"
+            ]
+          },
+          "cardId": {
+            "type": "string",
+            "description": "Id of the other card."
+          }
+        }
+      }
+    },
     "archivedAt": {
       "type": [
         "string",

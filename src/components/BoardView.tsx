@@ -16,6 +16,7 @@ import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
 import { byPriority, prioritiesOf } from "../lib/priority";
+import { openBlockers, type Located } from "../lib/links";
 import { useDragSensors } from "../lib/dnd";
 import { t, tn } from "../lib/i18n";
 import { TRASH_DAYS } from "../lib/store";
@@ -36,11 +37,20 @@ export function BoardView({
   cards: allCards,
   actions,
   unsavedIds,
+  index,
+  onOpenElsewhere,
+  initialOpenCardId = null,
 }: {
   board: Board;
   cards: Card[];
   actions: Actions;
   unsavedIds: ReadonlySet<string>;
+  /** Every card by id, on every board, for links. */
+  index: Map<string, Located>;
+  /** Opens a card of another board. */
+  onOpenElsewhere: (boardId: string, cardId: string) => void;
+  /** Card to open when the board shows, after following a link from another board. */
+  initialOpenCardId?: string | null;
 }) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
@@ -50,7 +60,7 @@ export function BoardView({
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const priorities = prioritiesOf(board);
-  const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [openCardId, setOpenCardId] = useState<string | null>(initialOpenCardId);
   const [newCard, setNewCard] = useState<Card | null>(null);
   const [showLabels, setShowLabels] = useState(false);
   const [newColumn, setNewColumn] = useState("");
@@ -58,6 +68,16 @@ export function BoardView({
   const [dragLists, setDragLists] = useState<Lists | null>(null);
 
   const cardById = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
+
+  const blockers = useMemo(
+    () => new Map(cards.map((c) => [c.id, openBlockers(c, index).map((b) => b.card.title)])),
+    [cards, index],
+  );
+
+  const openLinked = (boardId: string, cardId: string) => {
+    if (boardId === board.id) setOpenCardId(cardId);
+    else onOpenElsewhere(boardId, cardId);
+  };
 
   const computed = useMemo<Lists>(() => {
     const q = query.trim().toLowerCase();
@@ -311,6 +331,7 @@ export function BoardView({
                 cards={(lists[col.id] ?? []).map((id) => cardById.get(id)!).filter(Boolean)}
                 labels={board.labels}
                 priorities={priorities}
+                blockers={blockers}
                 unsavedIds={unsavedIds}
                 onOpen={setOpenCardId}
                 onAdd={(title) => addCard(col.id, title)}
@@ -337,7 +358,7 @@ export function BoardView({
         <DragOverlay>
           {activeCard && (
             <div className="card overlay">
-              <CardBody card={activeCard} labels={board.labels} priorities={priorities} />
+              <CardBody card={activeCard} labels={board.labels} priorities={priorities} blockers={blockers.get(activeCard.id)} />
             </div>
           )}
           {activeColumn && <ColumnPreview column={activeColumn} count={lists[activeColumn.id]?.length ?? 0} />}
@@ -352,6 +373,12 @@ export function BoardView({
           onSave={actions.saveCard}
           onClose={() => setOpenCardId(null)}
           onManageLabels={() => setShowLabels(true)}
+          links={{
+            index,
+            onLink: (type, target) => actions.linkCards(openCard, type, target),
+            onUnlink: (targetId) => actions.unlinkCards(openCard, index.get(targetId)?.card, targetId),
+            onOpen: openLinked,
+          }}
         />
       )}
       {newCard && (

@@ -507,3 +507,25 @@ textarea { resize: vertical; }
 .card-priority { font-size: 10px; font-weight: 800; color: var(--prio); border: 1.5px solid var(--prio); border-radius: 4px; padding: 0 5px; line-height: 14px; }
 .priority-chip { font-weight: 700; }
 .filter-sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px; }
+
+/* Links between cards */
+.links { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.links li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.links li.done .link-target { text-decoration: line-through; color: var(--muted); }
+.link-type { flex: none; width: 104px; font-size: 12px; color: var(--muted); }
+.link-target { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: none; border: none; padding: 0; color: var(--accent-2); text-align: left; }
+.link-target:hover:not(:disabled) { text-decoration: underline; }
+.link-target.missing { color: var(--muted); font-style: italic; }
+.link-board { font-size: 11px; white-space: nowrap; }
+.link-done { font-size: 11px; color: var(--ok); white-space: nowrap; }
+.links .icon-btn { margin-left: auto; }
+.link-add { display: flex; gap: 6px; align-items: flex-start; }
+.link-add select { flex: none; }
+.link-search { position: relative; flex: 1; min-width: 0; }
+.link-search input { width: 100%; }
+.link-results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; list-style: none; margin: 0; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); max-height: 260px; overflow-y: auto; }
+.link-results li.muted { padding: 6px 8px; }
+.link-results button { width: 100%; display: flex; justify-content: space-between; gap: 10px; background: none; border: none; padding: 6px 8px; border-radius: 6px; text-align: left; }
+.link-results button:hover { background: var(--card-hover); }
+.link-results button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge-blocked { color: #ff6b57; background: rgba(255, 77, 46, 0.14); font-weight: 600; }

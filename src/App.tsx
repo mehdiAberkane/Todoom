@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { backend } from "./lib/backend";
 import { expiredBoards, useTodoom } from "./lib/store";
+import { indexCards } from "./lib/links";
 import { useUpdater } from "./lib/updater";
 import { useCloseGuard } from "./lib/closeGuard";
 import { getLang, setLang, systemLang, t } from "./lib/i18n";
@@ -49,6 +50,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   useCloseGuard(unsaved.length, retryNow);
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   const [showSettings, setShowSettings] = useState(false);
+  // A card to open once its board shows, after following a link from another board.
+  const [linkedCard, setLinkedCard] = useState<string | null>(null);
   const activeBoards = useMemo(() => data.boards.filter((b) => !b.archivedAt), [data.boards]);
   const trashedBoards = useMemo(() => data.boards.filter((b) => b.archivedAt), [data.boards]);
   const board = activeBoards.find((b) => b.id === boardId) ?? activeBoards[0];
@@ -75,6 +78,16 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   useEffect(() => {
     if (board) localSet("todoom-board", board.id);
   }, [board?.id]);
+
+  const cardIndex = useMemo(() => indexCards(data.boards, data.cards), [data.boards, data.cards]);
+  const openElsewhere = (id: string, cardId: string) => {
+    openBoard(id);
+    setLinkedCard(cardId);
+  };
+  // The board read it when it mounted; don't open it again on a later visit.
+  useEffect(() => {
+    if (linkedCard) setLinkedCard(null);
+  }, [linkedCard]);
 
   const counts = useMemo(
     () => Object.fromEntries(Object.entries(data.cards).map(([id, cards]) => [id, cards.filter((c) => !c.archivedAt).length])),
@@ -126,7 +139,16 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             onBack={() => setShowSettings(false)}
           />
         ) : board ? (
-          <BoardView key={board.id} board={board} cards={data.cards[board.id] ?? []} actions={actions} unsavedIds={unsavedIds} />
+          <BoardView
+            key={board.id}
+            board={board}
+            cards={data.cards[board.id] ?? []}
+            actions={actions}
+            unsavedIds={unsavedIds}
+            index={cardIndex}
+            onOpenElsewhere={openElsewhere}
+            initialOpenCardId={linkedCard}
+          />
         ) : status === "loading" ? (
           <div className="empty-state">{t("common.loading")}</div>
         ) : (

@@ -33,6 +33,15 @@ export interface ChecklistItem {
   done: boolean;
 }
 
+/** How a card relates to another, seen from the card that holds the link. */
+export type LinkType = "dependsOn" | "blocks" | "duplicateOf" | "duplicatedBy" | "relatesTo";
+
+export interface CardLink {
+  type: LinkType;
+  /** Id of the other card, on any board. */
+  cardId: string;
+}
+
 export interface Card {
   id: string;
   boardId: string;
@@ -47,6 +56,8 @@ export interface Card {
   /** YYYY-MM-DD */
   due: string | null;
   checklist: ChecklistItem[];
+  /** Links to other cards; each link is also stored, reversed, on the other card. */
+  links: CardLink[];
   /** Set when the card is archived: it leaves the board but can be restored. */
   archivedAt: string | null;
   createdAt: string;

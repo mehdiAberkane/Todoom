@@ -13,6 +13,7 @@ const card = (patch: Partial<Card> = {}): Card => ({
   priority: null,
   due: null,
   checklist: [],
+  links: [],
   archivedAt: null,
   createdAt: "2026-11-16T10:00:00.000Z",
   updatedAt: "2026-11-16T10:00:00.000Z",

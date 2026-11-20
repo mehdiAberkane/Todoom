@@ -41,10 +41,12 @@ noms possibles quand un nom n'est pas reconnu.
 |---|---|
 | `todoom boards [--all]` | tableaux, colonnes, étiquettes et niveaux de priorité (`--all` : corbeille comprise) |
 | `todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]` | cartes, colonne par colonne, sans description |
-| `todoom show <carte>` | une carte entière |
+| `todoom show <carte>` | une carte entière, avec ses liens (titre, tableau, colonne, terminée ou non) |
 | `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
 | `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--priority … \| --no-priority] [--due … \| --no-due]` | modifie les champs donnés, garde les autres |
 | `todoom move <carte> <colonne> [--top]` | déplace en bas (ou en haut) d'une colonne |
+| `todoom link <carte> <type> <autre carte>` | lie deux cartes, même sur deux tableaux, et écrit le lien sur les deux. Types : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` |
+| `todoom unlink <carte> <autre carte>` | retire le lien des deux cartes |
 | `todoom comment <carte> <texte>` | ajoute une note datée et signée du nom du PC à la fin de la description |
 | `todoom archive <carte>` / `todoom restore <carte>` | archive, ou remet en bas de sa colonne |
 | `todoom mcp` | lance le serveur MCP |
@@ -53,6 +55,7 @@ noms possibles quand un nom n'est pas reconnu.
   accents sont ignorés, et un début de nom suffit s'il est unique :
   `todoom move <carte> "en cours"`.
 - **Cartes** : par leur identifiant, ou un début unique d'au moins 4 caractères.
+- **Liens** : une carte qui dépend d'une carte non terminée est marquée « Bloquée » sur le tableau. Une carte compte comme terminée quand elle est archivée ou dans une colonne nommée « Terminé », « Done », « Fait »…
 - **Texte long** : `-` à la place du texte le lit sur l'entrée standard :
   `Get-Content rapport.md | todoom comment <carte> -`.
 
@@ -62,7 +65,7 @@ historique séparés de la description »), `comment` écrit à la fin de la des
 ## Serveur MCP pour Claude
 
 `todoom mcp` expose les mêmes opérations comme outils : `list_boards`, `list_cards`,
-`get_card`, `create_card`, `update_card`, `move_card`, `add_comment`,
+`get_card`, `create_card`, `update_card`, `move_card`, `link_cards`, `unlink_cards`, `add_comment`,
 `archive_card`, `restore_card`.
 
 Pour Claude Code, une fois pour toutes sur chaque PC :

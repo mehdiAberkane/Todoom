@@ -10,6 +10,8 @@ import type { Board, Card, Column } from "../src/types";
 import { boardProblem, cardProblem } from "../src/lib/validate";
 import { nextUpdatedAt, uid } from "../src/lib/ids";
 import { prioritiesOf, priorityOf } from "../src/lib/priority";
+import { inverseOf, isFinished, isLinkType, withLink, withoutLink } from "../src/lib/links";
+import type { LinkType } from "../src/types";
 
 export class TodoomError extends Error {}
 
@@ -85,6 +87,7 @@ export interface CardView {
   priority: string | null;
   due: string | null;
   checklist: Card["checklist"];
+  links: Card["links"];
   order: number;
   archived: boolean;
   archivedAt: string | null;
@@ -193,6 +196,7 @@ export class Store {
       priority: priorityOf(board, card)?.name ?? null,
       due: card.due,
       checklist: card.checklist,
+      links: card.links,
       order: card.order,
       archived: !!card.archivedAt,
       archivedAt: card.archivedAt,
@@ -252,6 +256,7 @@ export class Store {
       priority: this.priorityId(board, opts.priority),
       due: opts.due ?? null,
       checklist: [],
+      links: [],
       archivedAt: null,
       createdAt: at,
       updatedAt: at,
@@ -303,6 +308,52 @@ export class Store {
     return this.view(this.save(board, next, card), board);
   }
 
+  /** The card with its links spelled out: the other card's title, board, column, and whether it is finished. */
+  detail(card: Card, board: Board) {
+    const links = card.links.map((l) => {
+      try {
+        const other = this.card(l.cardId);
+        return {
+          type: l.type,
+          cardId: l.cardId,
+          title: other.card.title,
+          board: other.board.name,
+          column: other.board.columns.find((c) => c.id === other.card.columnId)?.name ?? null,
+          finished: isFinished(other.card, other.board),
+        };
+      } catch {
+        return { type: l.type, cardId: l.cardId, missing: true };
+      }
+    });
+    return { ...this.view(card, board), links };
+  }
+
+  /** Links two cards, on any boards; the link is written on both, each in its own direction. */
+  link(cardId: string, type: string, otherId: string) {
+    const kind = linkType(type);
+    const a = this.card(cardId);
+    const b = this.card(otherId);
+    if (a.card.id === b.card.id) throw new TodoomError("Une carte ne peut pas être liée à elle-même");
+    const saved = this.save(a.board, withLink(a.card, kind, b.card.id), a.card);
+    this.save(b.board, withLink(b.card, inverseOf(kind), a.card.id), b.card);
+    return this.detail(saved, a.board);
+  }
+
+  /** Removes the link between two cards, from both. */
+  unlink(cardId: string, otherId: string) {
+    const a = this.card(cardId);
+    const target = a.card.links.find((l) => l.cardId === otherId || (otherId.length >= 4 && l.cardId.startsWith(otherId)));
+    if (!target) throw new TodoomError(`Pas de lien entre ${a.card.id} et ${otherId}`);
+    const saved = this.save(a.board, withoutLink(a.card, target.cardId), a.card);
+    try {
+      const b = this.card(target.cardId);
+      if (b.card.links.some((l) => l.cardId === a.card.id)) this.save(b.board, withoutLink(b.card, a.card.id), b.card);
+    } catch {
+      /* the other card is gone: nothing to clean there */
+    }
+    return this.detail(saved, a.board);
+  }
+
   /**
    * Adds a dated, signed note at the end of the description. Cards have no
    * comment thread yet; when they do, this is the one place to change.
@@ -312,6 +363,21 @@ export class Store {
     const stamp = new Date().toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
     return this.update(cardId, { append: `--- ${stamp} · ${author} ---\n${text.trim()}` });
   }
+}
+
+const LINK_NAMES: Record<string, LinkType> = {
+  "depends-on": "dependsOn",
+  blocks: "blocks",
+  "duplicate-of": "duplicateOf",
+  "duplicated-by": "duplicatedBy",
+  "relates-to": "relatesTo",
+};
+
+/** A link type from its command name (depends-on…) or its stored name (dependsOn…). */
+export function linkType(name: string): LinkType {
+  const kind = LINK_NAMES[name.toLowerCase()] ?? (isLinkType(name) ? name : undefined);
+  if (!kind) throw new TodoomError(`Type de lien inconnu : ${name}. Choix : ${Object.keys(LINK_NAMES).join(", ")}`);
+  return kind;
 }
 
 function joinParagraphs(text: string, extra: string): string {
@@ -332,6 +398,7 @@ function withDefaults(raw: Card, board: Board): Card {
     priority: raw.priority ?? null,
     due: raw.due ?? null,
     checklist: raw.checklist ?? [],
+    links: raw.links ?? [],
     archivedAt: raw.archivedAt ?? null,
     createdAt: raw.createdAt ?? "",
     updatedAt: raw.updatedAt ?? "",

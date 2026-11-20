@@ -90,14 +90,14 @@ export function createServer(dir: string): McpServer {
     "get_card",
     {
       title: "Get a card",
-      description: "A card with its description, labels, due date and checklist.",
+      description: "A card with its description, priority, labels, due date, checklist and links (with the linked cards' titles, boards, columns and whether they are finished).",
       inputSchema: { card: z.string().describe("Card id") },
       annotations: readOnly,
     },
     ({ card }) =>
       run(() => {
         const found = store.card(card);
-        return store.view(found.card, found.board);
+        return store.detail(found.card, found.board);
       }),
   );
 
@@ -155,6 +155,35 @@ export function createServer(dir: string): McpServer {
       annotations: { ...writes, idempotentHint: true },
     },
     ({ card, column, position }) => run(() => store.move(card, column, position ?? "bottom")),
+  );
+
+  server.registerTool(
+    "link_cards",
+    {
+      title: "Link two cards",
+      description:
+        "Links two cards, possibly on different boards. The link is written on both cards, each in its own direction: " +
+        "card dependsOn other also writes other blocks card. A card with an unfinished dependsOn is shown as blocked. " +
+        "Replaces any other link between the same two cards.",
+      inputSchema: {
+        card: z.string().describe("Card id"),
+        type: z.enum(["dependsOn", "blocks", "duplicateOf", "duplicatedBy", "relatesTo"]),
+        other: z.string().describe("Id of the other card"),
+      },
+      annotations: { ...writes, idempotentHint: true },
+    },
+    ({ card, type, other }) => run(() => store.link(card, type, other)),
+  );
+
+  server.registerTool(
+    "unlink_cards",
+    {
+      title: "Unlink two cards",
+      description: "Removes the link between two cards, from both.",
+      inputSchema: { card: z.string().describe("Card id"), other: z.string().describe("Id of the other card") },
+      annotations: { ...writes, idempotentHint: true },
+    },
+    ({ card, other }) => run(() => store.unlink(card, other)),
   );
 
   server.registerTool(

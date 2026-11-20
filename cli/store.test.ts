@@ -94,6 +94,25 @@ describe("writes", () => {
     expect(() => store.update(a.id, { priority: "P9" })).toThrow(/Priorité.*P1/);
   });
 
+  it("links two cards on both sides, across boards, and unlinks both", () => {
+    mkdirSync(join(dir, "boards", "b2", "cards"), { recursive: true });
+    writeFileSync(
+      join(dir, "boards", "b2", "board.json"),
+      JSON.stringify({ id: "b2", name: "Nyx", columns: [{ id: "n0", name: "À faire" }, { id: "n1", name: "Terminé" }], labels: [] }),
+    );
+    const a = store.create("Todoom", "Un");
+    const b = store.create("Nyx", "Autre");
+    const linked = store.link(a.id, "depends-on", b.id);
+    expect(linked.links).toEqual([{ type: "dependsOn", cardId: b.id, title: "Autre", board: "Nyx", column: "À faire", finished: false }]);
+    expect(store.card(b.id).card.links).toEqual([{ type: "blocks", cardId: a.id }]);
+    store.move(b.id, "terminé");
+    expect(store.detail(store.card(a.id).card, store.board("Todoom")).links[0]).toMatchObject({ finished: true });
+    expect(store.unlink(a.id, b.id).links).toEqual([]);
+    expect(store.card(b.id).card.links).toEqual([]);
+    expect(() => store.link(a.id, "depends-on", a.id)).toThrow(/elle-même/);
+    expect(() => store.link(a.id, "parent", b.id)).toThrow(/Type de lien/);
+  });
+
   it("archives and restores at the bottom of the column", () => {
     const a = store.create("Todoom", "Un");
     const b = store.create("Todoom", "Deux");

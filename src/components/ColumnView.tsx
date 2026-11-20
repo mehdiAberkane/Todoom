@@ -12,6 +12,8 @@ interface Props {
   cards: Card[];
   labels: Label[];
   priorities: Priority[];
+  /** Titles of the unfinished cards each card waits for, by card id. */
+  blockers: Map<string, string[]>;
   unsavedIds: ReadonlySet<string>;
   onOpen: (id: string) => void;
   onAdd: (title: string) => void;
@@ -20,7 +22,7 @@ interface Props {
   onSortByPriority: () => void;
 }
 
-export function ColumnView({ column, cards, labels, priorities, unsavedIds, onOpen, onAdd, onRename, onDelete, onSortByPriority }: Props) {
+export function ColumnView({ column, cards, labels, priorities, blockers, unsavedIds, onOpen, onAdd, onRename, onDelete, onSortByPriority }: Props) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `col:${column.id}`,
   });
@@ -51,7 +53,7 @@ export function ColumnView({ column, cards, labels, priorities, unsavedIds, onOp
       <SortableContext items={cards.map((c) => `card:${c.id}`)} strategy={verticalListSortingStrategy}>
         <div className="card-list">
           {cards.map((c) => (
-            <CardTile key={c.id} card={c} labels={labels} priorities={priorities} unsaved={unsavedIds.has(c.id)} onOpen={onOpen} />
+            <CardTile key={c.id} card={c} labels={labels} priorities={priorities} blockers={blockers.get(c.id)} unsaved={unsavedIds.has(c.id)} onOpen={onOpen} />
           ))}
           {cards.length === 0 && <div className="empty-col">{emptyColumnLine(column.id)}</div>}
         </div>

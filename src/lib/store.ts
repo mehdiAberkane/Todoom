@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
-import type { AppSettings, Board, Card, Presence } from "../types";
+import type { AppSettings, Board, Card, LinkType, Presence } from "../types";
 import { LABEL_COLORS, nextUpdatedAt, now, reorder, uid } from "./utils";
 import { boardProblem, cardProblem, settingsProblem, type IssueReason } from "./validate";
 import { t } from "./i18n";
+import { inverseOf, withLink, withoutLink } from "./links";
 
 /** A file of the data folder that couldn't be loaded, and why. */
 export interface FileIssue {
@@ -75,6 +76,7 @@ function normalizeCard(raw: Partial<Card>, boardId: string): Card {
     priority: raw.priority ?? null,
     due: raw.due ?? null,
     checklist: raw.checklist ?? [],
+    links: raw.links ?? [],
     archivedAt: raw.archivedAt ?? null,
     createdAt: raw.createdAt ?? now(),
     updatedAt: raw.updatedAt ?? "",
@@ -420,6 +422,18 @@ export function useTodoom(backend: Backend) {
         removePath(boardDir(boardId));
       },
 
+      /** Links two cards, writing the link on both, each in its own direction. */
+      linkCards(from: Card, type: LinkType, to: Card) {
+        saveCard(withLink(from, type, to.id));
+        saveCard(withLink(to, inverseOf(type), from.id));
+      },
+
+      /** Removes the link from `from`, and from the other card when it is still there. */
+      unlinkCards(from: Card, to: Card | undefined, toId: string) {
+        saveCard(withoutLink(from, toId));
+        if (to && to.links.some((l) => l.cardId === from.id)) saveCard(withoutLink(to, from.id));
+      },
+
       archiveCard(card: Card) {
         saveCard({ ...card, archivedAt: now() });
       },
@@ -471,6 +485,7 @@ function blankCard(board: Board, columnId: string, title: string, order: number)
     priority: null,
     due: null,
     checklist: [],
+    links: [],
     archivedAt: null,
     createdAt: t,
     updatedAt: t,

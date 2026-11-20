@@ -7,6 +7,7 @@ import { priorityOf, prioritiesOf } from "../lib/priority";
 
 const fieldLabel = (f: Field) => t(`field.${f}`);
 import { Modal } from "./ui";
+import { LinkSection, type LinkProps } from "./LinkSection";
 
 interface Props {
   card: Card;
@@ -16,6 +17,8 @@ interface Props {
   onManageLabels: () => void;
   /** A card not on the board yet: closing without typing anything creates nothing. */
   isNew?: boolean;
+  /** Links to other cards; left out for a card not saved yet. */
+  links?: LinkProps;
 }
 
 /**
@@ -24,7 +27,7 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
@@ -64,6 +67,12 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
     }
   };
   const close = () => leave(false);
+  // Saves this card on the way to the linked one; if a field needs a choice, stays here.
+  const openLinked = (boardId: string, cardId: string) => {
+    if (pending.length) return close();
+    finish(false, new Set());
+    links?.onOpen(boardId, cardId);
+  };
   // Ctrl + Enter (Cmd + Enter on a Mac) saves from any field, like the button.
   const closeRef = useRef<(() => void) | null>(close);
   closeRef.current = resolving ? null : close; // not while choosing between versions
@@ -210,6 +219,8 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
               onKeyDown={(e) => e.key === "Enter" && addItem()}
             />
           </div>
+
+          {links && <LinkSection card={card} {...links} onOpen={openLinked} />}
         </div>
 
         <aside className="modal-side">

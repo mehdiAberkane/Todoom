@@ -1,0 +1,122 @@
+import { useMemo, useState } from "react";
+import type { Card, LinkType } from "../types";
+import { isFinished, LINK_TYPES, type Located } from "../lib/links";
+import { t } from "../lib/i18n";
+
+const MAX_RESULTS = 8;
+const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+export interface LinkProps {
+  /** Every card by id, on every board. */
+  index: Map<string, Located>;
+  onLink: (type: LinkType, target: Card) => void;
+  onUnlink: (targetId: string) => void;
+  onOpen: (boardId: string, cardId: string) => void;
+}
+
+/**
+ * The card's links, grouped by kind, and a search to add one. Links are written
+ * right away on both cards, outside the editor's draft, like the labels window.
+ */
+export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps & { card: Card }) {
+  const [type, setType] = useState<LinkType>("dependsOn");
+  const [query, setQuery] = useState("");
+  const self = index.get(card.id);
+
+  const results = useMemo(() => {
+    const q = plain(query.trim());
+    if (!q) return [];
+    const linked = new Set(card.links.map((l) => l.cardId));
+    return [...index.values()]
+      .filter(({ card: c, board }) => c.id !== card.id && !linked.has(c.id) && !c.archivedAt && !board.archivedAt)
+      .filter(({ card: c }) => plain(c.title).includes(q) || c.id.startsWith(query.trim()))
+      .sort((a, b) => Number(b.board.id === self?.board.id) - Number(a.board.id === self?.board.id))
+      .slice(0, MAX_RESULTS);
+  }, [query, index, card.id, card.links, self?.board.id]);
+
+  const link = (target: Card) => {
+    onLink(type, target);
+    setQuery("");
+  };
+
+  return (
+    <>
+      <h4>{t("field.links")}</h4>
+      {card.links.length > 0 && (
+        <ul className="links">
+          {LINK_TYPES.flatMap((kind) =>
+            card.links
+              .filter((l) => l.type === kind)
+              .map((l) => {
+                const target = index.get(l.cardId);
+                const done = target && isFinished(target.card, target.board);
+                return (
+                  <li key={l.cardId} className={done ? "done" : ""}>
+                    <span className="link-type">{t(`link.${kind}`)}</span>
+                    {target ? (
+                      <button
+                        className="link-target"
+                        disabled={!!target.board.archivedAt}
+                        onClick={() => onOpen(target.board.id, target.card.id)}
+                        title={target.card.title}
+                      >
+                        {target.card.title}
+                      </button>
+                    ) : (
+                      <span className="link-target missing">{t("links.missing")}</span>
+                    )}
+                    {target && target.board.id !== self?.board.id && <span className="muted link-board">{target.board.name}</span>}
+                    {target?.card.archivedAt ? (
+                      <span className="muted">{t("links.archived")}</span>
+                    ) : (
+                      done && <span className="link-done">✓ {t("links.finished")}</span>
+                    )}
+                    <button className="icon-btn" onClick={() => onUnlink(l.cardId)} title={t("links.remove")}>
+                      ✕
+                    </button>
+                  </li>
+                );
+              }),
+          )}
+        </ul>
+      )}
+      <div className="link-add">
+        <select value={type} onChange={(e) => setType(e.target.value as LinkType)} aria-label={t("links.kind")}>
+          {LINK_TYPES.map((k) => (
+            <option key={k} value={k}>
+              {t(`link.${k}`)}
+            </option>
+          ))}
+        </select>
+        <div className="link-search">
+          <input
+            placeholder={t("links.search")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && results[0]) link(results[0].card);
+              // Escape clears the search before it closes the card.
+              if (e.key === "Escape" && query) {
+                e.stopPropagation();
+                setQuery("");
+              }
+            }}
+          />
+          {query.trim() && (
+            <ul className="link-results">
+              {results.map(({ card: c, board }) => (
+                <li key={c.id}>
+                  <button onClick={() => link(c)}>
+                    <span>{c.title}</span>
+                    {board.id !== self?.board.id && <span className="muted">{board.name}</span>}
+                  </button>
+                </li>
+              ))}
+              {results.length === 0 && <li className="muted">{t("links.none")}</li>}
+            </ul>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
