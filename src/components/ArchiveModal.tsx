@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Board, Card, Label } from "../types";
 import { formatDateTime } from "../lib/utils";
+import { t } from "../lib/i18n";
 import { DangerButton, Modal } from "./ui";
 
 interface Props {
@@ -23,18 +24,18 @@ export function ArchiveModal({ board, cards, onRestore, onDelete, onClose }: Pro
   return (
     <Modal onClose={onClose} className="archive-modal">
       <div className="modal-head">
-        <h3>📦 Archives de « {board.name} »</h3>
-        <button className="icon-btn" onClick={onClose} title="Fermer (Échap)">
+        <h3>{t("archive.title", { name: board.name })}</h3>
+        <button className="icon-btn" onClick={onClose} title={t("common.closeEsc")}>
           ✕
         </button>
       </div>
 
       {cards.length > 5 && (
-        <input className="archive-search" placeholder="🔍 Rechercher dans les archives…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="archive-search" placeholder={t("archive.search")} value={query} onChange={(e) => setQuery(e.target.value)} />
       )}
 
       {cards.length === 0 ? (
-        <p className="muted archive-empty">Aucune carte archivée. Rien ne se perd, tout se range.</p>
+        <p className="muted archive-empty">{t("archive.empty")}</p>
       ) : (
         <ul className="archive-list">
           {shown.map((card) => {
@@ -49,20 +50,20 @@ export function ArchiveModal({ board, cards, onRestore, onDelete, onClose }: Pro
                         {l.name}
                       </span>
                     ))}
-                    <span>{columnName(card.columnId) ?? "colonne supprimée"}</span>
-                    {card.archivedAt && <span>· archivée le {formatDateTime(card.archivedAt)}</span>}
+                    <span>{columnName(card.columnId) ?? t("describe.deletedColumn")}</span>
+                    {card.archivedAt && <span>· {t("archive.archivedOn", { date: formatDateTime(card.archivedAt) })}</span>}
                   </div>
                 </div>
-                <button className="btn-ghost small" onClick={() => onRestore(card)} title="Remettre la carte en bas de sa colonne">
-                  ↩ Restaurer
+                <button className="btn-ghost small" onClick={() => onRestore(card)} title={t("archive.restoreTitle")}>
+                  {t("common.restore")}
                 </button>
-                <DangerButton className="small" onConfirm={() => onDelete(card)} confirmLabel="Définitivement ?">
+                <DangerButton className="small" onConfirm={() => onDelete(card)} confirmLabel={t("archive.deleteQ")}>
                   🗑
                 </DangerButton>
               </li>
             );
           })}
-          {shown.length === 0 && <li className="muted">Aucune carte archivée ne correspond.</li>}
+          {shown.length === 0 && <li className="muted">{t("archive.noMatch")}</li>}
         </ul>
       )}
     </Modal>

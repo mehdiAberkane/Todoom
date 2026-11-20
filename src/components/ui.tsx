@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { t } from "../lib/i18n";
 
 const stop = (e: React.PointerEvent) => e.stopPropagation();
 
@@ -26,7 +27,7 @@ export function InlineEdit({
           setDraft(value);
           setEditing(true);
         }}
-        title="Cliquer pour renommer"
+        title={t("ui.renameTitle")}
       >
         {value || placeholder}
       </span>
@@ -61,7 +62,7 @@ export function InlineEdit({
 export function DangerButton({
   onConfirm,
   children,
-  confirmLabel = "Vraiment ?",
+  confirmLabel = t("common.reallyQ"),
   className = "",
   title,
 }: {

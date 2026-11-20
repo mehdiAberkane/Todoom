@@ -52,6 +52,8 @@ export interface AppSettings {
   background: string | null;
   /** How much the background is darkened to keep cards readable, from 0 to 0.9. */
   backgroundDim: number;
+  /** Interface language; null follows the system's language. */
+  language: "fr" | "en" | null;
   updatedAt: string;
 }
 

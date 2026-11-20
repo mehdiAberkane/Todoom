@@ -16,6 +16,8 @@ import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
 import { useDragSensors } from "../lib/dnd";
+import { t, tn } from "../lib/i18n";
+import { TRASH_DAYS } from "../lib/store";
 import { ColumnPreview, ColumnView } from "./ColumnView";
 import { CardBody } from "./CardTile";
 import { CardModal } from "./CardModal";
@@ -207,14 +209,14 @@ export function BoardView({
         <div className="board-title-row">
           <InlineEdit value={board.name} onSave={(name) => actions.saveBoard({ ...board, name })} className="board-title" />
           <span className="board-stats">
-            {cards.length} carte{cards.length > 1 ? "s" : ""}
-            {overdue > 0 && <span className="stat-overdue"> · 🔥 {overdue} en retard</span>}
+            {tn("board.cards", cards.length)}
+            {overdue > 0 && <span className="stat-overdue"> · {t("board.overdue", { n: overdue })}</span>}
           </span>
         </div>
         <div className="board-tools">
           <input
             className="search"
-            placeholder="🔍 Rechercher…"
+            placeholder={t("board.search")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -231,22 +233,22 @@ export function BoardView({
             ))}
             {filtering && (
               <button className="btn-ghost small" onClick={() => (setQuery(""), setLabelFilter([]))}>
-                Effacer
+                {t("board.clearFilters")}
               </button>
             )}
           </div>
           <button className="btn-ghost" onClick={() => setShowLabels(true)}>
-            🏷 Étiquettes
+            {t("board.labels")}
           </button>
-          <button className="btn-ghost" onClick={() => setShowArchive(true)} title="Cartes archivées : restaurer ou supprimer">
-            📦 Archives{archived.length > 0 && ` (${archived.length})`}
+          <button className="btn-ghost" onClick={() => setShowArchive(true)} title={t("board.archivesTitle")}>
+            {t("board.archives")}{archived.length > 0 && ` (${archived.length})`}
           </button>
           <DangerButton
             onConfirm={() => actions.trashBoard(board)}
-            confirmLabel="Mettre à la corbeille ?"
-            title="Met le tableau à la corbeille : restaurable pendant 30 jours"
+            confirmLabel={t("board.trashQ")}
+            title={t("board.trashTitle", { days: TRASH_DAYS })}
           >
-            🗑 Tableau
+            {t("board.trash")}
           </DangerButton>
         </div>
       </header>
@@ -278,14 +280,14 @@ export function BoardView({
           </SortableContext>
           <div className="add-column">
             <input
-              placeholder="+ Nouvelle colonne"
+              placeholder={t("board.newColumn")}
               value={newColumn}
               onChange={(e) => setNewColumn(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addColumn()}
             />
             {newColumn.trim() && (
               <button className="btn-primary" onClick={addColumn}>
-                Ajouter
+                {t("common.add")}
               </button>
             )}
           </div>

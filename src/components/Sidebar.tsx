@@ -8,13 +8,11 @@ import type { FileIssue, SyncStatus, WriteFailure } from "../lib/store";
 import { Modal } from "./ui";
 import { TrashModal } from "./TrashModal";
 import type { UpdateState } from "../lib/updater";
+import { t, tn } from "../lib/i18n";
+import type { IssueReason } from "../lib/validate";
 
-const STATUS_TEXT: Record<SyncStatus, string> = {
-  loading: "Chargement…",
-  synced: "Synchronisé",
-  saving: "Enregistrement…",
-  error: "Erreur",
-};
+/** A loading problem, in the current language. */
+export const issueText = (reason: IssueReason) => t(`issue.${reason.code}`, { field: reason.field ?? "" });
 
 interface Props {
   boards: Board[];
@@ -74,7 +72,7 @@ export function Sidebar(props: Props) {
       </div>
 
       <nav className="board-list">
-        <div className="section-title">Tableaux</div>
+        <div className="section-title">{t("sidebar.boards")}</div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={boards.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             {boards.map((b) => (
@@ -90,7 +88,7 @@ export function Sidebar(props: Props) {
         </DndContext>
         <input
           className="new-board"
-          placeholder="+ Nouveau tableau"
+          placeholder={t("sidebar.newBoard")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && create()}
@@ -101,23 +99,23 @@ export function Sidebar(props: Props) {
         <UpdateBanner state={props.update} onInstall={props.onInstallUpdate} />
         <FileIssues issues={props.issues} dataDir={dataDir} />
         {others.length > 0 && (
-          <div className="presence" title="Ces machines ont Todoom ouvert en ce moment">
-            👀 Aussi ouvert sur {others.map((o) => o.host).join(", ")}
+          <div className="presence" title={t("sidebar.presenceTitle")}>
+            {t("sidebar.alsoOpenOn", { hosts: others.map((o) => o.host).join(", ") })}
           </div>
         )}
         {props.failures.length > 0 ? (
           <WriteFailures failures={props.failures} unsavedCount={props.unsavedCount} nextRetry={props.nextRetry} onRetry={props.onRetry} />
         ) : (
           <div className={`sync sync-${error ? "error" : status}`} title={error ?? undefined}>
-            <span className="dot" /> {error ? "Lecture impossible" : STATUS_TEXT[status]}
+            <span className="dot" /> {error ? t("status.readError") : t(`status.${status}`)}
           </div>
         )}
-        <button className="data-dir" onClick={onSettings} title="Changer de dossier de données">
+        <button className="data-dir" onClick={onSettings} title={t("sidebar.changeDataDir")}>
           📁 <span>{dataDir}</span>
         </button>
         {props.trashed.length > 0 && (
           <button className="settings-link" onClick={() => setShowTrash(true)}>
-            🗑 Corbeille ({props.trashed.length})
+            {t("sidebar.trash", { n: props.trashed.length })}
           </button>
         )}
         {showTrash && (
@@ -130,7 +128,7 @@ export function Sidebar(props: Props) {
           />
         )}
         <button className={`settings-link ${props.settingsOpen ? "active" : ""}`} onClick={props.onOpenSettings}>
-          ⚙ Paramètres
+          {t("sidebar.settings")}
         </button>
         {props.version && <div className="app-version">Todoom v{props.version}</div>}
       </footer>
@@ -160,7 +158,7 @@ function WriteFailures({
   return (
     <div className="write-failures">
       <div className="write-failures-title">
-        ⚠ {n} modification{n > 1 ? "s" : ""} non enregistrée{n > 1 ? "s" : ""}
+        {tn("failures.unsaved", n)}
       </div>
       <ul>
         {failures.slice(0, 3).map((f) => (
@@ -169,12 +167,12 @@ function WriteFailures({
             <span>{f.error}</span>
           </li>
         ))}
-        {failures.length > 3 && <li className="muted">… et {failures.length - 3} autre(s)</li>}
+        {failures.length > 3 && <li className="muted">{t("failures.more", { n: failures.length - 3 })}</li>}
       </ul>
       <div className="write-failures-actions">
-        <span className="muted">{seconds !== null && `Nouvel essai dans ${seconds} s`}</span>
+        <span className="muted">{seconds !== null && t("failures.retryIn", { s: seconds })}</span>
         <button className="btn-ghost small" onClick={onRetry}>
-          Réessayer
+          {t("common.retry")}
         </button>
       </div>
     </div>
@@ -187,26 +185,25 @@ function FileIssues({ issues, dataDir }: { issues: FileIssue[]; dataDir: string 
   const n = issues.length;
   return (
     <>
-      <button className="issues-btn" onClick={() => setOpen(true)} title="Fichiers de données que Todoom n'a pas pu charger">
-        ⚠ {n} fichier{n > 1 ? "s" : ""} ignoré{n > 1 ? "s" : ""}
+      <button className="issues-btn" onClick={() => setOpen(true)} title={t("issues.buttonTitle")}>
+        {tn("issues.count", n)}
       </button>
       {open && (
         <Modal onClose={() => setOpen(false)} className="issues-modal">
           <div className="modal-head">
-            <h3>⚠ Fichiers non chargés</h3>
-            <button className="icon-btn" onClick={() => setOpen(false)} title="Fermer (Échap)">
+            <h3>{t("issues.title")}</h3>
+            <button className="icon-btn" onClick={() => setOpen(false)} title={t("common.closeEsc")}>
               ✕
             </button>
           </div>
           <p className="muted">
-            Ces fichiers de <code>{dataDir}</code> n'ont pas pu être chargés. Todoom ne les écrase jamais : répare-les ou
-            supprime-les à la main. Un fichier en cours de synchronisation par Drive peut apparaître ici un instant.
+            {t("issues.introBefore")} <code>{dataDir}</code> {t("issues.introAfter")}
           </p>
           <ul className="issues-list">
             {issues.map((i) => (
-              <li key={i.path + i.reason}>
+              <li key={i.path + i.reason.code}>
                 <code>{i.path}</code>
-                <span>{i.reason}</span>
+                <span>{issueText(i.reason)}</span>
               </li>
             ))}
           </ul>
@@ -221,19 +218,19 @@ function UpdateBanner({ state, onInstall }: { state: UpdateState; onInstall: () 
     case "available":
       return (
         <button className="update-btn" onClick={onInstall}>
-          ⬆ Mettre à jour vers {state.version}
+          {t("update.available", { version: state.version })}
         </button>
       );
     case "installing":
       return (
         <div className="update-progress">
-          Installation…{state.progress !== null && ` ${Math.round(state.progress * 100)} %`}
+          {t("update.installing")}{state.progress !== null && ` ${Math.round(state.progress * 100)} %`}
         </div>
       );
     case "error":
       return (
         <button className="update-error" onClick={onInstall} title={state.message}>
-          Échec de la mise à jour, réessayer
+          {t("update.failed")}
         </button>
       );
     default:

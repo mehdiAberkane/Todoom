@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { isTauri } from "./backend";
+import { t, tn } from "./i18n";
 
 /**
  * Keeps the window open while changes are still waiting for the disk: tries
@@ -28,11 +29,12 @@ export function useCloseGuard(unsavedCount: number, retryNow: () => Promise<void
       const left = count.current;
       if (
         !left ||
-        (await ask(
-          `${left} modification${left > 1 ? "s n'ont" : " n'a"} pas pu être enregistrée${left > 1 ? "s" : ""} sur le disque ` +
-            `(détails en bas de la barre latérale).\n\nSi tu quittes maintenant, ${left > 1 ? "elles seront perdues" : "elle sera perdue"}.`,
-          { title: "Todoom", kind: "warning", okLabel: "Quitter quand même", cancelLabel: "Rester" },
-        ))
+        (await ask(tn("closeGuard.message", left), {
+          title: "Todoom",
+          kind: "warning",
+          okLabel: t("closeGuard.quit"),
+          cancelLabel: t("closeGuard.stay"),
+        }))
       ) {
         await win.destroy();
       }

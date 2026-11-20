@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 const MAX_SIDE = 2560;
 const JPEG_QUALITY = 0.82;
 
@@ -6,9 +8,9 @@ const JPEG_QUALITY = 0.82;
  * Drive (a few hundred KB) while staying sharp full-screen.
  */
 export async function imageToBackground(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) throw new Error("Ce fichier n'est pas une image.");
+  if (!file.type.startsWith("image/")) throw new Error(t("error.notImage"));
   const bitmap = await createImageBitmap(file).catch(() => {
-    throw new Error("Image illisible : essaie un JPEG, un PNG ou un WebP.");
+    throw new Error(t("error.badImage"));
   });
   const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");

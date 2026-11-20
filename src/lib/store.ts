@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
 import type { AppSettings, Board, Card, Presence } from "../types";
 import { LABEL_COLORS, nextUpdatedAt, now, reorder, uid } from "./utils";
-import { boardProblem, cardProblem, settingsProblem } from "./validate";
+import { boardProblem, cardProblem, settingsProblem, type IssueReason } from "./validate";
+import { t } from "./i18n";
 
 /** A file of the data folder that couldn't be loaded, and why. */
 export interface FileIssue {
   path: string;
-  reason: string;
+  reason: IssueReason;
 }
 
 export interface Data {
@@ -20,19 +21,20 @@ export interface Data {
 
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
-export const DEFAULT_SETTINGS: AppSettings = { background: null, backgroundDim: 0.45, updatedAt: "" };
+export const DEFAULT_SETTINGS: AppSettings = { background: null, backgroundDim: 0.45, language: null, updatedAt: "" };
 const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [] };
 const SETTINGS_PATH = "settings.json";
 // Safety net only: the folder watcher reports other machines' changes as they happen.
 const POLL_MS = 120_000;
 const HEARTBEAT_MS = 60_000;
 
-const DEFAULT_COLUMNS = ["À faire", "En cours", "Terminé"];
-const DEFAULT_LABELS = [
-  { name: "Urgent", color: LABEL_COLORS[0] },
-  { name: "Bug", color: LABEL_COLORS[1] },
-  { name: "Idée", color: LABEL_COLORS[6] },
-  { name: "Perso", color: LABEL_COLORS[3] },
+// Starting content of a new board, in the language in use when it is created.
+const defaultColumns = () => [t("default.todo"), t("default.doing"), t("default.done")];
+const defaultLabels = () => [
+  { name: t("default.urgent"), color: LABEL_COLORS[0] },
+  { name: t("default.bug"), color: LABEL_COLORS[1] },
+  { name: t("default.idea"), color: LABEL_COLORS[6] },
+  { name: t("default.personal"), color: LABEL_COLORS[3] },
 ];
 
 const boardDir = (boardId: string) => `boards/${boardId}`;
@@ -43,7 +45,7 @@ const presencePath = (host: string) => `.presence/${host.replace(/[^\w-]/g, "_")
 function normalizeBoard(raw: Partial<Board>): Board {
   return {
     id: raw.id!,
-    name: raw.name ?? "Sans nom",
+    name: raw.name ?? t("board.untitled"),
     columns: raw.columns ?? [],
     labels: raw.labels ?? [],
     ...(typeof raw.order === "number" ? { order: raw.order } : {}),
@@ -111,7 +113,7 @@ export function parse(files: FileEntry[]): Data {
       raw = JSON.parse(file.content);
     } catch {
       // Heartbeats are rewritten every minute; a half-synced one isn't worth a warning.
-      if (kind !== "presence") issues.push({ path: file.path, reason: "JSON invalide (fichier partiel ou corrompu)" });
+      if (kind !== "presence") issues.push({ path: file.path, reason: { code: "invalid_json" } });
       continue;
     }
     if (kind === "presence") {
@@ -142,12 +144,12 @@ export function parse(files: FileEntry[]): Data {
   for (const { card, path } of cards.values()) {
     const board = boards.get(card.boardId);
     if (!board) {
-      issues.push({ path, reason: "son tableau (board.json) est absent ou illisible" });
+      issues.push({ path, reason: { code: "missing_board" } });
       continue;
     }
     byBoard[card.boardId].push(card);
     if (!card.archivedAt && !board.columns.some((c) => c.id === card.columnId)) {
-      issues.push({ path, reason: "colonne inconnue : la carte est affichée dans la première colonne" });
+      issues.push({ path, reason: { code: "unknown_column" } });
     }
   }
 
@@ -386,8 +388,8 @@ export function useTodoom(backend: Backend) {
         const board: Board = {
           id: uid(),
           name,
-          columns: DEFAULT_COLUMNS.map((n) => ({ id: uid(), name: n })),
-          labels: DEFAULT_LABELS.map((l) => ({ ...l, id: uid() })),
+          columns: defaultColumns().map((n) => ({ id: uid(), name: n })),
+          labels: defaultLabels().map((l) => ({ ...l, id: uid() })),
           ...(orders.length ? { order: Math.max(...orders) + 1 } : {}),
           createdAt: t,
           updatedAt: t,

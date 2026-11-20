@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Board, Card } from "../types";
 import { addDays, dueStatus, formatDateTime, formatDue, now, uid } from "../lib/utils";
-import { conflicts, FIELD_LABELS, mergeEdits, rebase, type Field } from "../lib/merge";
+import { conflicts, mergeEdits, rebase, type Field } from "../lib/merge";
+import { t } from "../lib/i18n";
+
+const fieldLabel = (f: Field) => t(`field.${f}`);
 import { Modal } from "./ui";
 
 interface Props {
@@ -87,30 +90,30 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
     return (
       <Modal onClose={() => setResolving(null)} className="conflict-modal">
         <div className="modal-head">
-          <h3>⚠ Cette carte a aussi été modifiée ailleurs</h3>
+          <h3>{t("conflict.title")}</h3>
         </div>
-        <p className="muted">Pour chaque champ modifié des deux côtés, choisis la version à garder.</p>
+        <p className="muted">{t("conflict.intro")}</p>
         {resolving.fields.map((f) => (
           <div key={f} className="conflict">
-            <h4>{FIELD_LABELS[f]}</h4>
+            <h4>{fieldLabel(f)}</h4>
             <label className={!keepTheirs.has(f) ? "on" : ""}>
               <input type="radio" checked={!keepTheirs.has(f)} onChange={() => choose(f, false)} />
-              <span className="conflict-who">Ma version</span>
+              <span className="conflict-who">{t("conflict.mine")}</span>
               <span className="conflict-value">{describe(f, cleaned(), board)}</span>
             </label>
             <label className={keepTheirs.has(f) ? "on" : ""}>
               <input type="radio" checked={keepTheirs.has(f)} onChange={() => choose(f, true)} />
-              <span className="conflict-who">L'autre version</span>
+              <span className="conflict-who">{t("conflict.theirs")}</span>
               <span className="conflict-value">{describe(f, card, board)}</span>
             </label>
           </div>
         ))}
         <div className="conflict-actions">
           <button className="btn-ghost" onClick={() => setResolving(null)}>
-            Revenir à l'édition
+            {t("conflict.back")}
           </button>
           <button className="btn-primary" onClick={() => finish(resolving.archive, keepTheirs)}>
-            {resolving.archive ? "Enregistrer et archiver" : "Enregistrer"}
+            {resolving.archive ? t("conflict.saveArchive") : t("conflict.save")}
           </button>
         </div>
       </Modal>
@@ -125,9 +128,9 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
           rows={1}
           value={draft.title}
           onChange={(e) => set({ title: e.target.value.replace(/\n/g, " ") })}
-          placeholder="Titre"
+          placeholder={t("cardModal.title")}
         />
-        <button className="icon-btn" onClick={close} title="Fermer (Échap)">
+        <button className="icon-btn" onClick={close} title={t("common.closeEsc")}>
           ✕
         </button>
       </div>
@@ -136,14 +139,12 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
         <div className="external-banner">
           {incoming.length > 0 && (
             <div>
-              ↻ Modifiée ailleurs pendant ton édition ({incoming.map((f) => FIELD_LABELS[f]).join(", ")}) : ces changements sont
-              repris, les tiens s'appliqueront par-dessus.
+              {t("cardModal.incoming", { fields: incoming.map(fieldLabel).join(", ") })}
             </div>
           )}
           {pending.length > 0 && (
             <div className="external-conflict">
-              ⚠ Modifié des deux côtés : {pending.map((f) => FIELD_LABELS[f]).join(", ")}. Tu choisiras la version à garder en
-              fermant.
+              {t("cardModal.bothSides", { fields: pending.map(fieldLabel).join(", ") })}
             </div>
           )}
         </div>
@@ -151,17 +152,17 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
 
       <div className="modal-body">
         <div className="modal-main">
-          <h4>Description</h4>
+          <h4>{t("field.description")}</h4>
           <textarea
             className="description"
             rows={6}
-            placeholder="Détails, liens, notes… "
+            placeholder={t("cardModal.descriptionPlaceholder")}
             value={draft.description}
             onChange={(e) => set({ description: e.target.value })}
           />
 
           <h4>
-            Checklist {total > 0 && <span className="muted">{done}/{total}</span>}
+            {t("field.checklist")} {total > 0 && <span className="muted">{done}/{total}</span>}
           </h4>
           {total > 0 && (
             <div className="progress">
@@ -175,7 +176,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
                 <input className="check-text" value={item.text} onChange={(e) => updateItem(item.id, { text: e.target.value })} />
                 <button
                   className="icon-btn"
-                  title="Retirer"
+                  title={t("cardModal.remove")}
                   onClick={() => set({ checklist: draft.checklist.filter((i) => i.id !== item.id) })}
                 >
                   ✕
@@ -185,7 +186,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
           </ul>
           <div className="check-add">
             <input
-              placeholder="+ Ajouter un élément"
+              placeholder={t("cardModal.addItem")}
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addItem()}
@@ -194,7 +195,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
         </div>
 
         <aside className="modal-side">
-          <h4>Colonne</h4>
+          <h4>{t("field.columnId")}</h4>
           <select value={draft.columnId} onChange={(e) => set({ columnId: e.target.value })}>
             {board.columns.map((c) => (
               <option key={c.id} value={c.id}>
@@ -204,9 +205,9 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
           </select>
 
           <h4>
-            Étiquettes
+            {t("field.labels")}
             <button className="link" onClick={onManageLabels}>
-              gérer
+              {t("cardModal.manageLabels")}
             </button>
           </h4>
           <div className="label-picker">
@@ -220,10 +221,10 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
                 {l.name}
               </button>
             ))}
-            {board.labels.length === 0 && <span className="muted">Aucune étiquette</span>}
+            {board.labels.length === 0 && <span className="muted">{t("cardModal.noLabels")}</span>}
           </div>
 
-          <h4>Échéance</h4>
+          <h4>{t("field.due")}</h4>
           <input
             type="date"
             className={due ? `due-${due}` : ""}
@@ -231,21 +232,21 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
             onChange={(e) => set({ due: e.target.value || null })}
           />
           <div className="due-shortcuts">
-            <button className="btn-ghost small" onClick={() => set({ due: addDays(0) })}>Aujourd'hui</button>
-            <button className="btn-ghost small" onClick={() => set({ due: addDays(1) })}>Demain</button>
-            <button className="btn-ghost small" onClick={() => set({ due: addDays(7) })}>+1 sem.</button>
+            <button className="btn-ghost small" onClick={() => set({ due: addDays(0) })}>{t("cardModal.today")}</button>
+            <button className="btn-ghost small" onClick={() => set({ due: addDays(1) })}>{t("cardModal.tomorrow")}</button>
+            <button className="btn-ghost small" onClick={() => set({ due: addDays(7) })}>{t("cardModal.nextWeek")}</button>
             {draft.due && (
-              <button className="btn-ghost small" onClick={() => set({ due: null })}>Retirer</button>
+              <button className="btn-ghost small" onClick={() => set({ due: null })}>{t("cardModal.remove")}</button>
             )}
           </div>
 
           <div className="meta">
-            <div>Créée le {formatDateTime(card.createdAt)}</div>
-            {card.updatedAt && <div>Modifiée le {formatDateTime(card.updatedAt)}</div>}
+            <div>{t("cardModal.created", { date: formatDateTime(card.createdAt) })}</div>
+            {card.updatedAt && <div>{t("cardModal.updated", { date: formatDateTime(card.updatedAt) })}</div>}
           </div>
 
-          <button className="btn-ghost full" onClick={archive} title="La carte quitte le tableau ; elle reste restaurable depuis les archives">
-            📦 Archiver la carte
+          <button className="btn-ghost full" onClick={archive} title={t("cardModal.archiveTitle")}>
+            {t("cardModal.archive")}
           </button>
         </aside>
       </div>
@@ -257,18 +258,18 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels }: Prop
 function describe(field: Field, card: Card, board: Board): string {
   switch (field) {
     case "columnId":
-      return board.columns.find((c) => c.id === card.columnId)?.name ?? "colonne supprimée";
+      return board.columns.find((c) => c.id === card.columnId)?.name ?? t("describe.deletedColumn");
     case "labels":
-      return card.labels.map((id) => board.labels.find((l) => l.id === id)?.name).filter(Boolean).join(", ") || "aucune";
+      return card.labels.map((id) => board.labels.find((l) => l.id === id)?.name).filter(Boolean).join(", ") || t("describe.none");
     case "due":
-      return card.due ? formatDue(card.due) : "aucune";
+      return card.due ? formatDue(card.due) : t("describe.none");
     case "checklist": {
       const done = card.checklist.filter((i) => i.done).length;
-      return `${card.checklist.length} élément(s), ${done} fait(s) : ${card.checklist.map((i) => i.text).join(" · ")}`;
+      return t("describe.checklist", { n: card.checklist.length, done, items: card.checklist.map((i) => i.text).join(" · ") });
     }
     default: {
       const text = card[field].trim();
-      return text ? (text.length > 280 ? `${text.slice(0, 280)}…` : text) : "(vide)";
+      return text ? (text.length > 280 ? `${text.slice(0, 280)}…` : text) : t("describe.empty");
     }
   }
 }

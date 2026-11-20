@@ -18,6 +18,18 @@
       "minimum": 0,
       "maximum": 0.9
     },
+    "language": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "fr",
+        "en",
+        null
+      ],
+      "description": "Interface language; null follows the system language."
+    },
     "updatedAt": {
       "type": "string"
     }

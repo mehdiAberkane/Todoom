@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Board, Label } from "../types";
 import { LABEL_COLORS, uid } from "../lib/utils";
 import { DangerButton, Modal } from "./ui";
+import { t } from "../lib/i18n";
 
 export function LabelManager({ board, onSave, onClose }: { board: Board; onSave: (b: Board) => void; onClose: () => void }) {
   const [name, setName] = useState("");
@@ -20,8 +21,8 @@ export function LabelManager({ board, onSave, onClose }: { board: Board; onSave:
   return (
     <Modal onClose={onClose} className="label-modal">
       <div className="modal-head">
-        <h3>🏷 Étiquettes de « {board.name} »</h3>
-        <button className="icon-btn" onClick={onClose}>
+        <h3>{t("labels.title", { name: board.name })}</h3>
+        <button className="icon-btn" onClick={onClose} title={t("common.closeEsc")}>
           ✕
         </button>
       </div>
@@ -34,7 +35,7 @@ export function LabelManager({ board, onSave, onClose }: { board: Board; onSave:
               onBlur={(e) => e.target.value.trim() && e.target.value !== l.name && patch(l.id, { name: e.target.value.trim() })}
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
             />
-            <DangerButton className="icon-btn" onConfirm={() => update(board.labels.filter((x) => x.id !== l.id))} confirmLabel="Sûr ?">
+            <DangerButton className="icon-btn" onConfirm={() => update(board.labels.filter((x) => x.id !== l.id))} confirmLabel={t("common.sureQ")}>
               🗑
             </DangerButton>
           </li>
@@ -43,13 +44,13 @@ export function LabelManager({ board, onSave, onClose }: { board: Board; onSave:
       <div className="label-new">
         <ColorPicker value={color} onChange={setColor} />
         <input
-          placeholder="Nouvelle étiquette"
+          placeholder={t("labels.new")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
         />
         <button className="btn-primary" onClick={add}>
-          Créer
+          {t("common.create")}
         </button>
       </div>
     </Modal>
@@ -60,7 +61,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   const [open, setOpen] = useState(false);
   return (
     <div className="color-picker">
-      <button className="swatch" style={{ background: value }} onClick={() => setOpen((o) => !o)} title="Couleur" />
+      <button className="swatch" style={{ background: value }} onClick={() => setOpen((o) => !o)} title={t("labels.color")} />
       {open && (
         <div className="swatches">
           {LABEL_COLORS.map((c) => (

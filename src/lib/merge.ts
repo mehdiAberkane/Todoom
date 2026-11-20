@@ -4,15 +4,6 @@ import type { Card } from "../types";
 export const EDITABLE = ["title", "description", "columnId", "labels", "due", "checklist"] as const;
 export type Field = (typeof EDITABLE)[number];
 
-export const FIELD_LABELS: Record<Field, string> = {
-  title: "Titre",
-  description: "Description",
-  columnId: "Colonne",
-  labels: "Étiquettes",
-  due: "Échéance",
-  checklist: "Checklist",
-};
-
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Fields that differ between two versions of a card. */

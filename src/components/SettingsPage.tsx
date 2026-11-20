@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AppSettings } from "../types";
 import { imageToBackground } from "../lib/image";
+import { t } from "../lib/i18n";
 
 interface Props {
   settings: AppSettings;
@@ -22,8 +23,8 @@ export function SettingsPage({ settings, onSave, dataDir, onChangeDataDir, versi
   // The slider fires on every pixel; write the file once it settles.
   useEffect(() => {
     if (dim === settings.backgroundDim) return;
-    const t = setTimeout(() => onSave({ ...settings, backgroundDim: dim }), SAVE_DELAY_MS);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => onSave({ ...settings, backgroundDim: dim }), SAVE_DELAY_MS);
+    return () => clearTimeout(timer);
   }, [dim]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = async (file: File | undefined) => {
@@ -44,14 +45,27 @@ export function SettingsPage({ settings, onSave, dataDir, onChangeDataDir, versi
     <div className="settings-page">
       <header className="settings-head">
         <button className="btn-ghost" onClick={onBack}>
-          ← Retour
+          {t("settings.back")}
         </button>
-        <h1>⚙ Paramètres</h1>
+        <h1>{t("sidebar.settings")}</h1>
       </header>
 
       <section className="settings-section">
-        <h2>Fond d'écran</h2>
-        <p className="muted">L'image est enregistrée dans ton dossier Drive : elle s'affiche sur tous tes PC.</p>
+        <h2>{t("settings.language")}</h2>
+        <select
+          className="settings-select"
+          value={settings.language ?? "auto"}
+          onChange={(e) => onSave({ ...settings, backgroundDim: dim, language: e.target.value === "auto" ? null : (e.target.value as "fr" | "en") })}
+        >
+          <option value="auto">{t("settings.languageAuto")}</option>
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+      </section>
+
+      <section className="settings-section">
+        <h2>{t("settings.background")}</h2>
+        <p className="muted">{t("settings.backgroundShared")}</p>
 
         <div className="bg-editor">
           <div
@@ -62,23 +76,23 @@ export function SettingsPage({ settings, onSave, dataDir, onChangeDataDir, versi
                 : undefined
             }
           >
-            {!settings.background && <span className="muted">Fond noir par défaut</span>}
-            <div className="bg-preview-card">Aperçu d'une carte</div>
+            {!settings.background && <span className="muted">{t("settings.backgroundDefault")}</span>}
+            <div className="bg-preview-card">{t("settings.cardPreview")}</div>
           </div>
 
           <div className="bg-controls">
             <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
             <button className="btn-primary" disabled={busy} onClick={() => fileInput.current?.click()}>
-              {busy ? "Préparation…" : settings.background ? "Changer d'image…" : "Choisir une image…"}
+              {busy ? t("settings.preparing") : settings.background ? t("settings.changeImage") : t("settings.chooseImage")}
             </button>
             {settings.background && (
               <button className="btn-ghost" onClick={() => onSave({ ...settings, backgroundDim: dim, background: null })}>
-                Retirer l'image
+                {t("settings.removeImage")}
               </button>
             )}
 
             <label className="dim-label" htmlFor="bg-dim">
-              Assombrissement <span className="muted">{Math.round(dim * 100)} %</span>
+              {t("settings.dim")} <span className="muted">{Math.round(dim * 100)} %</span>
             </label>
             <input
               id="bg-dim"
@@ -90,25 +104,25 @@ export function SettingsPage({ settings, onSave, dataDir, onChangeDataDir, versi
               disabled={!settings.background}
               onChange={(e) => setDim(Number(e.target.value))}
             />
-            <p className="hint">Plus c'est sombre, plus les cartes restent lisibles sur une image claire.</p>
+            <p className="hint">{t("settings.dimHint")}</p>
             {error && <div className="error-box">{error}</div>}
           </div>
         </div>
       </section>
 
       <section className="settings-section">
-        <h2>Dossier de données</h2>
+        <h2>{t("settings.dataDir")}</h2>
         <div className="settings-row">
           <code className="settings-path">{dataDir}</code>
           <button className="btn-ghost" onClick={onChangeDataDir}>
-            Changer…
+            {t("settings.change")}
           </button>
         </div>
       </section>
 
       {version && (
         <section className="settings-section">
-          <h2>À propos</h2>
+          <h2>{t("settings.about")}</h2>
           <p className="muted">Todoom v{version}</p>
         </section>
       )}

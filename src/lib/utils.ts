@@ -1,3 +1,5 @@
+import { locale, t } from "./i18n";
+
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 export const now = () => new Date().toISOString();
@@ -68,11 +70,11 @@ export function formatDue(due: string): string {
   const [y, m, d] = due.split("-").map(Number);
   const date = new Date(y, m - 1, d);
   const sameYear = y === new Date().getFullYear();
-  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+  return date.toLocaleDateString(locale(), { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(iso).toLocaleString(locale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function localGet(key: string): string | null {
@@ -91,16 +93,10 @@ export function localSet(key: string, value: string) {
   }
 }
 
-const EMPTY_COLUMN_LINES = [
-  "Rien ici. Suspect.",
-  "Le vide intersidéral.",
-  "Zéro tâche, zéro drame.",
-  "Calme plat… pour l'instant.",
-  "Les tickets dorment ailleurs.",
-];
+const EMPTY_COLUMN_LINES = ["emptyCol.1", "emptyCol.2", "emptyCol.3", "emptyCol.4", "emptyCol.5"] as const;
 
 export function emptyColumnLine(seed: string): string {
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return EMPTY_COLUMN_LINES[Math.abs(h) % EMPTY_COLUMN_LINES.length];
+  return t(EMPTY_COLUMN_LINES[Math.abs(h) % EMPTY_COLUMN_LINES.length]);
 }

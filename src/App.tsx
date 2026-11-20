@@ -4,6 +4,7 @@ import { backend } from "./lib/backend";
 import { expiredBoards, useTodoom } from "./lib/store";
 import { useUpdater } from "./lib/updater";
 import { useCloseGuard } from "./lib/closeGuard";
+import { getLang, setLang, systemLang, t } from "./lib/i18n";
 import { localGet, localSet } from "./lib/utils";
 import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
@@ -38,6 +39,12 @@ export default function App() {
 
 function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () => void }) {
   const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow } = useTodoom(backend);
+  // Before the settings are read, keep the language last used here rather than flicker.
+  const language = status === "loading" ? getLang() : (data.settings.language ?? systemLang());
+  setLang(language);
+  useEffect(() => {
+    backend.setLanguage(language).catch(() => {});
+  }, [language]);
   const updater = useUpdater();
   useCloseGuard(unsaved.length, retryNow);
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
@@ -117,14 +124,14 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         ) : board ? (
           <BoardView key={board.id} board={board} cards={data.cards[board.id] ?? []} actions={actions} unsavedIds={unsavedIds} />
         ) : status === "loading" ? (
-          <div className="empty-state">Chargement…</div>
+          <div className="empty-state">{t("common.loading")}</div>
         ) : (
           <div className="empty-state">
             <div className="empty-skull">💀</div>
-            <h2>Aucun tableau.</h2>
-            <p>Le doom n'attend que toi.</p>
-            <button className="btn-primary big" onClick={() => setBoardId(actions.createBoard("Mon premier tableau", data.boards).id)}>
-              Créer mon premier tableau
+            <h2>{t("empty.title")}</h2>
+            <p>{t("empty.tagline")}</p>
+            <button className="btn-primary big" onClick={() => setBoardId(actions.createBoard(t("empty.firstBoard"), data.boards).id)}>
+              {t("empty.create")}
             </button>
           </div>
         )}

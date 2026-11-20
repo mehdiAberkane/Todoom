@@ -43,14 +43,21 @@ const isImageDataUrl = (v: unknown) => isString(v) && /^data:image\/(jpeg|png|we
 const SETTINGS: Check[] = [
   ["background", nullable(isImageDataUrl)],
   ["backgroundDim", optional(isNumber)],
+  ["language", nullable((v) => v === "fr" || v === "en")],
   ["updatedAt", optional(isString)],
 ];
 
-function problem(raw: unknown, checks: Check[], needsId: boolean): string | null {
-  if (!isObject(raw)) return "le contenu n'est pas un objet JSON";
-  if (needsId && (!isString(raw.id) || !raw.id)) return "champ « id » manquant";
+/** Why a data file can't be used; the interface turns the code into a sentence. */
+export interface IssueReason {
+  code: "invalid_json" | "not_object" | "missing_id" | "bad_field" | "missing_board" | "unknown_column";
+  field?: string;
+}
+
+function problem(raw: unknown, checks: Check[], needsId: boolean): IssueReason | null {
+  if (!isObject(raw)) return { code: "not_object" };
+  if (needsId && (!isString(raw.id) || !raw.id)) return { code: "missing_id" };
   const bad = checks.find(([f, ok]) => !ok(raw[f]));
-  return bad ? `champ « ${bad[0]} » de type inattendu` : null;
+  return bad ? { code: "bad_field", field: bad[0] } : null;
 }
 
 /** Why a card file can't be used, or null when it is fine. */

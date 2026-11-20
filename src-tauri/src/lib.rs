@@ -19,6 +19,18 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 const CHANGED_EVENT: &str = "todoom://changed";
+
+/// Messages shown to the user follow the interface language, French by default.
+static ENGLISH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn tr(fr: String, en: String) -> String {
+    if ENGLISH.load(std::sync::atomic::Ordering::Relaxed) { en } else { fr }
+}
+
+#[tauri::command]
+fn set_language(lang: String) {
+    ENGLISH.store(lang == "en", std::sync::atomic::Ordering::Relaxed);
+}
 /// Filesystem events this soon after one of our own writes are ignored.
 const SELF_WRITE_GRACE: Duration = Duration::from_secs(3);
 
@@ -85,14 +97,14 @@ fn data_root(state: &AppState) -> Result<PathBuf, String> {
         .data_dir
         .clone()
         .map(PathBuf::from)
-        .ok_or_else(|| "Aucun dossier de données configuré".into())
+        .ok_or_else(|| tr("Aucun dossier de données configuré".into(), "No data folder configured".into()))
 }
 
 /// Joins a relative path to the data root, refusing anything that could escape it.
 fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
     let rel_path = Path::new(rel);
     if rel.is_empty() || rel_path.components().any(|c| !matches!(c, Component::Normal(_))) {
-        return Err(format!("Chemin invalide : {rel}"));
+        return Err(tr(format!("Chemin invalide : {rel}"), format!("Invalid path: {rel}")));
     }
     Ok(root.join(rel_path))
 }
@@ -127,17 +139,23 @@ fn allowed(rel: &str, access: Access) -> bool {
 fn check_data_dir(path: &Path) -> Result<(), String> {
     let shown = path.display();
     if !path.is_absolute() {
-        return Err(format!("{shown} n'est pas un chemin complet."));
+        return Err(tr(format!("{shown} n'est pas un chemin complet."), format!("{shown} is not a full path.")));
     }
     if path.parent().is_none() {
-        return Err(format!("{shown} est la racine d'un disque : choisis un dossier dédié, par exemple …\\Mon Drive\\Todoom."));
+        return Err(tr(
+            format!("{shown} est la racine d'un disque : choisis un dossier dédié, par exemple …\\Mon Drive\\Todoom."),
+            format!("{shown} is the root of a drive: pick a dedicated folder, for example …\\My Drive\\Todoom."),
+        ));
     }
     let lower = |p: &Path| p.to_string_lossy().to_lowercase().trim_end_matches(['\\', '/']).to_string();
     let target = lower(path);
     if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
         && target == lower(Path::new(&home))
     {
-        return Err(format!("{shown} est ton dossier personnel : choisis un sous-dossier dédié."));
+        return Err(tr(
+            format!("{shown} est ton dossier personnel : choisis un sous-dossier dédié."),
+            format!("{shown} is your home folder: pick a dedicated subfolder."),
+        ));
     }
     let mut system: Vec<PathBuf> = ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"]
         .iter()
@@ -149,7 +167,10 @@ fn check_data_dir(path: &Path) -> Result<(), String> {
     for dir in system {
         let dir = lower(&dir);
         if target == dir || target.starts_with(&format!("{dir}\\")) || target.starts_with(&format!("{dir}/")) {
-            return Err(format!("{shown} est un dossier système : choisis un dossier à toi, par exemple dans ton Google Drive."));
+            return Err(tr(
+                format!("{shown} est un dossier système : choisis un dossier à toi, par exemple dans ton Google Drive."),
+                format!("{shown} is a system folder: pick a folder of your own, for example in your Google Drive."),
+            ));
         }
     }
     Ok(())
@@ -219,7 +240,7 @@ async fn set_data_dir(app: AppHandle, path: String) -> Result<(), String> {
     blocking(app, move |app| {
         let state = app.state::<AppState>();
         check_data_dir(Path::new(&path))?;
-        fs::create_dir_all(&path).map_err(|e| format!("Impossible de créer {path} : {e}"))?;
+        fs::create_dir_all(&path).map_err(|e| tr(format!("Impossible de créer {path} : {e}"), format!("Cannot create {path}: {e}")))?;
         {
             let mut cfg = state.config.lock().unwrap();
             cfg.data_dir = Some(path);
@@ -328,8 +349,9 @@ async fn load_all(app: AppHandle) -> Result<Vec<FileEntry>, String> {
 /// for the user to repair, and writing over one would destroy what is left of it.
 fn refuse_unreadable(target: &Path, rel: &str) -> Result<(), String> {
     match fs::read_to_string(target) {
-        Ok(existing) if serde_json::from_str::<serde_json::Value>(&existing).is_err() => Err(format!(
-            "{rel} est illisible (JSON invalide) : il n'est pas écrasé. Répare-le ou supprime-le à la main."
+        Ok(existing) if serde_json::from_str::<serde_json::Value>(&existing).is_err() => Err(tr(
+            format!("{rel} est illisible (JSON invalide) : il n'est pas écrasé. Répare-le ou supprime-le à la main."),
+            format!("{rel} is unreadable (invalid JSON): it is not overwritten. Fix or delete it by hand."),
         )),
         _ => Ok(()),
     }
@@ -338,7 +360,10 @@ fn refuse_unreadable(target: &Path, rel: &str) -> Result<(), String> {
 /// Checks a path the UI wants to write and returns where it lives, its folder created.
 fn prepare_write(root: &Path, rel: &str) -> Result<PathBuf, String> {
     if !allowed(rel, Access::Write) {
-        return Err(format!("Écriture refusée : {rel} n'est pas un fichier de données Todoom."));
+        return Err(tr(
+            format!("Écriture refusée : {rel} n'est pas un fichier de données Todoom."),
+            format!("Write refused: {rel} is not a Todoom data file."),
+        ));
     }
     let target = resolve(root, rel)?;
     if let Some(parent) = target.parent() {
@@ -362,7 +387,10 @@ fn write_atomic(target: &Path, content: &str) -> Result<(), String> {
 
 fn prepare_remove(root: &Path, rel: &str) -> Result<PathBuf, String> {
     if !allowed(rel, Access::Remove) {
-        return Err(format!("Suppression refusée : {rel} n'est pas une carte ni un tableau Todoom."));
+        return Err(tr(
+            format!("Suppression refusée : {rel} n'est pas une carte ni un tableau Todoom."),
+            format!("Removal refused: {rel} is not a Todoom card or board."),
+        ));
     }
     resolve(root, rel)
 }
@@ -448,6 +476,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_data_dir,
+            set_language,
             set_data_dir,
             suggest_data_dir,
             hostname,

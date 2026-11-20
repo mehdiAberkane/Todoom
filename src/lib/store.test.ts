@@ -29,13 +29,13 @@ describe("loading the data folder", () => {
   it("reports a half-synced file instead of dropping it silently", () => {
     const data = parse(files({ "boards/b1/cards/c1.json": '{"id":"c1","title":"Car' }));
     expect(data.cards.b1).toEqual([]);
-    expect(data.issues).toEqual([{ path: "boards/b1/cards/c1.json", reason: "JSON invalide (fichier partiel ou corrompu)" }]);
+    expect(data.issues).toEqual([{ path: "boards/b1/cards/c1.json", reason: { code: "invalid_json" } }]);
   });
 
   it("rejects a field of the wrong type, which used to crash the board", () => {
     const data = parse(files({ "boards/b1/cards/c1.json": card({ labels: "urgent" }) }));
     expect(data.cards.b1).toEqual([]);
-    expect(data.issues[0].reason).toBe("champ « labels » de type inattendu");
+    expect(data.issues[0].reason).toEqual({ code: "bad_field", field: "labels" });
   });
 
   it("reports cards without an id, without a board, or in an unknown column", () => {
@@ -46,10 +46,10 @@ describe("loading the data folder", () => {
         "boards/b1/cards/c.json": card({ id: "c3", columnId: "disparue" }),
       }),
     );
-    expect(data.issues.map((i) => [i.path, i.reason])).toEqual([
-      ["boards/b1/cards/a.json", "champ « id » manquant"],
-      ["boards/b1/cards/c.json", "colonne inconnue : la carte est affichée dans la première colonne"],
-      ["boards/b2/cards/b.json", "son tableau (board.json) est absent ou illisible"],
+    expect(data.issues.map((i) => [i.path, i.reason.code])).toEqual([
+      ["boards/b1/cards/a.json", "missing_id"],
+      ["boards/b1/cards/c.json", "unknown_column"],
+      ["boards/b2/cards/b.json", "missing_board"],
     ]);
     // The unknown-column card is still shown, the others are not.
     expect(data.cards.b1.map((c) => c.id)).toEqual(["c3"]);
@@ -78,14 +78,14 @@ describe("loading the data folder", () => {
     ]) {
       const data = parse(files({ "settings.json": JSON.stringify({ background: trap, updatedAt: "1" }) }));
       expect(data.settings.background).toBeNull();
-      expect(data.issues[0].reason).toBe("champ « background » de type inattendu");
+      expect(data.issues[0].reason).toEqual({ code: "bad_field", field: "background" });
     }
   });
 
   it("reports an unreadable settings file and keeps the defaults", () => {
     const data = parse(files({ "settings.json": JSON.stringify({ backgroundDim: "fort" }) }));
     expect(data.settings.background).toBeNull();
-    expect(data.issues[0]).toEqual({ path: "settings.json", reason: "champ « backgroundDim » de type inattendu" });
+    expect(data.issues[0]).toEqual({ path: "settings.json", reason: { code: "bad_field", field: "backgroundDim" } });
   });
 });
 
@@ -139,6 +139,6 @@ describe("the trash of boards", () => {
     const ok = parse([{ path: "boards/b1/board.json", content: JSON.stringify({ ...board, archivedAt: "2026-11-20T10:00:00Z" }) }]);
     expect(ok.boards[0].archivedAt).toBe("2026-11-20T10:00:00Z");
     const bad = parse([{ path: "boards/b1/board.json", content: JSON.stringify({ ...board, archivedAt: true }) }]);
-    expect(bad.issues[0].reason).toBe("champ « archivedAt » de type inattendu");
+    expect(bad.issues[0].reason).toEqual({ code: "bad_field", field: "archivedAt" });
   });
 });

@@ -5,6 +5,7 @@ import type { Card, Column, Label } from "../types";
 import { CardTile } from "./CardTile";
 import { DangerButton, InlineEdit } from "./ui";
 import { emptyColumnLine } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 interface Props {
   column: Column;
@@ -34,8 +35,8 @@ export function ColumnView({ column, cards, labels, unsavedIds, onOpen, onAdd, o
         <DangerButton
           className="icon-btn"
           onConfirm={onDelete}
-          confirmLabel="Supprimer ?"
-          title="Supprimer la colonne et ses cartes"
+          confirmLabel={t("column.deleteQ")}
+          title={t("column.deleteTitle")}
         >
           🗑
         </DangerButton>
@@ -71,14 +72,14 @@ function QuickAdd({ onAdd }: { onAdd: (title: string) => void }) {
   if (!open) {
     return (
       <button className="add-card" onClick={() => setOpen(true)}>
-        + Ajouter une carte
+        {t("column.addCard")}
       </button>
     );
   }
 
   const submit = () => {
-    const t = text.trim();
-    if (t) onAdd(t);
+    const title = text.trim();
+    if (title) onAdd(title);
     setText("");
   };
 
@@ -87,7 +88,7 @@ function QuickAdd({ onAdd }: { onAdd: (title: string) => void }) {
       <textarea
         autoFocus
         rows={2}
-        placeholder="Titre de la carte… (Entrée pour valider)"
+        placeholder={t("column.cardTitlePlaceholder")}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -101,10 +102,10 @@ function QuickAdd({ onAdd }: { onAdd: (title: string) => void }) {
       />
       <div className="quick-add-actions">
         <button className="btn-primary" onMouseDown={(e) => e.preventDefault()} onClick={submit}>
-          Ajouter
+          {t("common.add")}
         </button>
         <button className="btn-ghost" onClick={() => setOpen(false)}>
-          Annuler
+          {t("common.cancel")}
         </button>
       </div>
     </div>

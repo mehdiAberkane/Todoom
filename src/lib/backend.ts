@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { t } from "./i18n";
 
 export interface FileEntry {
   /** Relative to the data folder, always with "/" separators. */
@@ -20,6 +21,8 @@ export interface Backend {
   remove(path: string): Promise<void>;
   /** Fires when another machine changed the data folder. */
   onChange(cb: () => void): Promise<() => void>;
+  /** Language of the messages the backend itself writes (refusals, errors). */
+  setLanguage(lang: "fr" | "en"): Promise<void>;
 }
 
 const tauriBackend: Backend = {
@@ -28,7 +31,7 @@ const tauriBackend: Backend = {
   setDataDir: (path) => invoke("set_data_dir", { path }),
   suggestDataDir: () => invoke<string | null>("suggest_data_dir"),
   pickFolder: async () => {
-    const picked = await open({ directory: true, title: "Où ranger les données Todoom ?" });
+    const picked = await open({ directory: true, title: t("setup.pickTitle") });
     return typeof picked === "string" ? picked : null;
   },
   hostname: () => invoke<string>("hostname"),
@@ -36,6 +39,7 @@ const tauriBackend: Backend = {
   write: (path, content) => invoke("write_file", { path, content }),
   remove: (path) => invoke("remove_path", { path }),
   onChange: (cb) => listen("todoom://changed", () => cb()),
+  setLanguage: (lang) => invoke("set_language", { lang }),
 };
 
 // Lets the UI run in a plain browser (vite dev) with the same file layout kept in localStorage.
@@ -55,7 +59,7 @@ function writeFs(fs: Record<string, string>) {
 
 const browserBackend: Backend = {
   kind: "browser",
-  getDataDir: async () => "localStorage (mode navigateur)",
+  getDataDir: async () => t("dev.browserDataDir"),
   setDataDir: async () => {},
   suggestDataDir: async () => null,
   pickFolder: async () => null,
@@ -68,7 +72,7 @@ const browserBackend: Backend = {
       try {
         JSON.parse(fs[path]);
       } catch {
-        throw new Error(`${path} est illisible (JSON invalide) : il n'est pas écrasé. Répare-le ou supprime-le à la main.`);
+        throw new Error(t("error.unreadable", { path }));
       }
     }
     fs[path] = content;
@@ -86,6 +90,7 @@ const browserBackend: Backend = {
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
   },
+  setLanguage: async () => {},
 };
 
 export const isTauri = "__TAURI_INTERNALS__" in window;

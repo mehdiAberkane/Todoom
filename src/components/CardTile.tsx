@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Card, Label } from "../types";
 import { dueStatus, formatDue } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 export function CardBody({ card, labels }: { card: Card; labels: Label[] }) {
   const cardLabels = card.labels.map((id) => labels.find((l) => l.id === id)).filter((l): l is Label => !!l);
@@ -24,17 +25,17 @@ export function CardBody({ card, labels }: { card: Card; labels: Label[] }) {
       {(card.due || total > 0 || card.description) && (
         <div className="card-badges">
           {card.due && (
-            <span className={`badge due-${due}`} title="Échéance">
+            <span className={`badge due-${due}`} title={t("card.due")}>
               {due === "overdue" ? "🔥" : "📅"} {formatDue(card.due)}
             </span>
           )}
           {total > 0 && (
-            <span className={`badge ${done === total ? "badge-done" : ""}`} title="Checklist">
+            <span className={`badge ${done === total ? "badge-done" : ""}`} title={t("card.checklist")}>
               ☑ {done}/{total}
             </span>
           )}
           {card.description && (
-            <span className="badge" title="A une description">
+            <span className="badge" title={t("card.hasDescription")}>
               ≡
             </span>
           )}
@@ -75,8 +76,8 @@ export function CardTile({
       }}
     >
       {unsaved && (
-        <div className="unsaved-badge" title="Le disque n'a pas encore accepté la dernière modification : nouvel essai automatique">
-          ⚠ non enregistrée
+        <div className="unsaved-badge" title={t("card.unsavedTitle")}>
+          {t("card.unsaved")}
         </div>
       )}
       <CardBody card={card} labels={labels} />
