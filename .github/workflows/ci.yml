@@ -48,6 +48,11 @@ jobs:
       - name: Interface tests
         run: npm test
 
+      - name: Build the todoom command (type check included)
+        run: |
+          npm run build:cli
+          node dist-cli/todoom.mjs --version
+
       - name: npm dependency audit
         run: npm audit --audit-level=high
 

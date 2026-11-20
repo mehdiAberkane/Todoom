@@ -40,6 +40,13 @@ ignorés ») avec la raison, et Todoom ne l'écrase jamais.
 - L'app surveille le dossier et se recharge quand un autre PC modifie quelque chose
   (plus un rafraîchissement toutes les 2 min et au retour sur la fenêtre).
 
+## Commande `todoom` et serveur MCP
+
+Pour les scripts, l'agent et Claude : `todoom cards Todoom --column "à faire"`,
+`todoom move <carte> "en cours"`, `todoom comment <carte> "…"`… en JSON, avec les
+mêmes vérifications que l'application. `todoom mcp` offre les mêmes opérations comme
+outils MCP. Installation et détail : [`docs/commande-todoom.md`](docs/commande-todoom.md).
+
 ## Publier une version
 
 `npm run release` (ou `minor`, `major`, `x.y.z`) monte la version, crée le tag et le
