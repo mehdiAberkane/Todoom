@@ -122,7 +122,9 @@ function kindOf(parts: string[]): Kind | null {
  * "board (1).json" carry the same id, so the most recently updated one wins.
  * Files that can't be used are listed in `issues` rather than dropped silently.
  */
-export function parse(files: FileEntry[]): Data {
+export function parse(files: FileEntry[], pending: string[] = []): Data {
+  // Boards whose file Google Drive is still downloading: their cards wait silently.
+  const boardPending = new Set(pending.filter((p) => /^boards\/[^/]+\/board\.json$/.test(p)).map((p) => p.split("/")[1]));
   const boards = new Map<string, Board>();
   const cards = new Map<string, { card: Card; path: string }>();
   const presence: Presence[] = [];
@@ -205,7 +207,7 @@ export function parse(files: FileEntry[]): Data {
   for (const { card, path } of cards.values()) {
     const board = boards.get(card.boardId);
     if (!board) {
-      issues.push({ path, reason: { code: "missing_board" } });
+      if (!boardPending.has(card.boardId)) issues.push({ path, reason: { code: "missing_board" } });
       continue;
     }
     byBoard[card.boardId].push(card);
@@ -242,6 +244,10 @@ export interface WriteFailure {
 }
 
 const RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 30_000, 60_000];
+/** A load taking longer than this is said to be slow. */
+const SLOW_LOAD_MS = 8_000;
+/** While files are pending, the folder is loaded again this often. */
+const PENDING_RETRY_MS = 3_000;
 
 /** How long a board stays in the trash before it is deleted for good. */
 export const TRASH_DAYS = 30;
@@ -282,6 +288,11 @@ export function useTodoom(backend: Backend) {
   const [status, setStatus] = useState<SyncStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState("");
+  // Files Google Drive hasn't downloaded yet; while there are some, the data is incomplete.
+  const [pending, setPending] = useState<string[]>([]);
+  // The folder has been slow to answer: said instead of an endless « loading ».
+  const [slow, setSlow] = useState(false);
+  const pendingTimer = useRef<number | undefined>(undefined);
   // Read by the actions, which don't change between renders.
   const hostRef = useRef("");
   hostRef.current = host;
@@ -302,17 +313,27 @@ export function useTodoom(backend: Backend) {
   const reload = useCallback(async () => {
     // A reload racing a write in progress could briefly resurrect the old state.
     if (flushing.current) return;
+    const slowTimer = window.setTimeout(() => setSlow(true), SLOW_LOAD_MS);
     try {
-      const files = await backend.loadAll();
+      const { files, pending } = await backend.loadAll();
       if (flushing.current) return;
-      setData(parse(overlay(files, queue.current)));
+      setData(parse(overlay(files, queue.current), pending));
+      setPending(pending);
       setError(null);
       setStatus(queue.current.size ? "error" : "synced");
+      // Loads again shortly while Drive downloads the rest.
+      clearTimeout(pendingTimer.current);
+      if (pending.length) pendingTimer.current = window.setTimeout(() => reloadRef.current(), PENDING_RETRY_MS);
     } catch (e) {
       setStatus("error");
       setError(String(e));
+    } finally {
+      clearTimeout(slowTimer);
+      setSlow(false);
     }
   }, [backend]);
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   /** Writes the queued changes in order; failed ones stay queued and are retried later. */
   const flush = useCallback(async (): Promise<void> => {
@@ -588,7 +609,7 @@ export function useTodoom(backend: Backend) {
   // Ids of the cards and boards with a change the disk hasn't confirmed yet.
   const unsavedIds = useMemo(() => new Set(unsaved.map(idOfPath).filter((id): id is string => !!id)), [unsaved]);
 
-  return { data, status, error, host, actions, reload, unsaved, unsavedIds, failures, nextRetry, retryNow };
+  return { data, status, error, host, actions, reload, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow };
 }
 
 function blankCard(board: Board, columnId: string, title: string, order: number, number?: number): Card {

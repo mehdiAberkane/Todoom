@@ -13,6 +13,15 @@ describe("loading the data folder", () => {
     expect(data.issues).toEqual([]);
   });
 
+  it("waits silently for a board Google Drive is still downloading, but reports a board really missing", () => {
+    const cardsOnly = [
+      { path: "boards/b2/cards/c2.json", content: card({ id: "c2" }) },
+      { path: "boards/b3/cards/c3.json", content: card({ id: "c3" }) },
+    ];
+    const data = parse(cardsOnly, ["boards/b2/board.json"]);
+    expect(data.issues.map((i) => i.path)).toEqual(["boards/b3/cards/c3.json"]);
+  });
+
   it("keeps fields it doesn't know, so saving doesn't erase what a newer version wrote", () => {
     const data = parse(
       Object.entries({

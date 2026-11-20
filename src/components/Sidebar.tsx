@@ -32,6 +32,10 @@ interface Props {
   /** Reading the data folder failed. */
   error: string | null;
   unsavedCount: number;
+  /** Files Google Drive hasn't downloaded yet. */
+  pendingCount: number;
+  /** The data folder is slow to answer. */
+  slow: boolean;
   failures: WriteFailure[];
   nextRetry: number | null;
   onRetry: () => void;
@@ -101,6 +105,11 @@ export function Sidebar(props: Props) {
         {others.length > 0 && (
           <div className="presence" title={t("sidebar.presenceTitle")}>
             {t("sidebar.alsoOpenOn", { hosts: others.map((o) => o.host).join(", ") })}
+          </div>
+        )}
+        {(props.pendingCount > 0 || props.slow) && (
+          <div className="load-pending" title={t("load.pendingTitle")}>
+            ⏳ {props.pendingCount > 0 ? tn("load.pending", props.pendingCount) : t("load.slow")}
           </div>
         )}
         {props.failures.length > 0 ? (

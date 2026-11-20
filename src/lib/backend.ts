@@ -9,6 +9,12 @@ export interface FileEntry {
   content: string;
 }
 
+/** A load of the data folder: the files read, and those not available yet (Google Drive still downloading them). */
+export interface Loaded {
+  files: FileEntry[];
+  pending: string[];
+}
+
 export interface Backend {
   kind: "tauri" | "browser";
   getDataDir(): Promise<string | null>;
@@ -16,7 +22,7 @@ export interface Backend {
   suggestDataDir(): Promise<string | null>;
   pickFolder(): Promise<string | null>;
   hostname(): Promise<string>;
-  loadAll(): Promise<FileEntry[]>;
+  loadAll(): Promise<Loaded>;
   write(path: string, content: string): Promise<void>;
   remove(path: string): Promise<void>;
   /** Fires when another machine changed the data folder. */
@@ -35,7 +41,7 @@ const tauriBackend: Backend = {
     return typeof picked === "string" ? picked : null;
   },
   hostname: () => invoke<string>("hostname"),
-  loadAll: () => invoke<FileEntry[]>("load_all"),
+  loadAll: () => invoke<Loaded>("load_all"),
   write: (path, content) => invoke("write_file", { path, content }),
   remove: (path) => invoke("remove_path", { path }),
   onChange: (cb) => listen("todoom://changed", () => cb()),
@@ -64,7 +70,7 @@ const browserBackend: Backend = {
   suggestDataDir: async () => null,
   pickFolder: async () => null,
   hostname: async () => "navigateur",
-  loadAll: async () => Object.entries(readFs()).map(([path, content]) => ({ path, content })),
+  loadAll: async () => ({ files: Object.entries(readFs()).map(([path, content]) => ({ path, content })), pending: [] }),
   write: async (path, content) => {
     const fs = readFs();
     // Same rule as the desktop backend: never overwrite a file that isn't valid JSON.

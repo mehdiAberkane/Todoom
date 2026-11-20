@@ -7,6 +7,7 @@ use std::{
     fs,
     path::{Component, Path, PathBuf},
     sync::{Arc, Mutex},
+    thread,
     time::{Duration, Instant, SystemTime},
 };
 
@@ -60,7 +61,9 @@ struct AppState {
     config: Mutex<Config>,
     recent_writes: RecentWrites,
     watcher: Mutex<Option<Debouncer<RecommendedWatcher>>>,
-    files: Mutex<HashMap<PathBuf, CachedFile>>,
+    files: FileCache,
+    /// Files being read by a background reader, possibly started by an earlier load.
+    reading: Arc<Mutex<HashSet<PathBuf>>>,
 }
 
 /// Runs disk work on a blocking thread. Synchronous Tauri commands run on the main
@@ -301,21 +304,40 @@ fn hostname() -> String {
     gethostname::gethostname().to_string_lossy().into_owned()
 }
 
-/// Lists the JSON files, rereading only those whose size or modification time changed:
-/// on Google Drive a listing costs ~30 ms while reading every file costs seconds.
-fn walk(
-    root: &Path,
-    dir: &Path,
-    cache: &mut HashMap<PathBuf, CachedFile>,
-    seen: &mut Vec<PathBuf>,
-    out: &mut Vec<FileEntry>,
-) {
+type FileCache = Arc<Mutex<HashMap<PathBuf, CachedFile>>>;
+
+/// A data file found in the folder, before it is read.
+#[derive(Clone)]
+struct Listed {
+    path: PathBuf,
+    rel: String,
+    modified: SystemTime,
+    len: u64,
+}
+
+/// What a load returns: the files read, and those not available yet.
+#[derive(Serialize)]
+struct Loaded {
+    files: Vec<FileEntry>,
+    /// Still being read (Google Drive downloading an "online only" file) or unreadable for now;
+    /// the UI shows what it has and loads again a moment later.
+    pending: Vec<String>,
+}
+
+/// A load answers with what it has after this long, instead of waiting for the slowest file.
+const LOAD_DEADLINE: Duration = Duration::from_secs(15);
+/// Files read at once: Google Drive downloads "online only" files one per read.
+const READERS: usize = 8;
+
+/// The JSON files under `dir`, from their metadata only: listing is fast even
+/// when Google Drive hasn't downloaded the files yet.
+fn list(root: &Path, dir: &Path, out: &mut Vec<Listed>) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
         let Ok(meta) = entry.metadata() else { continue };
         if meta.is_dir() {
-            walk(root, &path, cache, seen, out);
+            list(root, &path, out);
             continue;
         }
         if !path.extension().is_some_and(|e| e == "json") {
@@ -324,29 +346,116 @@ fn walk(
         let Ok(rel) = path.strip_prefix(root) else { continue };
         let rel = rel.to_string_lossy().replace('\\', "/");
         let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let fresh = cache
-            .get(&path)
-            .is_some_and(|c| c.modified == modified && c.len == meta.len());
-        if !fresh {
-            let Ok(content) = fs::read_to_string(&path) else { continue };
-            cache.insert(path.clone(), CachedFile { modified, len: meta.len(), content });
-        }
-        out.push(FileEntry { path: rel, content: cache[&path].content.clone() });
-        seen.push(path);
+        out.push(Listed { path, rel, modified, len: meta.len() });
     }
 }
 
+fn is_fresh(l: &Listed, cache: &HashMap<PathBuf, CachedFile>) -> bool {
+    cache.get(&l.path).is_some_and(|c| c.modified == l.modified && c.len == l.len)
+}
+
+/// Lists the data files and reads those that changed since the last load (the
+/// rest comes from the cache: on Google Drive a listing costs ~30 ms while
+/// reading every file costs seconds). Reads run in parallel on background
+/// threads; after `deadline` the load answers with what it has, and the files
+/// still being read are listed as pending. Those threads go on and fill the
+/// cache, so the next load finds them ready.
+fn load_files(
+    root: &Path,
+    cache: &FileCache,
+    reading: &Arc<Mutex<HashSet<PathBuf>>>,
+    deadline: Duration,
+    read: fn(&Path) -> std::io::Result<String>,
+) -> Loaded {
+    let started = Instant::now();
+    let mut listed = Vec::new();
+    list(root, root, &mut listed);
+    {
+        let seen: HashSet<&PathBuf> = listed.iter().map(|l| &l.path).collect();
+        cache.lock().unwrap().retain(|p, _| seen.contains(p));
+    }
+    let todo: Vec<Listed> = {
+        let cached = cache.lock().unwrap();
+        listed.iter().filter(|l| !is_fresh(l, &cached)).cloned().collect()
+    };
+    // Files an earlier load is still reading aren't read twice: their reader will fill the cache.
+    let queue: Vec<Listed> = {
+        let mut busy = reading.lock().unwrap();
+        todo.iter().filter(|l| busy.insert(l.path.clone())).cloned().collect()
+    };
+    let workers = READERS.min(queue.len());
+    let queue = Arc::new(Mutex::new(queue));
+    for _ in 0..workers {
+        let (queue, cache, reading) = (queue.clone(), cache.clone(), reading.clone());
+        thread::spawn(move || loop {
+            let Some(l) = queue.lock().unwrap().pop() else { break };
+            match read(&l.path) {
+                Ok(content) => {
+                    cache.lock().unwrap().insert(l.path.clone(), CachedFile { modified: l.modified, len: l.len, content });
+                }
+                Err(e) => log::warn!("lecture impossible de {} : {e}", l.rel),
+            }
+            reading.lock().unwrap().remove(&l.path);
+        });
+    }
+    // Waits for the files to read, until the deadline, or until no reader works on them any more.
+    while !todo.is_empty() {
+        let missing = {
+            let cached = cache.lock().unwrap();
+            todo.iter().filter(|l| !is_fresh(l, &cached)).count()
+        };
+        let busy = {
+            let reading = reading.lock().unwrap();
+            todo.iter().any(|l| reading.contains(&l.path))
+        };
+        if missing == 0 || !busy || started.elapsed() >= deadline {
+            break;
+        }
+        thread::sleep(Duration::from_millis(40));
+    }
+
+    let cached = cache.lock().unwrap();
+    let (mut files, mut pending) = (Vec::new(), Vec::new());
+    for l in &listed {
+        match cached.get(&l.path) {
+            Some(c) if is_fresh(l, &cached) => files.push(FileEntry { path: l.rel.clone(), content: c.content.clone() }),
+            _ => pending.push(l.rel.clone()),
+        }
+    }
+    let ms = started.elapsed().as_millis();
+    if todo.is_empty() {
+        log::debug!("chargement : {} fichiers, tous depuis le cache, en {ms} ms", files.len());
+    } else {
+        log::info!(
+            "chargement : {} fichiers en {ms} ms ({} lus, {} depuis le cache, {} en attente)",
+            listed.len(),
+            todo.len() - pending.len(),
+            listed.len() - todo.len(),
+            pending.len()
+        );
+        if !pending.is_empty() {
+            let mut by_board: HashMap<&str, usize> = HashMap::new();
+            for rel in &pending {
+                *by_board.entry(rel.split('/').take(2).last().unwrap_or(rel)).or_default() += 1;
+            }
+            for (board, n) in by_board {
+                log::info!("  en attente : {n} fichier(s) dans {board} (Google Drive les télécharge peut-être)");
+            }
+        }
+    }
+    Loaded { files, pending }
+}
+
+fn read_file(path: &Path) -> std::io::Result<String> {
+    fs::read_to_string(path)
+}
+
 #[tauri::command]
-async fn load_all(app: AppHandle) -> Result<Vec<FileEntry>, String> {
+async fn load_all(app: AppHandle) -> Result<Loaded, String> {
     blocking(app, |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
-        let mut cache = state.files.lock().unwrap();
-        let (mut seen, mut out) = (Vec::new(), Vec::new());
-        walk(&root, &root, &mut cache, &mut seen, &mut out);
-        let seen: HashSet<_> = seen.into_iter().collect();
-        cache.retain(|p, _| seen.contains(p));
-        Ok(out)
+        Ok(load_files(&root, &state.files, &state.reading, LOAD_DEADLINE, read_file))
     })
     .await
 }
@@ -499,14 +608,69 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    fn load(root: &Path, cache: &mut HashMap<PathBuf, CachedFile>) -> Vec<(String, String)> {
-        let (mut seen, mut out) = (Vec::new(), Vec::new());
-        walk(root, root, cache, &mut seen, &mut out);
-        let seen: HashSet<_> = seen.into_iter().collect();
-        cache.retain(|p, _| seen.contains(p));
-        let mut files: Vec<_> = out.into_iter().map(|f| (f.path, f.content)).collect();
+    fn load(root: &Path, cache: &FileCache) -> Vec<(String, String)> {
+        let loaded = load_files(root, cache, &Default::default(), Duration::from_secs(10), read_file);
+        assert!(loaded.pending.is_empty(), "{:?}", loaded.pending);
+        let mut files: Vec<_> = loaded.files.into_iter().map(|f| (f.path, f.content)).collect();
         files.sort();
         files
+    }
+
+    fn slow_read(path: &Path) -> std::io::Result<String> {
+        if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("slow")) {
+            thread::sleep(Duration::from_millis(600));
+        }
+        read_file(path)
+    }
+
+    #[test]
+    fn slow_files_are_pending_then_ready_without_blocking_the_rest() {
+        let root = std::env::temp_dir().join(format!("todoom-slow-{}", std::process::id()));
+        let cards = root.join("boards/b1/cards");
+        fs::create_dir_all(&cards).unwrap();
+        fs::write(root.join("boards/b1/board.json"), "board").unwrap();
+        for i in 0..20 {
+            fs::write(cards.join(format!("c{i}.json")), "card").unwrap();
+        }
+        fs::write(cards.join("slow1.json"), "s1").unwrap();
+        fs::write(cards.join("slow2.json"), "s2").unwrap();
+        let (cache, reading): (FileCache, Arc<Mutex<HashSet<PathBuf>>>) = Default::default();
+
+        // The slow files take 600 ms each; the load answers after 150 ms with everything else.
+        let started = Instant::now();
+        let first = load_files(&root, &cache, &reading, Duration::from_millis(150), slow_read);
+        assert!(started.elapsed() < Duration::from_millis(500), "the load waited for the slow files");
+        assert_eq!(first.files.len(), 21);
+        let mut pending = first.pending.clone();
+        pending.sort();
+        assert_eq!(pending, ["boards/b1/cards/slow1.json", "boards/b1/cards/slow2.json"]);
+
+        // Read in parallel in the background: both are ready well before 2 × 600 ms.
+        thread::sleep(Duration::from_millis(800));
+        let second = load_files(&root, &cache, &reading, Duration::from_millis(150), slow_read);
+        assert!(second.pending.is_empty(), "{:?}", second.pending);
+        assert_eq!(second.files.len(), 23);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn an_unreadable_file_is_pending_and_the_load_does_not_wait_for_it() {
+        fn failing_read(path: &Path) -> std::io::Result<String> {
+            if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("broken")) {
+                return Err(std::io::Error::other("Drive a refusé"));
+            }
+            read_file(path)
+        }
+        let root = std::env::temp_dir().join(format!("todoom-broken-{}", std::process::id()));
+        fs::create_dir_all(root.join("boards/b1/cards")).unwrap();
+        fs::write(root.join("boards/b1/board.json"), "board").unwrap();
+        fs::write(root.join("boards/b1/cards/broken.json"), "x").unwrap();
+        let started = Instant::now();
+        let loaded = load_files(&root, &Default::default(), &Default::default(), Duration::from_secs(10), failing_read);
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(loaded.pending, ["boards/b1/cards/broken.json"]);
+        assert_eq!(loaded.files.len(), 1);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -660,10 +824,10 @@ mod tests {
         fs::write(root.join("boards/b1/board.json"), "board").unwrap();
         fs::write(cards.join("c1.json"), "v1").unwrap();
         fs::write(cards.join("skip.json.tmp"), "tmp").unwrap();
-        let mut cache = HashMap::new();
+        let cache: FileCache = Default::default();
 
         assert_eq!(
-            load(&root, &mut cache),
+            load(&root, &cache),
             [("boards/b1/board.json".into(), "board".into()), ("boards/b1/cards/c1.json".into(), "v1".into())]
         );
 
@@ -671,10 +835,10 @@ mod tests {
         fs::write(cards.join("c2.json"), "new").unwrap();
         fs::remove_file(root.join("boards/b1/board.json")).unwrap();
         assert_eq!(
-            load(&root, &mut cache),
+            load(&root, &cache),
             [("boards/b1/cards/c1.json".into(), "version 2".into()), ("boards/b1/cards/c2.json".into(), "new".into())]
         );
-        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.lock().unwrap().len(), 2);
 
         fs::remove_dir_all(&root).unwrap();
     }

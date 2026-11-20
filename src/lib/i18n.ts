@@ -17,6 +17,11 @@ const fr = {
 
   // Sidebar
   "status.loading": "Chargement…",
+  "load.pending_one": "Drive télécharge encore {n} fichier…",
+  "load.pending_other": "Drive télécharge encore {n} fichiers…",
+  "load.slow": "Le dossier de données tarde à répondre…",
+  "load.pendingTitle": "Google Drive n'a pas encore téléchargé ces fichiers (dossier « en ligne uniquement ») : Todoom affiche ce qui est prêt et recharge tout seul. Pour l'éviter : clic droit sur le dossier Todoom dans Drive, « Disponible hors connexion ».",
+  "load.slowHint": "Google Drive télécharge peut-être les fichiers (dossier « en ligne uniquement »). Todoom affiche les tableaux dès qu'ils arrivent. Pour que ce soit immédiat : rends le dossier Todoom « Disponible hors connexion » dans Google Drive.",
   "status.synced": "Synchronisé",
   "status.saving": "Enregistrement…",
   "status.error": "Erreur",
@@ -293,6 +298,11 @@ const en: Record<Key, string> = {
 
   // Sidebar
   "status.loading": "Loading…",
+  "load.pending_one": "Drive is still downloading {n} file…",
+  "load.pending_other": "Drive is still downloading {n} files…",
+  "load.slow": "The data folder is slow to answer…",
+  "load.pendingTitle": "Google Drive hasn't downloaded these files yet (\"online only\" folder): Todoom shows what is ready and loads again by itself. To avoid it: right-click the Todoom folder in Drive, \"Available offline\".",
+  "load.slowHint": "Google Drive may be downloading the files (\"online only\" folder). Todoom shows the boards as they arrive. To make it immediate: make the Todoom folder \"Available offline\" in Google Drive.",
   "status.synced": "Synced",
   "status.saving": "Saving…",
   "status.error": "Error",

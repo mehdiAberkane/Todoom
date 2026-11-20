@@ -40,7 +40,10 @@ export default function App() {
 }
 
 function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () => void }) {
-  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow } = useTodoom(backend);
+  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow } = useTodoom(backend);
+  // Automatic upkeep (numbers, keys, trash) waits for complete data: a card not downloaded yet
+  // could take a number already used, a board not read yet could lose its key.
+  const incomplete = status === "loading" || pending.length > 0;
   // Before the settings are read, keep the language last used here rather than flicker.
   const language = status === "loading" ? getLang() : (data.settings.language ?? systemLang());
   setLang(language);
@@ -60,17 +63,17 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   // Boards left in the trash longer than TRASH_DAYS are deleted for good, once.
   const purged = useRef(new Set<string>());
   useEffect(() => {
-    if (status === "loading") return;
+    if (incomplete) return;
     for (const b of expiredBoards(data.boards)) {
       if (purged.current.has(b.id)) continue;
       purged.current.add(b.id);
       actions.purgeBoard(b.id);
     }
-  }, [data.boards, status, actions]);
+  }, [data.boards, incomplete, actions]);
   // Every board gets a key and every card a number (SOL-42). Same rules on every
   // computer, so two of them doing it at once write the same thing.
   useEffect(() => {
-    if (status === "loading") return;
+    if (incomplete) return;
     const taken = new Set(data.boards.map((b) => b.key).filter((k): k is string => !!k));
     for (const b of data.boards) {
       if (b.archivedAt) continue;
@@ -81,7 +84,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       }
       for (const { card, number } of numbering(data.cards[b.id] ?? [])) actions.saveCard({ ...card, number });
     }
-  }, [data.boards, data.cards, status, actions]);
+  }, [data.boards, data.cards, incomplete, actions]);
 
   const openBoard = (id: string) => {
     setBoardId(id);
@@ -134,6 +137,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         failures={failures}
         nextRetry={nextRetry}
         onRetry={retryNow}
+        pendingCount={pending.length}
+        slow={slow}
         dataDir={dataDir}
         others={others}
         issues={data.issues}
@@ -170,8 +175,11 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             agents={data.agents[board.id]}
             history={data.history}
           />
-        ) : status === "loading" ? (
-          <div className="empty-state">{t("common.loading")}</div>
+        ) : status === "loading" || pending.length > 0 ? (
+          <div className="empty-state">
+            {t("common.loading")}
+            {(slow || pending.length > 0) && <p className="muted load-hint">{t("load.slowHint")}</p>}
+          </div>
         ) : (
           <div className="empty-state">
             <div className="empty-skull">💀</div>

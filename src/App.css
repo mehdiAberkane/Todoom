@@ -578,3 +578,7 @@ textarea { resize: vertical; }
 .agent-idle { color: var(--ok); border-color: rgba(61, 220, 132, 0.4); }
 .agent-working { color: var(--accent-2); border-color: rgba(255, 159, 28, 0.5); }
 .agent-silent { color: var(--accent); border-color: rgba(255, 77, 46, 0.5); }
+
+/* Files Google Drive is still downloading */
+.load-pending { font-size: 12px; color: var(--accent-2); padding: 4px 2px; cursor: help; }
+.load-hint { max-width: 460px; margin: 12px auto 0; font-size: 13px; line-height: 1.5; }
