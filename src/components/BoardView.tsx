@@ -29,7 +29,17 @@ type Lists = Record<string, string[]>;
 const COL = "col:";
 const CARD = "card:";
 
-export function BoardView({ board, cards: allCards, actions }: { board: Board; cards: Card[]; actions: Actions }) {
+export function BoardView({
+  board,
+  cards: allCards,
+  actions,
+  unsavedIds,
+}: {
+  board: Board;
+  cards: Card[];
+  actions: Actions;
+  unsavedIds: ReadonlySet<string>;
+}) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
   const archived = useMemo(() => allCards.filter((c) => c.archivedAt), [allCards]);
@@ -253,6 +263,7 @@ export function BoardView({ board, cards: allCards, actions }: { board: Board; c
                 column={col}
                 cards={(lists[col.id] ?? []).map((id) => cardById.get(id)!).filter(Boolean)}
                 labels={board.labels}
+                unsavedIds={unsavedIds}
                 onOpen={setOpenCardId}
                 onAdd={(title) => addCard(col.id, title)}
                 onRename={(name) => renameColumn(col.id, name)}

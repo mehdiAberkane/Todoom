@@ -3,6 +3,7 @@ import "./App.css";
 import { backend } from "./lib/backend";
 import { useTodoom } from "./lib/store";
 import { useUpdater } from "./lib/updater";
+import { useCloseGuard } from "./lib/closeGuard";
 import { localGet, localSet } from "./lib/utils";
 import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
@@ -36,8 +37,9 @@ export default function App() {
 }
 
 function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () => void }) {
-  const { data, status, error, host, actions } = useTodoom(backend);
+  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow } = useTodoom(backend);
   const updater = useUpdater();
+  useCloseGuard(unsaved.length, retryNow);
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   const [showSettings, setShowSettings] = useState(false);
   const board = data.boards.find((b) => b.id === boardId) ?? data.boards[0];
@@ -74,6 +76,10 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         onSettings={onSettings}
         status={status}
         error={error}
+        unsavedCount={unsaved.length}
+        failures={failures}
+        nextRetry={nextRetry}
+        onRetry={retryNow}
         dataDir={dataDir}
         others={others}
         issues={data.issues}
@@ -92,7 +98,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             onBack={() => setShowSettings(false)}
           />
         ) : board ? (
-          <BoardView key={board.id} board={board} cards={data.cards[board.id] ?? []} actions={actions} />
+          <BoardView key={board.id} board={board} cards={data.cards[board.id] ?? []} actions={actions} unsavedIds={unsavedIds} />
         ) : status === "loading" ? (
           <div className="empty-state">Chargement…</div>
         ) : (

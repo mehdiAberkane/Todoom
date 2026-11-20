@@ -159,27 +159,131 @@ export function parse(files: FileEntry[]): Data {
   };
 }
 
+/** A change not yet confirmed on disk: the latest content wanted for a path, or its removal. */
+export type PendingOp = { kind: "write"; content: string } | { kind: "remove" };
+
+/** A queued change whose last attempt failed. */
+export interface WriteFailure {
+  path: string;
+  error: string;
+}
+
+const RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 30_000, 60_000];
+
+/** The card or board id a data file belongs to, or null for other files. */
+export function idOfPath(path: string): string | null {
+  const m = path.match(/^boards\/([^/]+)(?:\/board\.json|\/cards\/([^/]+)\.json)?$/);
+  return m ? (m[2] ?? m[1]) : null;
+}
+
+/**
+ * The folder as it will be once the queued changes are written. Reloads use it
+ * so that a change the disk refused stays on screen instead of reverting.
+ */
+export function overlay(files: FileEntry[], queue: ReadonlyMap<string, PendingOp>): FileEntry[] {
+  const out = new Map(files.map((f) => [f.path, f.content]));
+  for (const [path, op] of queue) {
+    if (op.kind === "write") {
+      out.set(path, op.content);
+    } else {
+      for (const p of [...out.keys()]) if (p === path || p.startsWith(path + "/")) out.delete(p);
+    }
+  }
+  return [...out].map(([path, content]) => ({ path, content }));
+}
+
 export function useTodoom(backend: Backend) {
   const [data, setData] = useState<Data>(EMPTY);
   const [status, setStatus] = useState<SyncStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState("");
-  const pending = useRef(0);
+  // Changes waiting for the disk, by path; only the latest change of a path is kept.
+  const queue = useRef(new Map<string, PendingOp>());
+  const [unsaved, setUnsaved] = useState<string[]>([]);
+  const [failures, setFailures] = useState<WriteFailure[]>([]);
+  const [nextRetry, setNextRetry] = useState<number | null>(null);
+  const flushing = useRef(false);
+  const flushAgain = useRef(false);
+  const retryTimer = useRef<number | undefined>(undefined);
+  const attempt = useRef(0);
 
   const reload = useCallback(async () => {
-    // A reload racing our own write could briefly resurrect the old state.
-    if (pending.current > 0) return;
+    // A reload racing a write in progress could briefly resurrect the old state.
+    if (flushing.current) return;
     try {
       const files = await backend.loadAll();
-      if (pending.current > 0) return;
-      setData(parse(files));
-      setStatus("synced");
+      if (flushing.current) return;
+      setData(parse(overlay(files, queue.current)));
       setError(null);
+      setStatus(queue.current.size ? "error" : "synced");
     } catch (e) {
       setStatus("error");
       setError(String(e));
     }
   }, [backend]);
+
+  /** Writes the queued changes in order; failed ones stay queued and are retried later. */
+  const flush = useCallback(async (): Promise<void> => {
+    if (flushing.current) {
+      flushAgain.current = true;
+      return;
+    }
+    flushing.current = true;
+    clearTimeout(retryTimer.current);
+    setStatus("saving");
+    const failed: WriteFailure[] = [];
+    try {
+      for (const [path, op] of [...queue.current]) {
+        try {
+          if (op.kind === "write") await backend.write(path, op.content);
+          else await backend.remove(path);
+          // A newer change of the same path queued meanwhile stays for the next round.
+          if (queue.current.get(path) === op) queue.current.delete(path);
+        } catch (e) {
+          failed.push({ path, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+    } finally {
+      flushing.current = false;
+    }
+    setUnsaved([...queue.current.keys()]);
+    setFailures(failed);
+    if (flushAgain.current) {
+      flushAgain.current = false;
+      return flush();
+    }
+    if (failed.length) {
+      const delay = RETRY_DELAYS_MS[Math.min(attempt.current++, RETRY_DELAYS_MS.length - 1)];
+      retryTimer.current = window.setTimeout(flush, delay);
+      setNextRetry(Date.now() + delay);
+      setStatus("error");
+    } else {
+      attempt.current = 0;
+      setNextRetry(null);
+      setStatus("synced");
+    }
+  }, [backend]);
+
+  const enqueue = useCallback(
+    (path: string, op: PendingOp) => {
+      if (op.kind === "remove") {
+        // Writes inside a removed board are moot.
+        for (const p of [...queue.current.keys()]) if (p.startsWith(path + "/")) queue.current.delete(p);
+      }
+      queue.current.set(path, op);
+      setUnsaved([...queue.current.keys()]);
+      void flush();
+    },
+    [flush],
+  );
+
+  /** Retries now, skipping the wait; resolves once the attempt is over. */
+  const retryNow = useCallback(() => {
+    attempt.current = 0;
+    return flush();
+  }, [flush]);
+
+  useEffect(() => () => clearTimeout(retryTimer.current), []);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -211,23 +315,11 @@ export function useTodoom(backend: Backend) {
     return () => clearInterval(timer);
   }, [backend]);
 
-  const run = useCallback(async (op: () => Promise<void>) => {
-    pending.current++;
-    setStatus("saving");
-    try {
-      await op();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      pending.current--;
-      if (pending.current === 0) setStatus((s) => (s === "saving" ? "synced" : s));
-    }
-  }, []);
-
   const writeJson = useCallback(
-    (path: string, value: unknown) => run(() => backend.write(path, JSON.stringify(value, null, 2))),
-    [backend, run],
+    (path: string, value: unknown) => enqueue(path, { kind: "write", content: JSON.stringify(value, null, 2) }),
+    [enqueue],
   );
+  const removePath = useCallback((path: string) => enqueue(path, { kind: "remove" }), [enqueue]);
 
   const actions = useMemo(() => {
     const saveCard = (card: Card) => {
@@ -246,7 +338,7 @@ export function useTodoom(backend: Backend) {
         ...d,
         cards: { ...d.cards, [card.boardId]: (d.cards[card.boardId] ?? []).filter((c) => c.id !== card.id) },
       }));
-      run(() => backend.remove(cardPath(card)));
+      removePath(cardPath(card));
     };
 
     const saveBoard = (board: Board) => {
@@ -298,7 +390,7 @@ export function useTodoom(backend: Backend) {
           delete cards[boardId];
           return { ...d, boards: d.boards.filter((b) => b.id !== boardId), cards };
         });
-        run(() => backend.remove(boardDir(boardId)));
+        removePath(boardDir(boardId));
       },
 
       archiveCard(card: Card) {
@@ -342,9 +434,12 @@ export function useTodoom(backend: Backend) {
         return card;
       },
     };
-  }, [backend, run, writeJson]);
+  }, [writeJson, removePath]);
 
-  return { data, status, error, host, actions, reload };
+  // Ids of the cards and boards with a change the disk hasn't confirmed yet.
+  const unsavedIds = useMemo(() => new Set(unsaved.map(idOfPath).filter((id): id is string => !!id)), [unsaved]);
+
+  return { data, status, error, host, actions, reload, unsaved, unsavedIds, failures, nextRetry, retryNow };
 }
 
 export type Actions = ReturnType<typeof useTodoom>["actions"];

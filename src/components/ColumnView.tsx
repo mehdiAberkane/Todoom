@@ -10,13 +10,14 @@ interface Props {
   column: Column;
   cards: Card[];
   labels: Label[];
+  unsavedIds: ReadonlySet<string>;
   onOpen: (id: string) => void;
   onAdd: (title: string) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
 }
 
-export function ColumnView({ column, cards, labels, onOpen, onAdd, onRename, onDelete }: Props) {
+export function ColumnView({ column, cards, labels, unsavedIds, onOpen, onAdd, onRename, onDelete }: Props) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `col:${column.id}`,
   });
@@ -42,7 +43,7 @@ export function ColumnView({ column, cards, labels, onOpen, onAdd, onRename, onD
       <SortableContext items={cards.map((c) => `card:${c.id}`)} strategy={verticalListSortingStrategy}>
         <div className="card-list">
           {cards.map((c) => (
-            <CardTile key={c.id} card={c} labels={labels} onOpen={onOpen} />
+            <CardTile key={c.id} card={c} labels={labels} unsaved={unsavedIds.has(c.id)} onOpen={onOpen} />
           ))}
           {cards.length === 0 && <div className="empty-col">{emptyColumnLine(column.id)}</div>}
         </div>

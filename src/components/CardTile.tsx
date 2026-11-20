@@ -44,7 +44,18 @@ export function CardBody({ card, labels }: { card: Card; labels: Label[] }) {
   );
 }
 
-export function CardTile({ card, labels, onOpen }: { card: Card; labels: Label[]; onOpen: (id: string) => void }) {
+export function CardTile({
+  card,
+  labels,
+  unsaved,
+  onOpen,
+}: {
+  card: Card;
+  labels: Label[];
+  /** The disk hasn't confirmed the last change of this card yet. */
+  unsaved: boolean;
+  onOpen: (id: string) => void;
+}) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `card:${card.id}`,
   });
@@ -53,11 +64,16 @@ export function CardTile({ card, labels, onOpen }: { card: Card; labels: Label[]
     <article
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`card ${isDragging ? "ghost" : ""}`}
+      className={`card ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""}`}
       {...attributes}
       {...listeners}
       onClick={() => onOpen(card.id)}
     >
+      {unsaved && (
+        <div className="unsaved-badge" title="Le disque n'a pas encore accepté la dernière modification : nouvel essai automatique">
+          ⚠ non enregistrée
+        </div>
+      )}
       <CardBody card={card} labels={labels} />
     </article>
   );

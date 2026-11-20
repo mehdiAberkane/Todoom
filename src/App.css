@@ -463,3 +463,14 @@ textarea { resize: vertical; }
 .issues-list li { background: var(--card); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
 .issues-list code { overflow-wrap: anywhere; }
 .issues-list span { color: #ffb4a6; }
+
+/* Changes the disk hasn't accepted yet */
+.card.unsaved { border-color: var(--accent-2); }
+.unsaved-badge { font-size: 10px; font-weight: 700; color: var(--accent-2); margin-bottom: 4px; }
+.write-failures { background: rgba(255, 77, 46, 0.12); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.write-failures-title { color: #ffb4a6; font-weight: 700; }
+.write-failures ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.write-failures li { display: flex; flex-direction: column; gap: 1px; font-size: 11px; }
+.write-failures code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.write-failures li span { color: #ffb4a6; overflow-wrap: anywhere; }
+.write-failures-actions { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; }

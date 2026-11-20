@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parse } from "./store";
+import { idOfPath, overlay, parse, type PendingOp } from "./store";
 
 const board = { id: "b1", name: "Tableau", columns: [{ id: "todo", name: "À faire" }], labels: [], updatedAt: "1" };
 const card = (patch: Record<string, unknown> = {}) => JSON.stringify({ id: "c1", columnId: "todo", title: "Carte", updatedAt: "1", ...patch });
@@ -86,5 +86,42 @@ describe("loading the data folder", () => {
     const data = parse(files({ "settings.json": JSON.stringify({ backgroundDim: "fort" }) }));
     expect(data.settings.background).toBeNull();
     expect(data.issues[0]).toEqual({ path: "settings.json", reason: "champ « backgroundDim » de type inattendu" });
+  });
+});
+
+describe("changes the disk hasn't accepted yet", () => {
+  const disk = [
+    { path: "boards/b1/board.json", content: "board" },
+    { path: "boards/b1/cards/c1.json", content: "ancienne" },
+    { path: "boards/b2/board.json", content: "b2" },
+    { path: "boards/b2/cards/c9.json", content: "c9" },
+  ];
+  const view = (queue: [string, PendingOp][]) =>
+    Object.fromEntries(overlay(disk, new Map(queue)).map((f) => [f.path, f.content]));
+
+  it("stay on screen over what the disk still holds, instead of reverting on reload", () => {
+    const shown = view([
+      ["boards/b1/cards/c1.json", { kind: "write", content: "modifiée" }],
+      ["boards/b1/cards/c2.json", { kind: "write", content: "nouvelle" }],
+    ]);
+    expect(shown["boards/b1/cards/c1.json"]).toBe("modifiée");
+    expect(shown["boards/b1/cards/c2.json"]).toBe("nouvelle");
+    expect(shown["boards/b2/cards/c9.json"]).toBe("c9");
+  });
+
+  it("hide a card or a whole board whose removal is still pending", () => {
+    const shown = view([
+      ["boards/b1/cards/c1.json", { kind: "remove" }],
+      ["boards/b2", { kind: "remove" }],
+    ]);
+    expect(Object.keys(shown)).toEqual(["boards/b1/board.json"]);
+  });
+
+  it("map a pending path to the card or board it marks as unsaved", () => {
+    expect(idOfPath("boards/b1/cards/c1.json")).toBe("c1");
+    expect(idOfPath("boards/b1/board.json")).toBe("b1");
+    expect(idOfPath("boards/b1")).toBe("b1");
+    expect(idOfPath("settings.json")).toBeNull();
+    expect(idOfPath(".presence/PC.json")).toBeNull();
   });
 });

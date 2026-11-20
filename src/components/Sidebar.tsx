@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Board, Presence } from "../types";
-import type { FileIssue, SyncStatus } from "../lib/store";
+import type { FileIssue, SyncStatus, WriteFailure } from "../lib/store";
 import { Modal } from "./ui";
 import type { UpdateState } from "../lib/updater";
 
@@ -25,7 +25,12 @@ interface Props {
   onOpenSettings: () => void;
   onSettings: () => void;
   status: SyncStatus;
+  /** Reading the data folder failed. */
   error: string | null;
+  unsavedCount: number;
+  failures: WriteFailure[];
+  nextRetry: number | null;
+  onRetry: () => void;
   dataDir: string;
   others: Presence[];
   issues: FileIssue[];
@@ -93,9 +98,13 @@ export function Sidebar(props: Props) {
             👀 Aussi ouvert sur {others.map((o) => o.host).join(", ")}
           </div>
         )}
-        <div className={`sync sync-${error ? "error" : status}`} title={error ?? undefined}>
-          <span className="dot" /> {error ? "Erreur d'écriture" : STATUS_TEXT[status]}
-        </div>
+        {props.failures.length > 0 ? (
+          <WriteFailures failures={props.failures} unsavedCount={props.unsavedCount} nextRetry={props.nextRetry} onRetry={props.onRetry} />
+        ) : (
+          <div className={`sync sync-${error ? "error" : status}`} title={error ?? undefined}>
+            <span className="dot" /> {error ? "Lecture impossible" : STATUS_TEXT[status]}
+          </div>
+        )}
         <button className="data-dir" onClick={onSettings} title="Changer de dossier de données">
           📁 <span>{dataDir}</span>
         </button>
@@ -105,6 +114,49 @@ export function Sidebar(props: Props) {
         {props.version && <div className="app-version">Todoom v{props.version}</div>}
       </footer>
     </aside>
+  );
+}
+
+/** Changes the disk refused: which file, which error, when the next attempt is. */
+function WriteFailures({
+  failures,
+  unsavedCount,
+  nextRetry,
+  onRetry,
+}: {
+  failures: WriteFailure[];
+  unsavedCount: number;
+  nextRetry: number | null;
+  onRetry: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const seconds = nextRetry ? Math.max(0, Math.ceil((nextRetry - now) / 1000)) : null;
+  const n = unsavedCount;
+  return (
+    <div className="write-failures">
+      <div className="write-failures-title">
+        ⚠ {n} modification{n > 1 ? "s" : ""} non enregistrée{n > 1 ? "s" : ""}
+      </div>
+      <ul>
+        {failures.slice(0, 3).map((f) => (
+          <li key={f.path} title={`${f.path}\n${f.error}`}>
+            <code>{f.path}</code>
+            <span>{f.error}</span>
+          </li>
+        ))}
+        {failures.length > 3 && <li className="muted">… et {failures.length - 3} autre(s)</li>}
+      </ul>
+      <div className="write-failures-actions">
+        <span className="muted">{seconds !== null && `Nouvel essai dans ${seconds} s`}</span>
+        <button className="btn-ghost small" onClick={onRetry}>
+          Réessayer
+        </button>
+      </div>
+    </div>
   );
 }
 
