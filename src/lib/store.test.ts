@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { idOfPath, overlay, parse, type PendingOp } from "./store";
+import { expiredBoards, idOfPath, overlay, parse, type PendingOp } from "./store";
 
 const board = { id: "b1", name: "Tableau", columns: [{ id: "todo", name: "À faire" }], labels: [], updatedAt: "1" };
 const card = (patch: Record<string, unknown> = {}) => JSON.stringify({ id: "c1", columnId: "todo", title: "Carte", updatedAt: "1", ...patch });
@@ -123,5 +123,22 @@ describe("changes the disk hasn't accepted yet", () => {
     expect(idOfPath("boards/b1")).toBe("b1");
     expect(idOfPath("settings.json")).toBeNull();
     expect(idOfPath(".presence/PC.json")).toBeNull();
+  });
+});
+
+describe("the trash of boards", () => {
+  const trashed = (archivedAt: string | null) => ({ ...board, id: archivedAt ?? "active", archivedAt, createdAt: "1", updatedAt: "1" });
+
+  it("deletes for good only the boards trashed more than 30 days ago", () => {
+    const now = Date.parse("2026-12-31T12:00:00Z");
+    const boards = [trashed(null), trashed("2026-12-01T13:00:00Z"), trashed("2026-12-01T11:00:00Z"), trashed("2026-10-01T00:00:00Z")];
+    expect(expiredBoards(boards, now).map((b) => b.id)).toEqual(["2026-12-01T11:00:00Z", "2026-10-01T00:00:00Z"]);
+  });
+
+  it("loads a trashed board with its date, and rejects a malformed one", () => {
+    const ok = parse([{ path: "boards/b1/board.json", content: JSON.stringify({ ...board, archivedAt: "2026-11-20T10:00:00Z" }) }]);
+    expect(ok.boards[0].archivedAt).toBe("2026-11-20T10:00:00Z");
+    const bad = parse([{ path: "boards/b1/board.json", content: JSON.stringify({ ...board, archivedAt: true }) }]);
+    expect(bad.issues[0].reason).toBe("champ « archivedAt » de type inattendu");
   });
 });

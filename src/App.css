@@ -474,3 +474,12 @@ textarea { resize: vertical; }
 .write-failures code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .write-failures li span { color: #ffb4a6; overflow-wrap: anywhere; }
 .write-failures-actions { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; }
+
+/* Trash of boards */
+.trash-modal { width: min(680px, 100%); }
+.trash-modal > p { margin: 0 0 12px; font-size: 13px; }
+.trash-empty { text-align: center; padding: 18px 0; }
+.trash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.trash-list li { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 8px; padding: 8px 10px; }
+.trash-info { flex: 1; min-width: 0; font-size: 12px; }
+.trash-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }

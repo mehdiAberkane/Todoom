@@ -32,6 +32,7 @@ const BOARD: Check[] = [
   ["columns", listOf(shaped([["id", isString], ["name", isString]]))],
   ["labels", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["order", optional(isNumber)],
+  ["archivedAt", nullable(isString)],
   ["createdAt", optional(isString)],
   ["updatedAt", optional(isString)],
 ];

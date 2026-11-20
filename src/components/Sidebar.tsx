@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Board, Presence } from "../types";
+import type { Board, Card, Presence } from "../types";
 import type { FileIssue, SyncStatus, WriteFailure } from "../lib/store";
 import { Modal } from "./ui";
+import { TrashModal } from "./TrashModal";
 import type { UpdateState } from "../lib/updater";
 
 const STATUS_TEXT: Record<SyncStatus, string> = {
@@ -16,6 +17,10 @@ const STATUS_TEXT: Record<SyncStatus, string> = {
 
 interface Props {
   boards: Board[];
+  trashed: Board[];
+  cardsByBoard: Record<string, Card[]>;
+  onRestore: (board: Board) => void;
+  onPurge: (boardId: string) => void;
   currentId?: string;
   counts: Record<string, number>;
   onSelect: (id: string) => void;
@@ -41,6 +46,7 @@ interface Props {
 
 export function Sidebar(props: Props) {
   const { boards, currentId, counts, onSelect, onCreate, onMove, onSettings, status, error, dataDir, others } = props;
+  const [showTrash, setShowTrash] = useState(false);
   const [name, setName] = useState("");
   // The distance threshold keeps a plain click selecting the board.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -108,6 +114,20 @@ export function Sidebar(props: Props) {
         <button className="data-dir" onClick={onSettings} title="Changer de dossier de données">
           📁 <span>{dataDir}</span>
         </button>
+        {props.trashed.length > 0 && (
+          <button className="settings-link" onClick={() => setShowTrash(true)}>
+            🗑 Corbeille ({props.trashed.length})
+          </button>
+        )}
+        {showTrash && (
+          <TrashModal
+            boards={props.trashed}
+            cardsByBoard={props.cardsByBoard}
+            onRestore={props.onRestore}
+            onPurge={props.onPurge}
+            onClose={() => setShowTrash(false)}
+          />
+        )}
         <button className={`settings-link ${props.settingsOpen ? "active" : ""}`} onClick={props.onOpenSettings}>
           ⚙ Paramètres
         </button>

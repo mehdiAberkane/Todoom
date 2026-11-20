@@ -331,6 +331,13 @@ def process(card_path, card, cols):
 
 def tick(dry_run=False):
     board_path = BOARD_DIR / "board.json"
+    # A board in Todoom's trash is off limits: no ticket is taken from it.
+    if read_json(board_path).get("archivedAt"):
+        if not tick.trash_logged:
+            log.warning("le tableau est dans la corbeille de Todoom : aucun ticket n'est pris")
+            tick.trash_logged = True
+        return
+    tick.trash_logged = False
     if dry_run:
         cols = {c["name"]: c["id"] for c in read_json(board_path)["columns"]}
     else:
@@ -349,6 +356,9 @@ def tick(dry_run=False):
             log.info("[dry-run] prendrait « %s »", card["title"])
         else:
             process(path, card, cols)
+
+
+tick.trash_logged = False
 
 
 def load_config():

@@ -86,6 +86,18 @@ class VerdictTest(unittest.TestCase):
         self.assertEqual(agent.verdict(False, "erreur", "abc1234 x", ""), (False, "erreur"))
 
 
+class TrashTest(unittest.TestCase):
+    def test_no_ticket_is_taken_from_a_board_in_the_trash(self):
+        board = {"columns": [{"id": "c1", "name": "En cours"}], "archivedAt": "2026-11-20T10:00:00Z"}
+        with mock.patch.object(agent, "BOARD_DIR", Path("board")), \
+             mock.patch.object(agent, "read_json", return_value=board), \
+             mock.patch.object(agent, "process") as process, \
+             mock.patch.object(agent, "ensure_columns") as ensure_columns:
+            agent.tick()
+        process.assert_not_called()
+        ensure_columns.assert_not_called()
+
+
 class ConfigTest(unittest.TestCase):
     def load(self, cfg):
         with mock.patch.object(agent, "read_json", return_value=cfg):

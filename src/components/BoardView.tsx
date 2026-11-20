@@ -240,7 +240,11 @@ export function BoardView({
           <button className="btn-ghost" onClick={() => setShowArchive(true)} title="Cartes archivées : restaurer ou supprimer">
             📦 Archives{archived.length > 0 && ` (${archived.length})`}
           </button>
-          <DangerButton onConfirm={() => actions.deleteBoard(board.id)} confirmLabel="Supprimer le tableau ?" title="Supprimer ce tableau">
+          <DangerButton
+            onConfirm={() => actions.trashBoard(board)}
+            confirmLabel="Mettre à la corbeille ?"
+            title="Met le tableau à la corbeille : restaurable pendant 30 jours"
+          >
             🗑 Tableau
           </DangerButton>
         </div>

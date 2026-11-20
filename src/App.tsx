@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { backend } from "./lib/backend";
-import { useTodoom } from "./lib/store";
+import { expiredBoards, useTodoom } from "./lib/store";
 import { useUpdater } from "./lib/updater";
 import { useCloseGuard } from "./lib/closeGuard";
 import { localGet, localSet } from "./lib/utils";
@@ -42,7 +42,20 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   useCloseGuard(unsaved.length, retryNow);
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   const [showSettings, setShowSettings] = useState(false);
-  const board = data.boards.find((b) => b.id === boardId) ?? data.boards[0];
+  const activeBoards = useMemo(() => data.boards.filter((b) => !b.archivedAt), [data.boards]);
+  const trashedBoards = useMemo(() => data.boards.filter((b) => b.archivedAt), [data.boards]);
+  const board = activeBoards.find((b) => b.id === boardId) ?? activeBoards[0];
+
+  // Boards left in the trash longer than TRASH_DAYS are deleted for good, once.
+  const purged = useRef(new Set<string>());
+  useEffect(() => {
+    if (status === "loading") return;
+    for (const b of expiredBoards(data.boards)) {
+      if (purged.current.has(b.id)) continue;
+      purged.current.add(b.id);
+      actions.purgeBoard(b.id);
+    }
+  }, [data.boards, status, actions]);
   const openBoard = (id: string) => {
     setBoardId(id);
     setShowSettings(false);
@@ -65,14 +78,18 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   return (
     <div className={`app ${background ? "has-bg" : ""}`} style={backgroundStyle}>
       <Sidebar
-        boards={data.boards}
+        boards={activeBoards}
+        trashed={trashedBoards}
+        cardsByBoard={data.cards}
+        onRestore={actions.restoreBoard}
+        onPurge={actions.purgeBoard}
         currentId={showSettings ? undefined : board?.id}
         counts={counts}
         onSelect={openBoard}
         onCreate={(name) => openBoard(actions.createBoard(name, data.boards).id)}
         settingsOpen={showSettings}
         onOpenSettings={() => setShowSettings(true)}
-        onMove={(movedId, ids) => actions.moveBoard(data.boards, movedId, ids)}
+        onMove={(movedId, ids) => actions.moveBoard(activeBoards, movedId, ids)}
         onSettings={onSettings}
         status={status}
         error={error}

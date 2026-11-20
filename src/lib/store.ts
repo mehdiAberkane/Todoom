@@ -47,6 +47,7 @@ function normalizeBoard(raw: Partial<Board>): Board {
     columns: raw.columns ?? [],
     labels: raw.labels ?? [],
     ...(typeof raw.order === "number" ? { order: raw.order } : {}),
+    archivedAt: raw.archivedAt ?? null,
     createdAt: raw.createdAt ?? now(),
     updatedAt: raw.updatedAt ?? "",
   };
@@ -169,6 +170,18 @@ export interface WriteFailure {
 }
 
 const RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 30_000, 60_000];
+
+/** How long a board stays in the trash before it is deleted for good. */
+export const TRASH_DAYS = 30;
+const DAY_MS = 24 * 60 * 60_000;
+
+/** When a trashed board will be deleted for good. */
+export const purgeDate = (board: Board) => new Date(Date.parse(board.archivedAt!) + TRASH_DAYS * DAY_MS);
+
+/** Boards whose time in the trash is over. */
+export function expiredBoards(boards: Board[], now = Date.now()): Board[] {
+  return boards.filter((b) => b.archivedAt && purgeDate(b).getTime() <= now);
+}
 
 /** The card or board id a data file belongs to, or null for other files. */
 export function idOfPath(path: string): string | null {
@@ -384,7 +397,17 @@ export function useTodoom(backend: Backend) {
         return board;
       },
 
-      deleteBoard(boardId: string) {
+      /** Hides the board; it stays on disk, restorable, until purged. */
+      trashBoard(board: Board) {
+        saveBoard({ ...board, archivedAt: now() });
+      },
+
+      restoreBoard(board: Board) {
+        saveBoard({ ...board, archivedAt: null });
+      },
+
+      /** Deletes the board folder and all its cards for good. */
+      purgeBoard(boardId: string) {
         setData((d) => {
           const cards = { ...d.cards };
           delete cards[boardId];

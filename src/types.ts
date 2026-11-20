@@ -16,6 +16,8 @@ export interface Board {
   labels: Label[];
   /** Fractional position in the sidebar; absent on boards created before reordering existed. */
   order?: number;
+  /** Set when the board is in the trash: hidden, restorable, deleted for good after a while. */
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
