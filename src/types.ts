@@ -154,6 +154,8 @@ export interface AppSettings {
   backgroundDim: number;
   /** Interface language; null follows the system's language. */
   language: "fr" | "en" | null;
+  /** Columns shown in « My work », by name; absent means the usual ones (En cours, A verifier…). */
+  myWorkColumns?: string[];
   updatedAt: string;
 }
 

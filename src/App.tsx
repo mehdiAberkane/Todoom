@@ -12,6 +12,7 @@ import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
 import { Setup } from "./components/Setup";
 import { SettingsPage } from "./components/SettingsPage";
+import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 
 const PRESENCE_WINDOW_MS = 3 * 60_000;
 
@@ -54,6 +55,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   useCloseGuard(unsaved.length, retryNow);
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   const [showSettings, setShowSettings] = useState(false);
+  const [showMyWork, setShowMyWork] = useState(false);
   // A card to open once its board shows, after following a link from another board.
   const [linkedCard, setLinkedCard] = useState<string | null>(null);
   const activeBoards = useMemo(() => data.boards.filter((b) => !b.archivedAt), [data.boards]);
@@ -89,6 +91,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const openBoard = (id: string) => {
     setBoardId(id);
     setShowSettings(false);
+    setShowMyWork(false);
   };
   const { background, backgroundDim } = data.settings;
   const backgroundStyle = background
@@ -109,6 +112,11 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     if (linkedCard) setLinkedCard(null);
   }, [linkedCard]);
 
+  const myWorkCount = useMemo(
+    () => myWork(activeBoards, data.cards, myWorkColumns(data.settings)).reduce((n, g) => n + g.columns.reduce((m, c) => m + c.cards.length, 0), 0),
+    [activeBoards, data.cards, data.settings],
+  );
+
   const counts = useMemo(
     () => Object.fromEntries(Object.entries(data.cards).map(([id, cards]) => [id, cards.filter((c) => !c.archivedAt).length])),
     [data.cards],
@@ -123,12 +131,15 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         cardsByBoard={data.cards}
         onRestore={actions.restoreBoard}
         onPurge={actions.purgeBoard}
-        currentId={showSettings ? undefined : board?.id}
+        currentId={showSettings || showMyWork ? undefined : board?.id}
         counts={counts}
         onSelect={openBoard}
         onCreate={(name) => openBoard(actions.createBoard(name, data.boards).id)}
         settingsOpen={showSettings}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={() => (setShowSettings(true), setShowMyWork(false))}
+        myWorkOpen={showMyWork && !showSettings}
+        myWorkCount={myWorkCount}
+        onOpenMyWork={() => (setShowMyWork(true), setShowSettings(false))}
         onMove={(movedId, ids) => actions.moveBoard(activeBoards, movedId, ids)}
         onSettings={onSettings}
         status={status}
@@ -147,7 +158,17 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         onInstallUpdate={updater.install}
       />
       <main className="main">
-        {showSettings ? (
+        {showMyWork && !showSettings ? (
+          <MyWork
+            boards={activeBoards}
+            cards={data.cards}
+            settings={data.settings}
+            onSaveSettings={actions.saveSettings}
+            index={cardIndex}
+            comments={data.comments}
+            onOpen={openElsewhere}
+          />
+        ) : showSettings ? (
           <SettingsPage
             settings={data.settings}
             onSave={actions.saveSettings}

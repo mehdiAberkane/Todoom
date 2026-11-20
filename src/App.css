@@ -582,3 +582,15 @@ textarea { resize: vertical; }
 /* Files Google Drive is still downloading */
 .load-pending { font-size: 12px; color: var(--accent-2); padding: 4px 2px; cursor: help; }
 .load-hint { max-width: 460px; margin: 12px auto 0; font-size: 13px; line-height: 1.5; }
+
+/* My work: the cards being worked on, every board */
+.my-work { height: 100%; overflow: auto; padding: 22px 26px 40px; }
+.my-work-head { display: flex; align-items: baseline; gap: 14px; }
+.my-work-head h1 { margin: 0; font-size: 22px; }
+.my-work-columns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 20px; }
+.my-work-board { margin-bottom: 26px; }
+.my-work-board h2 { display: flex; align-items: center; gap: 10px; font-size: 16px; margin: 0 0 10px; }
+.my-work-row { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; }
+.my-work-col { flex: none; }
+.my-work-col .card { cursor: pointer; }
+.my-work-link { width: 100%; margin-bottom: 10px; }

@@ -17,6 +17,12 @@ const fr = {
 
   // Sidebar
   "status.loading": "Chargement…",
+  "myWork.link": "🗂 Mon travail",
+  "myWork.linkTitle": "Les tickets en cours et à vérifier de tous les tableaux",
+  "myWork.title": "🗂 Mon travail",
+  "myWork.columns": "Colonnes :",
+  "myWork.columnsTitle": "Colonnes montrées ici, sur tous les tableaux ; réglage partagé entre tes PC",
+  "myWork.empty": "Rien dans ces colonnes, sur aucun tableau.",
   "load.pending_one": "Drive télécharge encore {n} fichier…",
   "load.pending_other": "Drive télécharge encore {n} fichiers…",
   "load.slow": "Le dossier de données tarde à répondre…",
@@ -298,6 +304,12 @@ const en: Record<Key, string> = {
 
   // Sidebar
   "status.loading": "Loading…",
+  "myWork.link": "🗂 My work",
+  "myWork.linkTitle": "Tickets in progress and to review, on every board",
+  "myWork.title": "🗂 My work",
+  "myWork.columns": "Columns:",
+  "myWork.columnsTitle": "Columns shown here, on every board; a setting shared by your computers",
+  "myWork.empty": "Nothing in these columns, on any board.",
   "load.pending_one": "Drive is still downloading {n} file…",
   "load.pending_other": "Drive is still downloading {n} files…",
   "load.slow": "The data folder is slow to answer…",

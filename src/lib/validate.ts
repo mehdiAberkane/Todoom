@@ -53,6 +53,7 @@ const SETTINGS: Check[] = [
   ["background", nullable(isImageDataUrl)],
   ["backgroundDim", optional(isNumber)],
   ["language", nullable((v) => v === "fr" || v === "en")],
+  ["myWorkColumns", listOf(isString)],
   ["updatedAt", optional(isString)],
 ];
 

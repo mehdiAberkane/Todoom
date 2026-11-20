@@ -26,6 +26,9 @@ interface Props {
   onCreate: (name: string) => void;
   onMove: (movedId: string, ids: string[]) => void;
   settingsOpen: boolean;
+  myWorkOpen: boolean;
+  myWorkCount: number;
+  onOpenMyWork: () => void;
   onOpenSettings: () => void;
   onSettings: () => void;
   status: SyncStatus;
@@ -76,6 +79,10 @@ export function Sidebar(props: Props) {
       </div>
 
       <nav className="board-list">
+        <button className={`board-link my-work-link ${props.myWorkOpen ? "active" : ""}`} onClick={props.onOpenMyWork} title={t("myWork.linkTitle")}>
+          <span className="board-name">{t("myWork.link")}</span>
+          {props.myWorkCount > 0 && <span className="count">{props.myWorkCount}</span>}
+        </button>
         <div className="section-title">{t("sidebar.boards")}</div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={boards.map((b) => b.id)} strategy={verticalListSortingStrategy}>
