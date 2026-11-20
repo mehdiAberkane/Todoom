@@ -168,6 +168,11 @@ const fr = {
   "settings.dataDir": "Dossier de données",
   "settings.change": "Changer…",
   "settings.about": "À propos",
+  "settings.checkNow": "Vérifier les mises à jour",
+  "settings.checking": "Vérification…",
+  "settings.upToDate": "✓ Todoom est à jour",
+  "settings.checkFailed": "⚠ Impossible de joindre GitHub, réessaie plus tard",
+  "settings.checkHint": "Todoom vérifie aussi tout seul au lancement, puis toutes les 6 heures.",
 
   // Small pieces and errors
   "ui.renameTitle": "Cliquer pour renommer",
@@ -357,6 +362,11 @@ const en: Record<Key, string> = {
   "settings.dataDir": "Data folder",
   "settings.change": "Change…",
   "settings.about": "About",
+  "settings.checkNow": "Check for updates",
+  "settings.checking": "Checking…",
+  "settings.upToDate": "✓ Todoom is up to date",
+  "settings.checkFailed": "⚠ Couldn't reach GitHub, try again later",
+  "settings.checkHint": "Todoom also checks on its own at startup, then every 6 hours.",
 
   // Small pieces and errors
   "ui.renameTitle": "Click to rename",

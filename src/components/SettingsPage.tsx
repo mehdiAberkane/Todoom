@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AppSettings } from "../types";
 import { imageToBackground } from "../lib/image";
 import { t } from "../lib/i18n";
+import type { CheckState, UpdateState } from "../lib/updater";
 
 interface Props {
   settings: AppSettings;
@@ -9,12 +10,27 @@ interface Props {
   dataDir: string;
   onChangeDataDir: () => void;
   version: string | null;
+  update: UpdateState;
+  checkState: CheckState;
+  onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
   onBack: () => void;
 }
 
 const SAVE_DELAY_MS = 300;
 
-export function SettingsPage({ settings, onSave, dataDir, onChangeDataDir, version, onBack }: Props) {
+export function SettingsPage({
+  settings,
+  onSave,
+  dataDir,
+  onChangeDataDir,
+  version,
+  update,
+  checkState,
+  onCheckUpdate,
+  onInstallUpdate,
+  onBack,
+}: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +140,31 @@ export function SettingsPage({ settings, onSave, dataDir, onChangeDataDir, versi
         <section className="settings-section">
           <h2>{t("settings.about")}</h2>
           <p className="muted">Todoom v{version}</p>
+          <div className="settings-row">
+            {update.kind === "available" ? (
+              <button className="btn-primary" onClick={onInstallUpdate}>
+                {t("update.available", { version: update.version })}
+              </button>
+            ) : (
+              <button
+                className="btn-ghost"
+                onClick={onCheckUpdate}
+                disabled={checkState.kind === "checking" || update.kind === "installing"}
+              >
+                {checkState.kind === "checking" ? t("settings.checking") : t("settings.checkNow")}
+              </button>
+            )}
+            {update.kind === "installing" && <span className="muted">{t("update.installing")}</span>}
+            {update.kind !== "installing" && checkState.kind === "upToDate" && update.kind !== "available" && (
+              <span className="check-ok">{t("settings.upToDate")}</span>
+            )}
+            {checkState.kind === "failed" && (
+              <span className="check-failed" title={checkState.message}>
+                {t("settings.checkFailed")}
+              </span>
+            )}
+          </div>
+          <p className="hint">{t("settings.checkHint")}</p>
         </section>
       )}
     </div>

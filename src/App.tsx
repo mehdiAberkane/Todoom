@@ -119,6 +119,10 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             dataDir={dataDir}
             onChangeDataDir={onSettings}
             version={updater.version}
+            update={updater.state}
+            checkState={updater.checkState}
+            onCheckUpdate={updater.checkNow}
+            onInstallUpdate={updater.install}
             onBack={() => setShowSettings(false)}
           />
         ) : board ? (

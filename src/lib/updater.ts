@@ -13,31 +13,48 @@ export type UpdateState =
   | { kind: "installing"; progress: number | null }
   | { kind: "error"; message: string };
 
+/** Result of a check asked for by hand, shown next to the button. */
+export type CheckState = { kind: "idle" } | { kind: "checking" } | { kind: "upToDate" } | { kind: "failed"; message: string };
+
 /** Checks GitHub Releases for a signed update and installs it on demand. */
 export function useUpdater() {
   const [version, setVersion] = useState<string | null>(null);
   const [update, setUpdate] = useState<Update | null>(null);
   const [state, setState] = useState<UpdateState>({ kind: "idle" });
+  const [checkState, setCheckState] = useState<CheckState>({ kind: "idle" });
+
+  const lookup = useCallback(async () => {
+    const found = await check();
+    if (found) {
+      setUpdate(found);
+      setState((s) => (s.kind === "installing" ? s : { kind: "available", version: found.version }));
+    }
+    return found;
+  }, []);
 
   useEffect(() => {
     if (!isTauri) return;
     getVersion().then(setVersion, () => {});
-    const run = () =>
-      check()
-        .then((found) => {
-          if (!found) return;
-          setUpdate(found);
-          setState((s) => (s.kind === "installing" ? s : { kind: "available", version: found.version }));
-        })
-        // Offline or GitHub unreachable: try again at the next check.
-        .catch(() => {});
+    // Offline or GitHub unreachable: try again at the next check.
+    const run = () => lookup().catch(() => {});
     const first = window.setTimeout(run, FIRST_CHECK_MS);
     const timer = window.setInterval(run, CHECK_EVERY_MS);
     return () => {
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, []);
+  }, [lookup]);
+
+  /** The same check, on demand, saying what it found. */
+  const checkNow = useCallback(async () => {
+    setCheckState({ kind: "checking" });
+    try {
+      const found = await lookup();
+      setCheckState(found ? { kind: "idle" } : { kind: "upToDate" });
+    } catch (e) {
+      setCheckState({ kind: "failed", message: String(e) });
+    }
+  }, [lookup]);
 
   const install = useCallback(async () => {
     if (!update) return;
@@ -59,5 +76,5 @@ export function useUpdater() {
     }
   }, [update]);
 
-  return { version, state, install };
+  return { version, state, install, checkState, checkNow };
 }

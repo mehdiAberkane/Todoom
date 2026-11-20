@@ -499,3 +499,6 @@ textarea { resize: vertical; }
   background: var(--panel); border-top: 1px solid var(--border);
   border-radius: 0 0 14px 14px;
 }
+
+.check-ok { color: var(--ok); }
+.check-failed { color: var(--accent-2); cursor: help; }
