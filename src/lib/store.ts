@@ -49,8 +49,11 @@ const boardPath = (boardId: string) => `${boardDir(boardId)}/board.json`;
 const cardPath = (c: Card) => `${boardDir(c.boardId)}/cards/${c.id}.json`;
 const presencePath = (host: string) => `.presence/${host.replace(/[^\w-]/g, "_")}.json`;
 
+// Fields this version doesn't know (written by a newer one, or a script) are kept as they are,
+// so saving the item doesn't erase them.
 function normalizeBoard(raw: Partial<Board>): Board {
   return {
+    ...raw,
     id: raw.id!,
     name: raw.name ?? t("board.untitled"),
     ...(raw.key ? { key: raw.key } : {}),
@@ -74,6 +77,7 @@ function sortBoards(boards: Board[]): Board[] {
 
 function normalizeCard(raw: Partial<Card>, boardId: string): Card {
   return {
+    ...raw,
     id: raw.id!,
     ...(typeof raw.number === "number" ? { number: raw.number } : {}),
     boardId,

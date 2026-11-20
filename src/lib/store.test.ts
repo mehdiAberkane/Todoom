@@ -13,6 +13,17 @@ describe("loading the data folder", () => {
     expect(data.issues).toEqual([]);
   });
 
+  it("keeps fields it doesn't know, so saving doesn't erase what a newer version wrote", () => {
+    const data = parse(
+      Object.entries({
+        "boards/b1/board.json": JSON.stringify({ ...board, futureBoardField: { a: 1 } }),
+        "boards/b1/cards/c1.json": card({ futureCardField: "x" }),
+      }).map(([path, content]) => ({ path, content })),
+    );
+    expect((data.boards[0] as unknown as Record<string, unknown>).futureBoardField).toEqual({ a: 1 });
+    expect((data.cards.b1[0] as unknown as Record<string, unknown>).futureCardField).toBe("x");
+  });
+
   it("keeps the most recent of the Drive conflict copies of a card and a board", () => {
     const data = parse(
       files({
