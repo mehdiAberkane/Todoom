@@ -3,6 +3,7 @@ name = "todoom"
 version = "0.3.0"
 description = "Todoom - gestion de tickets kanban"
 authors = ["devsecops-force"]
+license = "MIT"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

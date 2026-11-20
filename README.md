@@ -46,3 +46,14 @@ ignorés ») avec la raison, et Todoom ne l'écrase jamais.
 pousse ; GitHub Actions construit Windows + macOS, signe et publie la Release, que
 Todoom propose d'installer. La clé de signature, sa sauvegarde et son remplacement :
 [`docs/cle-de-signature.md`](docs/cle-de-signature.md).
+Les installeurs ne sont pas signés par Windows ni Apple : alerte à la première installation
+seulement, pas lors des mises à jour (étude et coûts :
+[`docs/signature-installeurs.md`](docs/signature-installeurs.md)).
+
+## Sécurité
+
+Signaler une faille : [`SECURITY.md`](SECURITY.md).
+
+## Licence
+
+[MIT](LICENSE).
