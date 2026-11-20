@@ -3,7 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { normalize, Store, TodoomError } from "./store";
+import { identity, normalize, Store, TodoomError } from "./store";
 import { prioritiesOf } from "../src/lib/priority";
 
 declare const __TODOOM_VERSION__: string;
@@ -26,7 +26,8 @@ function run(op: () => unknown): Result {
 }
 
 export function createServer(dir: string): McpServer {
-  const store = new Store(dir);
+  // Changes and comments made through MCP are signed as Claude unless TODOOM_AGENT says otherwise.
+  const store = new Store(dir, identity("mcp", process.env.TODOOM_AGENT ?? "Claude"));
   const server = new McpServer({ name: "todoom", version: VERSION });
   const readOnly = { readOnlyHint: true, openWorldHint: false };
   const writes = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -91,7 +92,7 @@ export function createServer(dir: string): McpServer {
     "get_card",
     {
       title: "Get a card",
-      description: "A card with its description, priority, labels, due date, checklist and links (with the linked cards' titles, boards, columns and whether they are finished).",
+      description: "A card with its description, priority, labels, due date, checklist, links (with the linked cards' titles, boards, columns and whether they are finished), comments and history.",
       inputSchema: { card: z.string().describe("Card short id (SOL-42) or id") },
       annotations: readOnly,
     },
@@ -127,7 +128,7 @@ export function createServer(dir: string): McpServer {
     {
       title: "Update a card",
       description:
-        "Changes the fields given and keeps the others. To add a report or a note, prefer add_comment over rewriting the description.",
+        "Changes the fields given and keeps the others. To add a report or a note, use add_comment instead of the description.",
       inputSchema: {
         card: z.string().describe("Card short id (SOL-42) or id"),
         title: z.string().min(1).optional(),
@@ -191,7 +192,9 @@ export function createServer(dir: string): McpServer {
     "add_comment",
     {
       title: "Comment on a card",
-      description: "Adds a dated note signed with this computer's name at the end of the card's description: reports, findings, questions.",
+      description:
+        "Adds a comment to the card, dated and signed with this computer's name: reports, findings, questions. " +
+        "Prefer it to rewriting the description; get_card returns the comments and the history.",
       inputSchema: { card: z.string().describe("Card short id (SOL-42) or id"), text: z.string().min(1) },
       annotations: writes,
     },

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
-import type { AppSettings, Board, Card, LinkType, Presence } from "../types";
+import type { AppSettings, Board, Card, CardComment, HistoryEvent, LinkType, Presence } from "../types";
 import { LABEL_COLORS, nextUpdatedAt, now, reorder, uid } from "./utils";
-import { boardProblem, cardProblem, settingsProblem, type IssueReason } from "./validate";
+import { boardProblem, cardProblem, commentProblem, historyProblem, settingsProblem, type IssueReason } from "./validate";
+import { changesBetween, commentPath, commentsDir, eventsFor, historyDir, historyPath, writerName } from "./activity";
 import { t } from "./i18n";
 import { inverseOf, withLink, withoutLink } from "./links";
 
@@ -18,12 +19,16 @@ export interface Data {
   presence: Presence[];
   settings: AppSettings;
   issues: FileIssue[];
+  /** Comments by card id, oldest first. */
+  comments: Record<string, CardComment[]>;
+  /** History by card id, then by writer (a computer or a tool). */
+  history: Record<string, Record<string, HistoryEvent[]>>;
 }
 
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
 export const DEFAULT_SETTINGS: AppSettings = { background: null, backgroundDim: 0.45, language: null, updatedAt: "" };
-const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [] };
+const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [], comments: {}, history: {} };
 const SETTINGS_PATH = "settings.json";
 // Safety net only: the folder watcher reports other machines' changes as they happen.
 const POLL_MS = 120_000;
@@ -85,7 +90,7 @@ function normalizeCard(raw: Partial<Card>, boardId: string): Card {
   };
 }
 
-type Kind = "board" | "card" | "settings" | "presence";
+type Kind = "board" | "card" | "settings" | "presence" | "comment" | "history";
 
 /** Which kind of Todoom file a path is, or null for files Todoom doesn't own. */
 function kindOf(parts: string[]): Kind | null {
@@ -95,6 +100,8 @@ function kindOf(parts: string[]): Kind | null {
   if (parts[0] !== "boards") return null;
   if (parts.length === 3 && parts[2].startsWith("board")) return "board";
   if (parts.length === 4 && parts[2] === "cards") return "card";
+  if (parts.length === 5 && parts[2] === "comments") return "comment";
+  if (parts.length === 5 && parts[2] === "history") return "history";
   return null;
 }
 
@@ -109,6 +116,8 @@ export function parse(files: FileEntry[]): Data {
   const presence: Presence[] = [];
   const issues: FileIssue[] = [];
   let settings = DEFAULT_SETTINGS;
+  const comments = new Map<string, CardComment>();
+  const history: Data["history"] = {};
 
   for (const file of files) {
     const parts = file.path.split("/");
@@ -126,9 +135,31 @@ export function parse(files: FileEntry[]): Data {
       if (raw?.host && raw?.at) presence.push(raw);
       continue;
     }
-    const why = kind === "card" ? cardProblem(raw) : kind === "board" ? boardProblem(raw) : settingsProblem(raw);
+    const why =
+      kind === "card"
+        ? cardProblem(raw)
+        : kind === "board"
+          ? boardProblem(raw)
+          : kind === "comment"
+            ? commentProblem(raw)
+            : kind === "history"
+              ? historyProblem(raw)
+              : settingsProblem(raw);
     if (why) {
       issues.push({ path: file.path, reason: why });
+      continue;
+    }
+    if (kind === "comment") {
+      // A Drive conflict copy of a comment is the same comment.
+      comments.set(raw.id, raw as CardComment);
+      continue;
+    }
+    if (kind === "history") {
+      const file = raw as { cardId: string; writer: string; events?: HistoryEvent[] };
+      const events = file.events ?? [];
+      const forCard = (history[file.cardId] ??= {});
+      // A conflict copy of a writer's file: keep the longer one, history only grows.
+      if ((forCard[file.writer]?.length ?? -1) < events.length) forCard[file.writer] = events;
       continue;
     }
     if (kind === "settings") {
@@ -165,7 +196,15 @@ export function parse(files: FileEntry[]): Data {
     presence,
     settings,
     issues: issues.sort((a, b) => a.path.localeCompare(b.path)),
+    comments: groupComments([...comments.values()]),
+    history,
   };
+}
+
+function groupComments(list: CardComment[]): Record<string, CardComment[]> {
+  const out: Record<string, CardComment[]> = {};
+  for (const c of list.sort((a, b) => a.createdAt.localeCompare(b.createdAt))) (out[c.cardId] ??= []).push(c);
+  return out;
 }
 
 /** A change not yet confirmed on disk: the latest content wanted for a path, or its removal. */
@@ -218,6 +257,13 @@ export function useTodoom(backend: Backend) {
   const [status, setStatus] = useState<SyncStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState("");
+  // Read by the actions, which don't change between renders.
+  const hostRef = useRef("");
+  hostRef.current = host;
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  // The last version of each card saved here, newer than `data` until it re-renders.
+  const lastSaved = useRef(new Map<string, Card>());
   // Changes waiting for the disk, by path; only the latest change of a path is kept.
   const queue = useRef(new Map<string, PendingOp>());
   const [unsaved, setUnsaved] = useState<string[]>([]);
@@ -343,8 +389,29 @@ export function useTodoom(backend: Backend) {
   const removePath = useCallback((path: string) => enqueue(path, { kind: "remove" }), [enqueue]);
 
   const actions = useMemo(() => {
+    /** Adds what changed to this computer's history file of the card. */
+    const recordHistory = (prev: Card | undefined, next: Card) => {
+      const board = dataRef.current.boards.find((b) => b.id === next.boardId);
+      if (!board || !hostRef.current) return;
+      const events = eventsFor(changesBetween(prev, next, board), { host: hostRef.current });
+      if (!events.length) return;
+      const writer = writerName(hostRef.current);
+      const all = [...(dataRef.current.history[next.id]?.[writer] ?? []), ...events];
+      dataRef.current = {
+        ...dataRef.current,
+        history: { ...dataRef.current.history, [next.id]: { ...dataRef.current.history[next.id], [writer]: all } },
+      };
+      setData((d) => ({ ...d, history: { ...d.history, [next.id]: { ...d.history[next.id], [writer]: all } } }));
+      writeJson(historyPath(next.boardId, next.id, writer), { cardId: next.id, writer, events: all });
+    };
+
     const saveCard = (card: Card) => {
+      const fromData = (dataRef.current.cards[card.boardId] ?? []).find((c) => c.id === card.id);
+      const fromHere = lastSaved.current.get(card.id);
+      const prev = fromHere && (!fromData || fromHere.updatedAt >= fromData.updatedAt) ? fromHere : fromData;
       const saved = { ...card, updatedAt: nextUpdatedAt(card.updatedAt) };
+      lastSaved.current.set(saved.id, saved);
+      recordHistory(prev, saved);
       setData((d) => {
         const list = d.cards[saved.boardId] ?? [];
         const exists = list.some((c) => c.id === saved.id);
@@ -360,6 +427,8 @@ export function useTodoom(backend: Backend) {
         cards: { ...d.cards, [card.boardId]: (d.cards[card.boardId] ?? []).filter((c) => c.id !== card.id) },
       }));
       removePath(cardPath(card));
+      removePath(commentsDir(card.boardId, card.id));
+      removePath(historyDir(card.boardId, card.id));
     };
 
     const saveBoard = (board: Board) => {
@@ -422,6 +491,20 @@ export function useTodoom(backend: Backend) {
           return { ...d, boards: d.boards.filter((b) => b.id !== boardId), cards };
         });
         removePath(boardDir(boardId));
+      },
+
+      addComment(card: Card, text: string) {
+        const comment: CardComment = { id: uid(), cardId: card.id, createdAt: now(), author: { host: hostRef.current }, text };
+        setData((d) => ({ ...d, comments: { ...d.comments, [card.id]: [...(d.comments[card.id] ?? []), comment] } }));
+        writeJson(commentPath(comment, card.boardId), comment);
+      },
+
+      deleteComment(comment: CardComment, boardId: string) {
+        setData((d) => ({
+          ...d,
+          comments: { ...d.comments, [comment.cardId]: (d.comments[comment.cardId] ?? []).filter((c) => c.id !== comment.id) },
+        }));
+        removePath(commentPath(comment, boardId));
       },
 
       /** Links two cards, writing the link on both, each in its own direction. */

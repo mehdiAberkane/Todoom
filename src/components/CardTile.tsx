@@ -10,6 +10,7 @@ export function CardBody({
   labels,
   priorities,
   blockers = [],
+  commentCount = 0,
 }: {
   card: Card;
   /** Short id such as SOL-42. */
@@ -18,6 +19,7 @@ export function CardBody({
   priorities: Priority[];
   /** Titles of the unfinished cards this one depends on. */
   blockers?: string[];
+  commentCount?: number;
 }) {
   const cardLabels = card.labels.map((id) => labels.find((l) => l.id === id)).filter((l): l is Label => !!l);
   const priority = card.priority ? priorities.find((p) => p.id === card.priority) : undefined;
@@ -49,7 +51,7 @@ export function CardBody({
         {cardRef && <span className="card-ref">{cardRef}</span>}
         {card.title}
       </div>
-      {(card.due || total > 0 || card.description || card.links.length > 0) && (
+      {(card.due || total > 0 || card.description || card.links.length > 0 || commentCount > 0) && (
         <div className="card-badges">
           {blockers.length > 0 && (
             <span className="badge badge-blocked" title={t("card.blockedTitle", { titles: blockers.join(", ") })}>
@@ -71,6 +73,11 @@ export function CardBody({
               🔗 {card.links.length}
             </span>
           )}
+          {commentCount > 0 && (
+            <span className="badge" title={t("card.commentsTitle")}>
+              💬 {commentCount}
+            </span>
+          )}
           {card.description && (
             <span className="badge" title={t("card.hasDescription")}>
               ≡
@@ -88,6 +95,7 @@ export function CardTile({
   labels,
   priorities,
   blockers,
+  commentCount,
   unsaved,
   onOpen,
 }: {
@@ -96,6 +104,7 @@ export function CardTile({
   labels: Label[];
   priorities: Priority[];
   blockers?: string[];
+  commentCount?: number;
   /** The disk hasn't confirmed the last change of this card yet. */
   unsaved: boolean;
   onOpen: (id: string) => void;
@@ -123,7 +132,7 @@ export function CardTile({
           {t("card.unsaved")}
         </div>
       )}
-      <CardBody card={card} cardRef={cardRef} labels={labels} priorities={priorities} blockers={blockers} />
+      <CardBody card={card} cardRef={cardRef} labels={labels} priorities={priorities} blockers={blockers} commentCount={commentCount} />
     </article>
   );
 }

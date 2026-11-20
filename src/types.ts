@@ -68,6 +68,40 @@ export interface Card {
   updatedAt: string;
 }
 
+/** Who wrote a comment or made a change: the computer, and the agent or conversation when it wasn't by hand. */
+export interface Author {
+  host: string;
+  agent?: string;
+  conversation?: string;
+}
+
+/** A comment on a card: boards/<board>/comments/<card>/<id>.json. */
+export interface CardComment {
+  id: string;
+  cardId: string;
+  createdAt: string;
+  author: Author;
+  text: string;
+}
+
+export type HistoryField = "created" | "column" | "title" | "priority" | "labels" | "due" | "description" | "archived";
+
+/** One change of a card. from/to are names as they were at the time. */
+export interface HistoryEvent {
+  at: string;
+  by: Author;
+  field: HistoryField;
+  from?: string | null;
+  to?: string | null;
+}
+
+/** boards/<board>/history/<card>/<writer>.json: the changes made by one computer or tool. */
+export interface HistoryFile {
+  cardId: string;
+  writer: string;
+  events: HistoryEvent[];
+}
+
 /** App-wide preferences, stored once in the data folder so every machine shares them. */
 export interface AppSettings {
   /** Background image as a compressed JPEG data URL, or null for the plain dark background. */

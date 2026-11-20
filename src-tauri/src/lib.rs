@@ -129,6 +129,12 @@ fn allowed(rel: &str, access: Access) -> bool {
         (Access::Write, [".presence", file]) => json_id(file),
         (Access::Write, ["boards", board, "board.json"]) => id(board),
         (_, ["boards", board, "cards", file]) => id(board) && json_id(file),
+        // One file per comment; a comment can be deleted.
+        (_, ["boards", board, "comments", card, file]) => id(board) && id(card) && json_id(file),
+        // History: one file per card and per computer (or tool), only ever rewritten by it.
+        (Access::Write, ["boards", board, "history", card, file]) => id(board) && id(card) && json_id(file),
+        // A card deleted for good takes its comments and history with it.
+        (Access::Remove, ["boards", board, "comments" | "history", card]) => id(board) && id(card),
         (Access::Remove, ["boards", board]) => id(board),
         _ => false,
     }
@@ -504,10 +510,23 @@ mod tests {
 
     #[test]
     fn only_todoom_data_files_can_be_written_or_removed() {
-        for ok in ["settings.json", ".presence/PC-Main.json", "boards/mw0abc/board.json", "boards/mw0abc/cards/mw0xyz.json"] {
+        for ok in [
+            "settings.json",
+            ".presence/PC-Main.json",
+            "boards/mw0abc/board.json",
+            "boards/mw0abc/cards/mw0xyz.json",
+            "boards/mw0abc/comments/mw0xyz/mw1c.json",
+            "boards/mw0abc/history/mw0xyz/PC-Main-cli.json",
+        ] {
             assert!(allowed(ok, Access::Write), "{ok}");
         }
-        for ok in ["boards/mw0abc", "boards/mw0abc/cards/mw0xyz.json"] {
+        for ok in [
+            "boards/mw0abc",
+            "boards/mw0abc/cards/mw0xyz.json",
+            "boards/mw0abc/comments/mw0xyz/mw1c.json",
+            "boards/mw0abc/comments/mw0xyz",
+            "boards/mw0abc/history/mw0xyz",
+        ] {
             assert!(allowed(ok, Access::Remove), "{ok}");
         }
         let traps = [
@@ -525,13 +544,25 @@ mod tests {
             ".presence/../settings.json",
             "settings.json.bak",
             "boards\\b1\\board.json",
+            "boards/b1/comments/c1/../../board.json",
+            "boards/b1/comments/c1/x/y.json",
+            "boards/b1/history/c1/h.txt",
+            "boards/b1/notes/c1/n.json",
         ];
         for trap in traps {
             assert!(!allowed(trap, Access::Write), "écriture acceptée : {trap}");
             assert!(!allowed(trap, Access::Remove), "suppression acceptée : {trap}");
         }
         // Whole folders other than one board, and settings/presence, can't be removed.
-        for no in ["settings.json", ".presence/PC.json", "boards/b1/board.json", "boards/b1/cards", ".presence"] {
+        for no in [
+            "settings.json",
+            ".presence/PC.json",
+            "boards/b1/board.json",
+            "boards/b1/cards",
+            ".presence",
+            "boards/b1/comments",
+            "boards/b1/history/c1/PC.json",
+        ] {
             assert!(!allowed(no, Access::Remove), "{no}");
         }
     }

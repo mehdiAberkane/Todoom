@@ -8,6 +8,7 @@ import { priorityOf, prioritiesOf } from "../lib/priority";
 const fieldLabel = (f: Field) => t(`field.${f}`);
 import { Modal } from "./ui";
 import { LinkSection, Mentions, type LinkProps } from "./LinkSection";
+import { ActivitySection, type ActivityProps } from "./ActivitySection";
 
 interface Props {
   card: Card;
@@ -21,6 +22,8 @@ interface Props {
   links?: LinkProps;
   /** Short id such as SOL-42. */
   cardRef?: string | null;
+  /** Comments and history; left out for a card not saved yet. */
+  activity?: ActivityProps;
 }
 
 /**
@@ -29,7 +32,7 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
@@ -225,6 +228,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
           </div>
 
           {links && <LinkSection card={card} {...links} onOpen={openLinked} />}
+          {activity && <ActivitySection {...activity} />}
         </div>
 
         <aside className="modal-side">

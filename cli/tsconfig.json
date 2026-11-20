@@ -12,5 +12,5 @@
     "noUnusedParameters": true,
     "isolatedModules": true
   },
-  "include": ["*.ts", "../src/types.ts", "../src/lib/validate.ts", "../src/lib/ids.ts", "../src/lib/priority.ts", "../src/lib/links.ts", "../src/lib/shortid.ts"]
+  "include": ["*.ts", "../src/types.ts", "../src/lib/validate.ts", "../src/lib/ids.ts", "../src/lib/priority.ts", "../src/lib/links.ts", "../src/lib/shortid.ts", "../src/lib/activity.ts"]
 }

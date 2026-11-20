@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mehdiAberkane/Todoom/schema/comment.schema.json",
+  "title": "Todoom comment",
+  "description": "One comment: boards/<boardId>/comments/<cardId>/<id>.json. One file per comment, so two computers commenting at once never write the same file.",
+  "type": "object",
+  "required": [
+    "id",
+    "cardId",
+    "createdAt",
+    "author",
+    "text"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Also the file name, without .json."
+    },
+    "cardId": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "description": "ISO date."
+    },
+    "author": {
+      "type": "object",
+      "required": [
+        "host"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "Name of the computer."
+        },
+        "agent": {
+          "type": "string",
+          "description": "Agent or tool, when it wasn't written by hand (Claude, todoom-agent…)."
+        },
+        "conversation": {
+          "type": "string",
+          "description": "Conversation or session the agent was in."
+        }
+      }
+    },
+    "text": {
+      "type": "string"
+    }
+  }
+}

@@ -4,6 +4,10 @@ Claude Code headless on them, one at a time.
 Flow for each card:
   En cours -> Agent (lock, visible in the app) -> A verifier or Echec (with a report)
 
+The report is a comment on the card, signed by this computer and the agent; the
+moves go to the card's history. Comments left on the card are given to Claude,
+so a remark written there reaches the next attempt.
+
 Work happens on a dedicated branch per card, named <type>/<few-words>. Claude
 commits on it; this script then pushes it and opens a merge request on GitLab.
 Nothing is ever merged here: review and merge the request on GitLab.
@@ -18,6 +22,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -38,6 +43,11 @@ TICKET_TIMEOUT = 45 * 60
 # Optional command that runs Claude elsewhere (container, other account), e.g.
 # ["docker", "run", "--rm", "-v", "{repo}:/work", "-w", "/work", "todoom-agent"].
 SANDBOX = []
+
+# Signature of comments and history entries; the history file is <computer>-agent.json.
+HOST = socket.gethostname()
+AUTHOR = {"host": HOST, "agent": "todoom-agent"}
+WRITER = (re.sub(r"[^\w-]", "_", HOST) or "unknown") + "-agent"
 
 COL_TRIGGER = "En cours"
 COL_LOCK = "Agent"
@@ -147,13 +157,48 @@ def git(*args, check=True):
                           encoding="utf-8", check=check).stdout.strip()
 
 
-def move(card_path, card, column_id, description=None):
-    card["columnId"] = column_id
+def comments_of(card):
+    """The card's comments, oldest first (one file each, written by the app, the todoom command or this agent)."""
+    folder = BOARD_DIR / "comments" / card["id"]
+    comments = []
+    for path in folder.glob("*.json") if folder.is_dir() else []:
+        try:
+            c = read_json(path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(c, dict) and isinstance(c.get("text"), str):
+            comments.append(c)
+    return sorted(comments, key=lambda c: c.get("createdAt", ""))
+
+
+def add_comment(card, text):
+    comment = {"id": uid(), "cardId": card["id"], "createdAt": now(), "author": AUTHOR, "text": text}
+    path = BOARD_DIR / "comments" / card["id"] / f"{comment['id']}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(path, comment)
+
+
+def record_history(card, events):
+    """Appends to this agent's own history file of the card, which nothing else writes."""
+    path = BOARD_DIR / "history" / card["id"] / f"{WRITER}.json"
+    try:
+        earlier = read_json(path).get("events", [])
+    except (OSError, json.JSONDecodeError, AttributeError):
+        earlier = []
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(path, {"cardId": card["id"], "writer": WRITER, "events": earlier + events})
+
+
+def move(card_path, card, column, cols):
+    """Moves the card to the column named `column` (cols: name -> id) and records it."""
+    names = {v: k for k, v in cols.items()}
+    before = names.get(card.get("columnId"))
+    card["columnId"] = cols[column]
     card["order"] = time.time()  # lands at the bottom of the column
-    if description is not None:
-        card["description"] = description
     card["updatedAt"] = now()
     write_json(card_path, card)
+    if before != column:
+        record_history(card, [{"at": card["updatedAt"], "by": AUTHOR, "field": "column", "from": before, "to": column}])
 
 
 def plain_words(text):
@@ -185,8 +230,12 @@ def branch_exists(name):
 
 
 def branch_for(card):
-    """Reuses the branch of an earlier attempt, named in the card's report, or picks a new one."""
-    earlier = re.findall(r"^Branche : (\S+)", card["description"], re.MULTILINE)
+    """Reuses the branch of an earlier attempt, named in its report, or picks a new one.
+
+    Reports are comments now; older ones were appended to the description.
+    """
+    reports = "\n".join([card["description"], *(c["text"] for c in comments_of(card))])
+    earlier = re.findall(r"^Branche : (\S+)", reports, re.MULTILINE)
     if earlier and git("branch", "--list", earlier[-1]):
         return earlier[-1]
     name = suggest_branch(card)
@@ -231,7 +280,9 @@ def claude_env():
 
 def run_claude(card, branch):
     checklist = "\n".join(f"- [{'x' if i['done'] else ' '}] {i['text']}" for i in card["checklist"])
-    details = "\n".join(p for p in (card["description"].strip(), checklist) if p) or "(pas de détail)"
+    remarks = "\n\n".join(f"Commentaire ({c.get('author', {}).get('host', '?')}, {c.get('createdAt', '')[:16]}) :\n{c['text']}"
+                          for c in comments_of(card))
+    details = "\n\n".join(p for p in (card["description"].strip(), checklist, remarks) if p) or "(pas de détail)"
     prompt = PROMPT.format(project=PROJECT, repo=REPO, branch=branch, title=card["title"],
                            details=details, checks=CHECKS)
     cmd = claude_cmd("-p", prompt,
@@ -272,7 +323,7 @@ def process(card_path, card, cols):
     if git("status", "--porcelain", "--untracked-files=no"):
         log.warning("dépôt modifié, ticket « %s » laissé en attente", title)
         return
-    move(card_path, card, cols[COL_LOCK])
+    move(card_path, card, COL_LOCK, cols)
     started = time.monotonic()
     log.info("=== NOUVEAU TICKET : « %s »", title)
 
@@ -317,9 +368,9 @@ def process(card_path, card, cols):
     if dirty:
         report.append("Attention : modifications non commitées laissées sur la branche.")
     report += ["", summary or "(pas de résumé)"]
-    description = (card["description"].rstrip() + "\n\n" + "\n".join(report)).strip()
+    add_comment(card, "\n".join(report))
     column = COL_DONE if ok else COL_FAILED
-    move(card_path, read_json(card_path), cols[column], description)
+    move(card_path, read_json(card_path), column, cols)
     minutes, seconds = divmod(int(time.monotonic() - started), 60)
     log.info("=== TICKET TERMINÉ (%s, %d min %02d s) : « %s » -> %s", status, minutes, seconds, title, column)
     if mr_url:

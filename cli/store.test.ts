@@ -78,12 +78,30 @@ describe("writes", () => {
     expect(Date.parse(store.update(a.id, { title: "Un bis" }).updatedAt)).toBeGreaterThan(Date.parse(future));
   });
 
-  it("updates only the fields given, and appends comments", () => {
+  it("updates only the fields given", () => {
     const a = store.create("Todoom", "Un", { description: "Début", labels: ["Bug"], due: "2026-12-01" });
     const u = store.update(a.id, { removeLabels: ["bug"], due: null });
     expect(u).toMatchObject({ title: "Un", description: "Début", labels: [], due: null });
-    const c = store.comment(a.id, "Fait.", "PC-TEST");
-    expect(c.description).toMatch(/^Début\n\n--- .+ · PC-TEST ---\nFait\.$/);
+  });
+
+  it("comments in files of their own and records the history, signed", () => {
+    const agent = new Store(dir, { tool: "cli", author: { host: "PC-TEST", agent: "Claude" } });
+    const a = agent.create("Todoom", "Un", { description: "Début" });
+    const c = agent.comment(a.id, "  Fait.  ");
+    expect(c).toMatchObject({ cardId: a.id, text: "Fait.", author: { host: "PC-TEST", agent: "Claude" } });
+    expect(readdirSync(join(dir, "boards", "b1", "comments", a.id))).toEqual([`${c.id}.json`]);
+    agent.move(a.id, "en cours");
+    agent.update(a.id, { title: "Un bis" });
+    const shown = agent.detail(agent.card(a.id).card, agent.board("Todoom"));
+    expect(shown.description).toBe("Début");
+    expect(shown.comments.map((x) => x.text)).toEqual(["Fait."]);
+    expect(shown.history.map((e) => [e.field, e.from ?? null, e.to ?? null])).toEqual([
+      ["created", null, "À faire"],
+      ["column", "À faire", "En cours"],
+      ["title", "Un", "Un bis"],
+    ]);
+    expect(readdirSync(join(dir, "boards", "b1", "history", a.id))).toEqual(["PC-TEST-cli.json"]);
+    expect(() => agent.comment(a.id, "   ")).toThrow(/vide/);
   });
 
   it("sets and clears a priority by name, default levels included", () => {

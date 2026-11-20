@@ -3,16 +3,18 @@
 // same files, same checks, atomic writes, updatedAt that always moves forward.
 // The app watches the folder and picks the changes up by itself.
 
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Board, Card, Column } from "../src/types";
 import { boardProblem, cardProblem } from "../src/lib/validate";
 import { nextUpdatedAt, uid } from "../src/lib/ids";
 import { prioritiesOf, priorityOf } from "../src/lib/priority";
 import { inverseOf, isFinished, isLinkType, withLink, withoutLink } from "../src/lib/links";
-import type { LinkType } from "../src/types";
+import type { Author, CardComment, HistoryEvent, LinkType } from "../src/types";
 import { deriveKey, nextNumber, parseRef, refOf } from "../src/lib/shortid";
+import { changesBetween, commentPath, eventsFor, historyPath, writerName } from "../src/lib/activity";
+import { commentProblem, historyProblem } from "../src/lib/validate";
 
 export class TodoomError extends Error {}
 
@@ -111,8 +113,26 @@ export interface CardChanges {
   due?: string | null;
 }
 
+/**
+ * Who is writing: this computer, plus the agent and conversation when given
+ * (TODOOM_AGENT, TODOOM_CONVERSATION). `tool` names this program's history
+ * file next to the app's: <computer>-cli.json or <computer>-mcp.json.
+ */
+export interface Identity {
+  author: Author;
+  tool: "cli" | "mcp";
+}
+
+export function identity(tool: Identity["tool"], agent = process.env.TODOOM_AGENT): Identity {
+  const conversation = process.env.TODOOM_CONVERSATION;
+  return { tool, author: { host: hostname(), ...(agent ? { agent } : {}), ...(conversation ? { conversation } : {}) } };
+}
+
 export class Store {
-  constructor(readonly dir: string) {}
+  constructor(
+    readonly dir: string,
+    readonly who: Identity = identity("cli"),
+  ) {}
 
   private boardDir(id: string) {
     return join(this.dir, "boards", id);
@@ -253,7 +273,54 @@ export class Store {
     const problem = cardProblem(saved);
     if (problem) throw new TodoomError(`Carte refusée (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
     writeAtomic(join(this.boardDir(board.id), "cards", `${card.id}.json`), saved);
+    this.record(board, previous, saved);
     return saved;
+  }
+
+  /** Adds what changed to this tool's history file of the card, as the app does for its own. */
+  private record(board: Board, previous: Card | undefined, next: Card) {
+    const events = eventsFor(changesBetween(previous, next, board), this.who.author);
+    if (!events.length) return;
+    const writer = writerName(this.who.author.host, this.who.tool);
+    const path = join(this.dir, historyPath(board.id, next.id, writer));
+    let earlier: HistoryEvent[] = [];
+    try {
+      const raw = readJson(path);
+      if (!historyProblem(raw)) earlier = (raw as { events: HistoryEvent[] }).events;
+    } catch {
+      /* first change recorded by this tool */
+    }
+    mkdirSync(dirname(path), { recursive: true });
+    writeAtomic(path, { cardId: next.id, writer, events: [...earlier, ...events] });
+  }
+
+  /** Comments of a card, oldest first. */
+  comments(board: Board, cardId: string): CardComment[] {
+    return this.jsonFiles(join(this.boardDir(board.id), "comments", cardId))
+      .filter((raw) => !commentProblem(raw))
+      .map((raw) => raw as CardComment)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  /** History of a card from every computer and tool, oldest first. */
+  history(board: Board, cardId: string): HistoryEvent[] {
+    return this.jsonFiles(join(this.boardDir(board.id), "history", cardId))
+      .filter((raw) => !historyProblem(raw))
+      .flatMap((raw) => (raw as { events: HistoryEvent[] }).events)
+      .sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  private jsonFiles(dir: string): unknown[] {
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".json"))
+      .flatMap((f) => {
+        try {
+          return [readJson(join(dir, f))];
+        } catch {
+          return [];
+        }
+      });
   }
 
   create(
@@ -349,7 +416,7 @@ export class Store {
         return { type: l.type, cardId: l.cardId, missing: true };
       }
     });
-    return { ...this.view(card, board), links };
+    return { ...this.view(card, board), links, comments: this.comments(board, card.id), history: this.history(board, card.id) };
   }
 
   /** Links two cards, on any boards; the link is written on both, each in its own direction. */
@@ -385,14 +452,15 @@ export class Store {
     return this.detail(saved, a.board);
   }
 
-  /**
-   * Adds a dated, signed note at the end of the description. Cards have no
-   * comment thread yet; when they do, this is the one place to change.
-   */
-  comment(cardId: string, text: string, author = hostname()): CardView {
+  /** Adds a comment, dated and signed (computer, agent, conversation), in a file of its own. */
+  comment(cardId: string, text: string): CardComment & { ref: string | null } {
     if (!text.trim()) throw new TodoomError("Le commentaire est vide");
-    const stamp = new Date().toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
-    return this.update(cardId, { append: `--- ${stamp} · ${author} ---\n${text.trim()}` });
+    const { card, board } = this.card(cardId);
+    const comment: CardComment = { id: uid(), cardId: card.id, createdAt: new Date().toISOString(), author: this.who.author, text: text.trim() };
+    const path = join(this.dir, commentPath(comment, board.id));
+    mkdirSync(dirname(path), { recursive: true });
+    writeAtomic(path, comment);
+    return { ...comment, ref: refOf(board, card) };
   }
 }
 

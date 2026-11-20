@@ -166,6 +166,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             otherKeys={data.boards.filter((b) => b.id !== board.id && b.key).map((b) => b.key!)}
             onOpenElsewhere={openElsewhere}
             initialOpenCardId={linkedCard}
+            comments={data.comments}
+            history={data.history}
           />
         ) : status === "loading" ? (
           <div className="empty-state">{t("common.loading")}</div>

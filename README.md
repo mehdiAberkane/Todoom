@@ -26,6 +26,8 @@ Todoom/
   boards/<idTableau>/board.json         colonnes, étiquettes, nom
   boards/<idTableau>/cards/<idCarte>.json
   settings.json                         paramètres partagés (fond d'écran)
+  boards/<idTableau>/comments/<idCarte>/<id>.json      un fichier par commentaire
+  boards/<idTableau>/history/<idCarte>/<auteur>.json   historique, un fichier par PC ou outil
   .presence/<nomDuPC>.json              « aussi ouvert sur… »
 ```
 

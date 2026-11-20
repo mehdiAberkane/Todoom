@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mehdiAberkane/Todoom/schema/history.schema.json",
+  "title": "Todoom card history",
+  "description": "Changes of one card made by one writer: boards/<boardId>/history/<cardId>/<writer>.json. The writer is a computer's name (the app), <name>-cli or <name>-mcp (the todoom command), <name>-agent (the agent). Each writer only ever rewrites its own file, appending to it.",
+  "type": "object",
+  "required": [
+    "cardId",
+    "writer",
+    "events"
+  ],
+  "properties": {
+    "cardId": {
+      "type": "string"
+    },
+    "writer": {
+      "type": "string"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "at",
+          "by",
+          "field"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "ISO date."
+          },
+          "by": {
+            "type": "object",
+            "required": [
+              "host"
+            ],
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Name of the computer."
+              },
+              "agent": {
+                "type": "string",
+                "description": "Agent or tool, when it wasn't written by hand (Claude, todoom-agent…)."
+              },
+              "conversation": {
+                "type": "string",
+                "description": "Conversation or session the agent was in."
+              }
+            }
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "created",
+              "column",
+              "title",
+              "priority",
+              "labels",
+              "due",
+              "description",
+              "archived"
+            ]
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Value before, as a name (column, priority, labels)."
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Value after; for archived, \"archived\" or null when restored."
+          }
+        }
+      }
+    }
+  }
+}

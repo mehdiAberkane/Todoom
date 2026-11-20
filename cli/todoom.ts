@@ -3,7 +3,7 @@
 
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { findDataDir, normalize, Store, TodoomError, type CardChanges } from "./store";
+import { findDataDir, identity, normalize, Store, TodoomError, type CardChanges } from "./store";
 import { serveMcp } from "./mcp";
 import { prioritiesOf } from "../src/lib/priority";
 
@@ -24,7 +24,7 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
   todoom link <carte> <type> <autre carte>    type : depends-on, blocks, duplicate-of,
                                               duplicated-by, relates-to (écrit sur les deux cartes)
   todoom unlink <carte> <autre carte>
-  todoom comment <carte> <texte>
+  todoom comment <carte> <texte>              commentaire daté et signé (PC, TODOOM_AGENT)
   todoom archive <carte>
   todoom restore <carte>
   todoom mcp                                  serveur MCP (stdio) pour Claude
@@ -36,7 +36,8 @@ identifiant court (SOL-42), son identifiant, ou un début unique d'au moins
 Un texte égal à « - » est lu sur l'entrée standard.
 
 Options communes : --dir <dossier> (sinon TODOOM_DIR, sinon le dossier choisi
-dans l'application), --help, --version.`;
+dans l'application), --as <agent> (signe commentaires et historique ; sinon
+TODOOM_AGENT), --help, --version.`;
 
 /** "-" means: read the text from stdin, for long descriptions and reports. */
 const text = (v: string | undefined) => (v === "-" ? readFileSync(0, "utf8") : v);
@@ -51,6 +52,7 @@ export async function main(argv: string[]): Promise<number> {
     allowPositionals: true,
     options: {
       dir: { type: "string" },
+      as: { type: "string" },
       all: { type: "boolean" },
       archived: { type: "boolean" },
       column: { type: "string" },
@@ -76,7 +78,7 @@ export async function main(argv: string[]): Promise<number> {
   const need = (n: number, usage: string) => {
     if (rest.length < n) throw new TodoomError(`Usage : todoom ${usage}`);
   };
-  const store = () => new Store(findDataDir(o.dir));
+  const store = () => new Store(findDataDir(o.dir), identity("cli", o.as));
 
   switch (command) {
     case "mcp":

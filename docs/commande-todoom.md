@@ -41,13 +41,13 @@ noms possibles quand un nom n'est pas reconnu.
 |---|---|
 | `todoom boards [--all]` | tableaux, colonnes, étiquettes et niveaux de priorité (`--all` : corbeille comprise) |
 | `todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]` | cartes, colonne par colonne, sans description |
-| `todoom show <carte>` | une carte entière, avec ses liens (titre, tableau, colonne, terminée ou non) |
+| `todoom show <carte>` | une carte entière, avec ses commentaires, son historique et ses liens (titre, tableau, colonne, terminée ou non) |
 | `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
 | `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--priority … \| --no-priority] [--due … \| --no-due]` | modifie les champs donnés, garde les autres |
 | `todoom move <carte> <colonne> [--top]` | déplace en bas (ou en haut) d'une colonne |
 | `todoom link <carte> <type> <autre carte>` | lie deux cartes, même sur deux tableaux, et écrit le lien sur les deux. Types : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` |
 | `todoom unlink <carte> <autre carte>` | retire le lien des deux cartes |
-| `todoom comment <carte> <texte>` | ajoute une note datée et signée du nom du PC à la fin de la description |
+| `todoom comment <carte> <texte>` | ajoute un commentaire daté, signé du nom du PC (et de l'agent avec `--as` ou `TODOOM_AGENT`) |
 | `todoom archive <carte>` / `todoom restore <carte>` | archive, ou remet en bas de sa colonne |
 | `todoom mcp` | lance le serveur MCP |
 
@@ -59,8 +59,11 @@ noms possibles quand un nom n'est pas reconnu.
 - **Texte long** : `-` à la place du texte le lit sur l'entrée standard :
   `Get-Content rapport.md | todoom comment <carte> -`.
 
-Tant que les cartes n'ont pas de fil de commentaires (ticket « Commentaires et
-historique séparés de la description »), `comment` écrit à la fin de la description.
+Chaque modification faite par la commande ou le serveur MCP est inscrite dans
+l'historique de la carte, comme celles faites dans l'application. `show` et
+`get_card` renvoient les commentaires et l'historique. Pour signer : `--as <agent>`
+ou la variable `TODOOM_AGENT` (le serveur MCP signe « Claude » par défaut), et
+`TODOOM_CONVERSATION` pour la conversation.
 
 ## Serveur MCP pour Claude
 

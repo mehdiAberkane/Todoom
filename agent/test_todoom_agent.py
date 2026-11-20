@@ -65,14 +65,24 @@ class ResumeTest(unittest.TestCase):
 
     def test_reuses_the_branch_of_the_last_attempt_when_it_still_exists(self):
         card = {"id": "mw0abcdef123", "title": "Ajouter un export CSV",
-                "description": "Le ticket\n\n--- Agent (ÉCHEC) ---\nBranche : feature/old\n\n--- Agent (ÉCHEC) ---\nBranche : feature/export-csv"}
+                "description": "Le ticket\n\n--- Agent (ÉCHEC) ---\nBranche : feature/old"}
+        comments = [{"text": "--- Agent (ÉCHEC) ---\nBranche : feature/export-csv", "createdAt": "2026-11-20T10:00:00Z"}]
         local = {"feature/export-csv"}
-        with mock.patch.object(agent, "git", side_effect=lambda *a, **k: a[-1] if a[:2] == ("branch", "--list") and a[-1] in local else ""):
+        with mock.patch.object(agent, "comments_of", return_value=comments), \
+             mock.patch.object(agent, "git", side_effect=lambda *a, **k: a[-1] if a[:2] == ("branch", "--list") and a[-1] in local else ""):
             self.assertEqual(agent.branch_for(card), "feature/export-csv")
+
+    def test_older_reports_in_the_description_still_count(self):
+        card = {"id": "mw0abcdef123", "title": "Ajouter un export CSV",
+                "description": "Le ticket\n\n--- Agent (ÉCHEC) ---\nBranche : feature/old"}
+        with mock.patch.object(agent, "comments_of", return_value=[]), \
+             mock.patch.object(agent, "git", side_effect=lambda *a, **k: a[-1] if a[:2] == ("branch", "--list") else ""):
+            self.assertEqual(agent.branch_for(card), "feature/old")
 
     def test_picks_a_new_name_with_a_suffix_when_it_is_taken(self):
         card = {"id": "mw0abcdef123", "title": "Ajouter un export CSV", "description": ""}
-        with mock.patch.object(agent, "suggest_branch", return_value="feature/export-csv"), \
+        with mock.patch.object(agent, "comments_of", return_value=[]), \
+             mock.patch.object(agent, "suggest_branch", return_value="feature/export-csv"), \
              mock.patch.object(agent, "branch_exists", return_value=True):
             self.assertEqual(agent.branch_for(card), "feature/export-csv-def123")
 
@@ -114,3 +124,26 @@ class ConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ActivityTest(unittest.TestCase):
+    """Reports go to comments and moves to the history, in the formats the app reads."""
+
+    def test_report_is_a_comment_and_moves_are_recorded(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            board = Path(tmp)
+            (board / "cards").mkdir()
+            card_path = board / "cards" / "mw0card.json"
+            card = {"id": "mw0card", "title": "T", "description": "Le ticket", "columnId": "c1"}
+            agent.write_json(card_path, card)
+            cols = {"En cours": "c1", "Agent": "c2"}
+            with mock.patch.object(agent, "BOARD_DIR", board):
+                agent.move(card_path, card, "Agent", cols)
+                agent.add_comment(card, "Rapport")
+                comments = agent.comments_of(card)
+            self.assertEqual([c["text"] for c in comments], ["Rapport"])
+            self.assertEqual(comments[0]["author"]["agent"], "todoom-agent")
+            self.assertEqual(agent.read_json(card_path)["description"], "Le ticket")
+            history = agent.read_json(board / "history" / "mw0card" / f"{agent.WRITER}.json")
+            self.assertEqual([(e["field"], e["from"], e["to"]) for e in history["events"]], [("column", "En cours", "Agent")])

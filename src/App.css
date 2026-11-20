@@ -538,3 +538,15 @@ textarea { resize: vertical; }
 .board-key.invalid { border-color: var(--accent); color: var(--accent); }
 .board-key .inline-edit-input { width: 7ch; font-size: 12px; text-transform: uppercase; }
 .mentions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 6px; font-size: 12px; }
+
+/* Comments and history */
+.history-toggle { margin-left: auto; display: flex; align-items: center; gap: 5px; font-size: 11px; text-transform: none; letter-spacing: 0; cursor: pointer; }
+.comment-new { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.comment-new textarea { width: 100%; resize: vertical; }
+.activity { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.activity .comment { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.comment-head { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }
+.comment-author { font-weight: 700; }
+.comment-head .icon-btn { margin-left: auto; }
+.comment-text { white-space: pre-wrap; word-break: break-word; }
+.activity .event { font-size: 12px; padding-left: 10px; border-left: 2px solid var(--border); }

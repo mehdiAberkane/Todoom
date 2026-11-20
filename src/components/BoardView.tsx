@@ -17,6 +17,8 @@ import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
 import { byPriority, prioritiesOf } from "../lib/priority";
 import { openBlockers, type Located } from "../lib/links";
+import { mergedHistory } from "../lib/activity";
+import type { CardComment, HistoryEvent } from "../types";
 import { cleanKey, nextNumber, parseRef, refOf } from "../lib/shortid";
 import { useDragSensors } from "../lib/dnd";
 import { t, tn } from "../lib/i18n";
@@ -42,6 +44,8 @@ export function BoardView({
   onOpenElsewhere,
   initialOpenCardId = null,
   otherKeys,
+  comments,
+  history,
 }: {
   board: Board;
   cards: Card[];
@@ -55,6 +59,10 @@ export function BoardView({
   initialOpenCardId?: string | null;
   /** Keys of the other boards, which this one can't take. */
   otherKeys: string[];
+  /** Comments by card id. */
+  comments: Record<string, CardComment[]>;
+  /** History by card id, then by writer. */
+  history: Record<string, Record<string, HistoryEvent[]>>;
 }) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
@@ -359,6 +367,7 @@ export function BoardView({
                 priorities={priorities}
                 blockers={blockers}
                 boardKey={board.key}
+                comments={comments}
                 unsavedIds={unsavedIds}
                 onOpen={setOpenCardId}
                 onAdd={(title) => addCard(col.id, title)}
@@ -412,6 +421,12 @@ export function BoardView({
             onLink: (type, target) => actions.linkCards(openCard, type, target),
             onUnlink: (targetId) => actions.unlinkCards(openCard, index.get(targetId)?.card, targetId),
             onOpen: openLinked,
+          }}
+          activity={{
+            comments: comments[openCard.id] ?? [],
+            history: mergedHistory(history[openCard.id]),
+            onComment: (text) => actions.addComment(openCard, text),
+            onDeleteComment: (c) => actions.deleteComment(c, board.id),
           }}
         />
       )}
