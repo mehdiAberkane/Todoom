@@ -27,6 +27,7 @@ const CARD: Check[] = [
   ["checklist", listOf(shaped([["id", isString], ["text", isString], ["done", (v) => typeof v === "boolean"], ["cardId", optional(isString)]]))],
   ["links", listOf(shaped([["type", isString], ["cardId", isString]]))],
   ["branch", nullable(isString)],
+  ["color", optional(nullable(isString))],
   ["mergeRequest", nullable(shaped([["url", isString], ["state", (v) => v === "open" || v === "merged" || v === "closed"]]))],
   ["claimedBy", nullable(shaped([["host", isString], ["at", isString], ["agent", optional(isString)], ["conversation", optional(isString)]]))],
   ["archivedAt", nullable(isString)],
@@ -58,6 +59,8 @@ const SETTINGS: Check[] = [
   ["myWorkColumns", listOf(isString)],
   ["notifications", optional(shaped([["enabled", optional(isBoolean)], ["columns", listOf(isString)], ["due", optional(isBoolean)]]))],
   ["boardTemplate", optional(isString)],
+  ["theme", optional((v) => v === "dark" || v === "light" || v === "system")],
+  ["compact", optional(isBoolean)],
   ["updatedAt", optional(isString)],
 ];
 

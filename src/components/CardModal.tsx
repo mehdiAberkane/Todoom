@@ -14,6 +14,7 @@ import { toggleTask } from "../lib/markdown";
 import { applyTemplate, CARD_TEMPLATES } from "../lib/templates";
 import { AttachmentsSection, filesOf, type AttachmentProps } from "./AttachmentsSection";
 import { branchName, branchUrl, MR_STATES, webUrl } from "../lib/dev";
+import { CARD_COLORS } from "../lib/utils";
 import { claimLabel } from "../lib/claim";
 import { checklistDone, isFinished } from "../lib/links";
 import { refOf } from "../lib/shortid";
@@ -475,6 +476,18 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             {board.labels.length === 0 && <span className="muted">{t("cardModal.noLabels")}</span>}
           </div>
 
+          <h4>{t("field.color")}</h4>
+          <div className="card-colors">
+            <button
+              className={`swatch none ${draft.color ? "" : "on"}`}
+              onClick={() => set({ color: null })}
+              title={t("cardModal.noColor")}
+            />
+            {CARD_COLORS.map((c) => (
+              <button key={c} className={`swatch ${draft.color === c ? "on" : ""}`} style={{ background: c }} onClick={() => set({ color: c })} />
+            ))}
+          </div>
+
           <h4>{t("field.due")}</h4>
           <input
             type="date"
@@ -683,6 +696,8 @@ function describe(field: Field, card: Card, board: Board): string {
       return priorityOf(board, card)?.name ?? t("describe.none");
     case "branch":
       return card.branch ?? t("describe.none");
+    case "color":
+      return card.color ?? t("describe.none");
     case "mergeRequest":
       return card.mergeRequest ? `${card.mergeRequest.url} (${t(`mr.${card.mergeRequest.state}`)})` : t("describe.none");
     case "checklist": {

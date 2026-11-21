@@ -7,6 +7,11 @@ import { mrLabel } from "../lib/dev";
 import { claimLabel } from "../lib/claim";
 import { formatDateTime } from "../lib/utils";
 
+/** The class and style giving a card its color band, if it has one. */
+export function colorOf(card: Card): { className: string; style: React.CSSProperties } {
+  return card.color ? { className: "colored", style: { "--card-color": card.color } as React.CSSProperties } : { className: "", style: {} };
+}
+
 export function CardBody({
   card,
   cardRef,
@@ -160,8 +165,8 @@ export function CardTile({
   return (
     <article
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`card ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""} ${selected ? "selected" : ""}`}
+      style={{ ...colorOf(card).style, transform: CSS.Translate.toString(transform), transition }}
+      className={`card ${colorOf(card).className} ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""} ${selected ? "selected" : ""}`}
       aria-selected={selected}
       data-card-id={card.id}
       {...attributes}

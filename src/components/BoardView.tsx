@@ -25,7 +25,7 @@ import { useDragSensors } from "../lib/dnd";
 import { t, tn } from "../lib/i18n";
 import { TRASH_DAYS } from "../lib/store";
 import { ColumnPreview, ColumnView } from "./ColumnView";
-import { CardBody } from "./CardTile";
+import { CardBody, colorOf } from "./CardTile";
 import { CardModal } from "./CardModal";
 import { LabelManager } from "./LabelManager";
 import { ArchiveModal } from "./ArchiveModal";
@@ -597,7 +597,7 @@ export function BoardView({
         </div>
         <DragOverlay>
           {activeCard && (
-            <div className="card overlay">
+            <div className={`card overlay ${colorOf(activeCard).className}`} style={colorOf(activeCard).style}>
               <CardBody
                 card={activeCard}
                 cardRef={refOf(board, activeCard)}

@@ -138,6 +138,13 @@
         }
       }
     },
+    "color": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Color of the band at the top of the card (#rrggbb), or null for none."
+    },
     "claimedBy": {
       "type": [
         "object",

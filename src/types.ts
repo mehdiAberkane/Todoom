@@ -83,6 +83,8 @@ export interface Card {
   /** Git branch of the work on this card. */
   branch: string | null;
   mergeRequest: MergeRequest | null;
+  /** A color band at the top of the card (one of the palette's), or null/absent for none. */
+  color?: string | null;
   /** Who is working on the card, or null when nobody is. */
   claimedBy: Claim | null;
   /** Set when the card is archived: it leaves the board but can be restored. */
@@ -184,6 +186,10 @@ export interface AppSettings {
   notifications?: { enabled?: boolean; columns?: string[]; due?: boolean };
   /** Template a new board starts from: "simple", "dev" or "copy:<board id>"; absent means "dev". */
   boardTemplate?: string;
+  /** Absent means dark; "system" follows the computer's setting. */
+  theme?: "dark" | "light" | "system";
+  /** Smaller cards: title, short id and colored label marks only. */
+  compact?: boolean;
   updatedAt: string;
 }
 

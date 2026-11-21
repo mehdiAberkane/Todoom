@@ -14,6 +14,8 @@ import { BoardView } from "./components/BoardView";
 import { Setup } from "./components/Setup";
 import { SettingsPage } from "./components/SettingsPage";
 import { defaultTemplate } from "./lib/templates";
+import { useAppearance } from "./lib/theme";
+import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 import { GlobalSearch } from "./components/GlobalSearch";
@@ -134,9 +136,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     setMetrics(null);
   };
   const { background, backgroundDim } = data.settings;
-  const backgroundStyle = background
-    ? { backgroundImage: `linear-gradient(rgba(0,0,0,${backgroundDim}), rgba(0,0,0,${backgroundDim})), url("${background}")` }
-    : undefined;
+  const theme = useAppearance(data.settings);
+  const backgroundStyle = background ? { backgroundImage: `${veilOf(theme, backgroundDim)}, url("${background}")` } : undefined;
 
   useEffect(() => {
     if (board) localSet("todoom-board", board.id);

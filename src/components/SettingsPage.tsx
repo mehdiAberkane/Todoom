@@ -5,6 +5,7 @@ import { ensurePermission, notifyPermission, show } from "../lib/notifier";
 import { imageToBackground } from "../lib/image";
 import { t } from "../lib/i18n";
 import { boardSetup, defaultTemplate } from "../lib/templates";
+import { THEMES, veilOf, type ThemeChoice } from "../lib/appearance";
 import type { CheckState, UpdateState } from "../lib/updater";
 
 interface Props {
@@ -108,6 +109,29 @@ export function SettingsPage({
       </section>
 
       <section className="settings-section">
+        <h2>{t("settings.appearance")}</h2>
+        <div className="settings-row">
+          <span className="muted">{t("settings.theme")}</span>
+          <select
+            className="settings-select"
+            value={settings.theme ?? "dark"}
+            onChange={(e) => onSave({ ...settings, backgroundDim: dim, theme: e.target.value as ThemeChoice })}
+          >
+            {THEMES.map((th) => (
+              <option key={th} value={th}>
+                {t(`settings.theme.${th}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <label className="settings-check">
+          <input type="checkbox" checked={!!settings.compact} onChange={(e) => onSave({ ...settings, backgroundDim: dim, compact: e.target.checked })} />
+          {t("settings.compact")}
+        </label>
+        <p className="hint">{t("settings.appearanceHint")}</p>
+      </section>
+
+      <section className="settings-section">
         <h2>{t("settings.boardTemplate")}</h2>
         <select
           className="settings-select"
@@ -172,7 +196,7 @@ export function SettingsPage({
             className="bg-preview"
             style={
               settings.background
-                ? { backgroundImage: `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim})), url("${settings.background}")` }
+                ? { backgroundImage: `${veilOf(document.documentElement.dataset.theme === "light" ? "light" : "dark", dim)}, url("${settings.background}")` }
                 : undefined
             }
           >

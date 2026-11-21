@@ -62,6 +62,18 @@
       "type": "string",
       "description": "Template a new board starts from: \"simple\", \"dev\" (default) or \"copy:<board id>\"."
     },
+    "theme": {
+      "enum": [
+        "dark",
+        "light",
+        "system"
+      ],
+      "description": "Interface theme; absent means dark. \"system\" follows each computer's light or dark mode."
+    },
+    "compact": {
+      "type": "boolean",
+      "description": "Compact cards: title, short id and labels as dots. Default false."
+    },
     "updatedAt": {
       "type": "string"
     }

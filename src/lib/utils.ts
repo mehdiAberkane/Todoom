@@ -2,6 +2,9 @@ import { locale, t } from "./i18n";
 
 export { nextUpdatedAt, now, uid } from "./ids";
 
+/** Colors a card's band can take: bright enough on the dark and the light theme. */
+export const CARD_COLORS = ["#ff4d2e", "#ff9f1c", "#ffd23f", "#3ddc84", "#2ec4b6", "#3a86ff", "#8338ec", "#ff5fa2", "#8d99ae"];
+
 export const LABEL_COLORS = [
   "#ff4d2e", "#ff9f1c", "#ffd23f", "#3ddc84", "#2ec4b6",
   "#3a86ff", "#8338ec", "#ff5fa2", "#8d99ae", "#6b4f3a",
