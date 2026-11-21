@@ -23,7 +23,7 @@ interface Props {
   currentId?: string;
   counts: Record<string, number>;
   onSelect: (id: string) => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string, template: string) => void;
   onMove: (movedId: string, ids: string[]) => void;
   settingsOpen: boolean;
   myWorkOpen: boolean;
@@ -66,10 +66,11 @@ export function Sidebar(props: Props) {
     onMove(String(active.id), moved);
   };
 
+  const [template, setTemplate] = useState("simple");
   const create = () => {
     const n = name.trim();
     if (!n) return;
-    onCreate(n);
+    onCreate(n, template);
     setName("");
   };
 
@@ -109,6 +110,22 @@ export function Sidebar(props: Props) {
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && create()}
         />
+        {name.trim() && (
+          <div className="new-board-options">
+            <select value={template} onChange={(e) => setTemplate(e.target.value)}>
+              <option value="simple">{t("tpl.simple")}</option>
+              <option value="dev">{t("tpl.dev")}</option>
+              {boards.map((b) => (
+                <option key={b.id} value={`copy:${b.id}`}>
+                  {t("tpl.copy", { name: b.name })}
+                </option>
+              ))}
+            </select>
+            <button className="btn-primary small" onClick={create}>
+              {t("tpl.create")}
+            </button>
+          </div>
+        )}
       </nav>
 
       <footer className="sidebar-foot">

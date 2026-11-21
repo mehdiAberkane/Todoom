@@ -11,6 +11,7 @@ import { LinkSection, Mentions, type LinkProps } from "./LinkSection";
 import { ActivitySection, type ActivityProps } from "./ActivitySection";
 import { MarkdownView } from "./Markdown";
 import { toggleTask } from "../lib/markdown";
+import { applyTemplate, CARD_TEMPLATES } from "../lib/templates";
 import { branchUrl, MR_STATES, webUrl } from "../lib/dev";
 import { claimLabel } from "../lib/claim";
 import { openExternal } from "../lib/open";
@@ -216,6 +217,23 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
 
       <div className="modal-body">
         <div className="modal-main">
+          {isNew && (
+            <div className="card-templates" title={t("tpl.cardTitle")}>
+              <span className="muted">{t("tpl.cardLabel")}</span>
+              {CARD_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl}
+                  className="filter-chip"
+                  onClick={() => {
+                    setDraft((d) => applyTemplate(d, tpl, board));
+                    setEditingDesc(true);
+                  }}
+                >
+                  {t(`tpl.cardName.${tpl}`)}
+                </button>
+              ))}
+            </div>
+          )}
           <h4>
             {t("field.description")}
             {draft.description.trim() && (

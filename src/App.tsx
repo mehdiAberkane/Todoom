@@ -178,7 +178,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         currentId={showSettings || showMyWork ? undefined : board?.id}
         counts={counts}
         onSelect={openBoard}
-        onCreate={(name) => openBoard(actions.createBoard(name, data.boards).id)}
+        onCreate={(name, template) => openBoard(actions.createBoard(name, data.boards, template).id)}
         settingsOpen={showSettings}
         onOpenSettings={() => (setShowSettings(true), setShowMyWork(false))}
         myWorkOpen={showMyWork && !showSettings}

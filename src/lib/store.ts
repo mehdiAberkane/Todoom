@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
 import type { AgentStatus, AppSettings, Board, Card, CardComment, HistoryEvent, LinkType, Presence } from "../types";
-import { LABEL_COLORS, nextUpdatedAt, now, reorder, uid } from "./utils";
+import { nextUpdatedAt, now, reorder, uid } from "./utils";
 import { agentProblem, boardProblem, cardProblem, commentProblem, historyProblem, settingsProblem, type IssueReason } from "./validate";
 import { changesBetween, commentPath, commentsDir, eventsFor, historyDir, historyPath, writerName } from "./activity";
 import { t } from "./i18n";
 import { inverseOf, withLink, withoutLink } from "./links";
 import { newClaim } from "./claim";
+import { boardSetup, fromSetup, type BoardTemplate } from "./templates";
 
 /** A file of the data folder that couldn't be loaded, and why. */
 export interface FileIssue {
@@ -36,15 +37,6 @@ const SETTINGS_PATH = "settings.json";
 // Safety net only: the folder watcher reports other machines' changes as they happen.
 const POLL_MS = 120_000;
 const HEARTBEAT_MS = 60_000;
-
-// Starting content of a new board, in the language in use when it is created.
-const defaultColumns = () => [t("default.todo"), t("default.doing"), t("default.done")];
-const defaultLabels = () => [
-  { name: t("default.urgent"), color: LABEL_COLORS[0] },
-  { name: t("default.bug"), color: LABEL_COLORS[1] },
-  { name: t("default.idea"), color: LABEL_COLORS[6] },
-  { name: t("default.personal"), color: LABEL_COLORS[3] },
-];
 
 const boardDir = (boardId: string) => `boards/${boardId}`;
 const boardPath = (boardId: string) => `${boardDir(boardId)}/board.json`;
@@ -503,14 +495,14 @@ export function useTodoom(backend: Backend) {
         }
       },
 
-      createBoard(name: string, existing: Board[]): Board {
+      /** A new board, set up from a template (simple, development, or a copy of a board's set-up). */
+      createBoard(name: string, existing: Board[], template: BoardTemplate = "simple"): Board {
         const t = now();
         const orders = existing.map((b) => b.order).filter((o): o is number => o !== undefined);
         const board: Board = {
           id: uid(),
           name,
-          columns: defaultColumns().map((n) => ({ id: uid(), name: n })),
-          labels: defaultLabels().map((l) => ({ ...l, id: uid() })),
+          ...fromSetup(boardSetup(template, existing)),
           ...(orders.length ? { order: Math.max(...orders) + 1 } : {}),
           createdAt: t,
           updatedAt: t,

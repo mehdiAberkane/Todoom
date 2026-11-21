@@ -674,3 +674,8 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .md-hint { font-size: 11px; margin-top: 4px; }
 .md-toggle { margin-left: auto; text-transform: none; letter-spacing: 0; }
 .context-preview { min-height: 50vh; max-height: 60vh; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+
+/* Templates */
+.new-board-options { display: flex; gap: 6px; margin-top: 6px; }
+.new-board-options select { flex: 1; min-width: 0; font-size: 12px; }
+.card-templates { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 12px; }
