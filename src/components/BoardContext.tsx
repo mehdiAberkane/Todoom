@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Board } from "../types";
 import { t } from "../lib/i18n";
 import { Modal } from "./ui";
+import { Markdown } from "./Markdown";
 
 /**
  * The board's context page: repository, working rules, vocabulary, what each
@@ -9,6 +10,7 @@ import { Modal } from "./ui";
  */
 export function BoardContext({ board, onSave, onClose }: { board: Board; onSave: (b: Board) => void; onClose: () => void }) {
   const [text, setText] = useState(board.description ?? "");
+  const [preview, setPreview] = useState(false);
 
   const close = () => {
     const value = text.trim() ? text.replace(/\s+$/, "") : "";
@@ -32,8 +34,19 @@ export function BoardContext({ board, onSave, onClose }: { board: Board; onSave:
         </button>
       </div>
       <p className="muted">{t("context.intro")}</p>
-      <textarea className="context-text" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("context.placeholder")} autoFocus />
+      {preview ? (
+        <div className="context-preview">
+          <Markdown text={text} />
+        </div>
+      ) : (
+        <textarea className="context-text" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("context.placeholder")} autoFocus />
+      )}
       <div className="modal-foot">
+        {text.trim() && (
+          <button className="btn-ghost" onClick={() => setPreview((p) => !p)}>
+            {preview ? t("md.edit") : t("md.preview")}
+          </button>
+        )}
         {!text.trim() && (
           <button className="btn-ghost" onClick={template}>
             {t("context.useTemplate")}

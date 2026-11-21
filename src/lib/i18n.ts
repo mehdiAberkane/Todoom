@@ -17,6 +17,10 @@ const fr = {
 
   // Sidebar
   "status.loading": "Chargement…",
+  "md.clickToEdit": "Cliquer pour modifier",
+  "md.edit": "✎ Modifier",
+  "md.preview": "👁 Aperçu",
+  "md.hint": "Markdown : # titre, **gras**, *italique*, - liste, - [ ] case à cocher, `code`, [lien](https://…)",
   "palette.placeholder": "Aller à un tableau, une carte, ou lancer une commande…",
   "palette.none": "Rien ne correspond",
   "palette.newCard": "Nouvelle carte",
@@ -373,6 +377,10 @@ const en: Record<Key, string> = {
 
   // Sidebar
   "status.loading": "Loading…",
+  "md.clickToEdit": "Click to edit",
+  "md.edit": "✎ Edit",
+  "md.preview": "👁 Preview",
+  "md.hint": "Markdown: # heading, **bold**, *italic*, - list, - [ ] checkbox, `code`, [link](https://…)",
   "palette.placeholder": "Go to a board, a card, or run a command…",
   "palette.none": "Nothing matches",
   "palette.newCard": "New card",

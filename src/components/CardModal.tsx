@@ -9,6 +9,8 @@ const fieldLabel = (f: Field) => t(`field.${f}`);
 import { Modal } from "./ui";
 import { LinkSection, Mentions, type LinkProps } from "./LinkSection";
 import { ActivitySection, type ActivityProps } from "./ActivitySection";
+import { MarkdownView } from "./Markdown";
+import { toggleTask } from "../lib/markdown";
 import { branchUrl, MR_STATES, webUrl } from "../lib/dev";
 import { claimLabel } from "../lib/claim";
 import { openExternal } from "../lib/open";
@@ -44,6 +46,8 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
+  // The description is read as Markdown; it is edited as text when empty, or on demand.
+  const [editingDesc, setEditingDesc] = useState(() => !card.description.trim());
   const [incoming, setIncoming] = useState<Field[]>([]);
   const [resolving, setResolving] = useState<{ fields: Field[]; archive: boolean } | null>(null);
   const [keepTheirs, setKeepTheirs] = useState<Set<Field>>(new Set());
@@ -212,14 +216,37 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
 
       <div className="modal-body">
         <div className="modal-main">
-          <h4>{t("field.description")}</h4>
-          <textarea
-            className="description"
-            rows={6}
-            placeholder={t("cardModal.descriptionPlaceholder")}
-            value={draft.description}
-            onChange={(e) => set({ description: e.target.value })}
-          />
+          <h4>
+            {t("field.description")}
+            {draft.description.trim() && (
+              <button className="link md-toggle" onClick={() => setEditingDesc((v) => !v)}>
+                {editingDesc ? t("md.preview") : t("md.edit")}
+              </button>
+            )}
+          </h4>
+          {editingDesc ? (
+            <>
+              <textarea
+                className="description"
+                rows={6}
+                placeholder={t("cardModal.descriptionPlaceholder")}
+                value={draft.description}
+                autoFocus={!!draft.description.trim()}
+                onChange={(e) => set({ description: e.target.value })}
+                onBlur={(e) => {
+                  // Back to reading once written, unless the click was on the toggle itself.
+                  if (draft.description.trim() && !(e.relatedTarget as HTMLElement | null)?.closest(".md-toggle")) setEditingDesc(false);
+                }}
+              />
+              <div className="md-hint muted">{t("md.hint")}</div>
+            </>
+          ) : (
+            <MarkdownView
+              text={draft.description}
+              onEdit={() => setEditingDesc(true)}
+              onToggleTask={(line) => set({ description: toggleTask(draft.description, line) })}
+            />
+          )}
           {links && <Mentions text={draft.description} selfId={card.id} index={links.index} onOpen={openLinked} />}
 
           <h4>

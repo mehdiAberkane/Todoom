@@ -4,6 +4,7 @@ import { authorLabel } from "../lib/activity";
 import { formatDateTime, localGet, localSet } from "../lib/utils";
 import { t } from "../lib/i18n";
 import { DangerButton } from "./ui";
+import { Markdown } from "./Markdown";
 import { mrLabel, MR_STATES } from "../lib/dev";
 import type { MergeRequestState } from "../types";
 
@@ -87,7 +88,9 @@ export function ActivitySection({ comments, history, onComment, onDeleteComment 
                   🗑
                 </DangerButton>
               </div>
-              <div className="comment-text">{e.comment.text}</div>
+              <div className="comment-text">
+                <Markdown text={e.comment.text} />
+              </div>
             </li>
           ) : (
             <li key={`${e.event.at}-${e.event.field}-${e.event.by.host}`} className="event">
