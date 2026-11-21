@@ -12,6 +12,7 @@ import { ActivitySection, type ActivityProps } from "./ActivitySection";
 import { MarkdownView } from "./Markdown";
 import { toggleTask } from "../lib/markdown";
 import { applyTemplate, CARD_TEMPLATES } from "../lib/templates";
+import { AttachmentsSection, filesOf, type AttachmentProps } from "./AttachmentsSection";
 import { branchUrl, MR_STATES, webUrl } from "../lib/dev";
 import { claimLabel } from "../lib/claim";
 import { openExternal } from "../lib/open";
@@ -35,6 +36,8 @@ interface Props {
   claim?: { onTake: () => void; onRelease: () => void };
   /** For an archived card: puts it back on the board. */
   onRestore?: () => void;
+  /** Files attached to the card; left out for a card not saved yet. */
+  attachments?: AttachmentProps;
 }
 
 /**
@@ -43,12 +46,20 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim, onRestore }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim, onRestore, attachments }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
   // The description is read as Markdown; it is edited as text when empty, or on demand.
   const [editingDesc, setEditingDesc] = useState(() => !card.description.trim());
+  // Files pasted, dropped or picked are attached right away, like comments.
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const attach = (files: File[]) => {
+    if (!attachments) return;
+    setAttachError(null);
+    for (const file of files) attachments.onAdd(file).catch((e) => setAttachError(e instanceof Error ? e.message : String(e)));
+  };
   const [incoming, setIncoming] = useState<Field[]>([]);
   const [resolving, setResolving] = useState<{ fields: Field[]; archive: boolean } | null>(null);
   const [keepTheirs, setKeepTheirs] = useState<Set<Field>>(new Set());
@@ -173,7 +184,28 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
   }
 
   return (
-    <Modal onClose={close} className="card-modal">
+    <Modal onClose={close} className={`card-modal ${dropping ? "dropping" : ""}`}>
+      <div
+        className="drop-area"
+        onPaste={(e) => {
+          const files = filesOf(e.clipboardData);
+          if (!attachments || !files.length) return;
+          e.preventDefault();
+          attach(files);
+        }}
+        onDragOver={(e) => {
+          if (!attachments || !e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          setDropping(true);
+        }}
+        onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropping(false)}
+        onDrop={(e) => {
+          if (!attachments) return;
+          e.preventDefault();
+          setDropping(false);
+          attach(filesOf(e.dataTransfer));
+        }}
+      >
       <div className="modal-head">
         {cardRef && <CopyRef value={cardRef} />}
         <textarea
@@ -300,6 +332,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
           </div>
 
           {links && <LinkSection card={card} {...links} onOpen={openLinked} />}
+          {attachments && <AttachmentsSection {...attachments} onAdd={async (file) => attach([file])} error={attachError} />}
           {activity && <ActivitySection {...activity} />}
         </div>
 
@@ -455,6 +488,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
         <button className="btn-primary" onClick={close} title={t("cardModal.saveTitle")}>
           {t("cardModal.save")}
         </button>
+      </div>
       </div>
     </Modal>
   );

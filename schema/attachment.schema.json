@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mehdiAberkane/Todoom/schema/attachment.schema.json",
+  "title": "Todoom attachment",
+  "description": "Description of a file attached to a card: boards/<boardId>/attachments/<cardId>/<id>.json. The file itself is beside it, named by `file`; it is never loaded with the data, only when shown. 10 MB at most.",
+  "type": "object",
+  "required": [
+    "id",
+    "cardId",
+    "name",
+    "type",
+    "size",
+    "file",
+    "createdAt",
+    "author"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Also the description file name, without .json."
+    },
+    "cardId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "description": "The name the file had when attached."
+    },
+    "type": {
+      "type": "string",
+      "description": "Media type, e.g. image/png."
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10485760
+    },
+    "file": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+-[A-Za-z0-9._-]+$",
+      "description": "Stored file name, <id>-<cleaned name>; never ends with .json."
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "author": {
+      "type": "object",
+      "required": [
+        "host"
+      ],
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "string"
+        },
+        "conversation": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

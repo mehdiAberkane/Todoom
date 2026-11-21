@@ -70,6 +70,16 @@ const COMMENT: Check[] = [
   ["author", AUTHOR],
 ];
 
+const ATTACHMENT: Check[] = [
+  ["cardId", isString],
+  ["name", isString],
+  ["type", isString],
+  ["size", isNumber],
+  ["file", (v) => isString(v) && /^[\w-]+-[\w.-]+$/.test(v as string) && !(v as string).includes("..")],
+  ["createdAt", isString],
+  ["author", AUTHOR],
+];
+
 const HISTORY: Check[] = [
   ["cardId", isString],
   ["writer", isString],
@@ -106,3 +116,4 @@ export const settingsProblem = (raw: unknown) => problem(raw, SETTINGS, false);
 export const commentProblem = (raw: unknown) => problem(raw, COMMENT, true);
 export const historyProblem = (raw: unknown) => problem(raw, HISTORY, false);
 export const agentProblem = (raw: unknown) => problem(raw, AGENT, false);
+export const attachmentProblem = (raw: unknown) => problem(raw, ATTACHMENT, true);

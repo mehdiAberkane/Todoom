@@ -99,6 +99,21 @@ export interface Claim extends Author {
   at: string;
 }
 
+/** A file attached to a card; the file itself is boards/<board>/attachments/<card>/<file>. */
+export interface Attachment {
+  id: string;
+  cardId: string;
+  /** The name it had when attached. */
+  name: string;
+  /** Its media type, e.g. image/png. */
+  type: string;
+  size: number;
+  /** The stored file's name, next to this description. */
+  file: string;
+  createdAt: string;
+  author: Author;
+}
+
 /** A comment on a card: boards/<board>/comments/<card>/<id>.json. */
 export interface CardComment {
   id: string;

@@ -240,6 +240,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             initialOpenCardId={linkedCard}
             comments={data.comments}
             agents={data.agents[board.id]}
+            attachments={data.attachments}
             history={data.history}
           />
         ) : status === "loading" || pending.length > 0 ? (

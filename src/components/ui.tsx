@@ -99,15 +99,21 @@ export function DangerButton({
 export function Modal({ onClose, children, className = "" }: { onClose: () => void; children: ReactNode; className?: string }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const self = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCloseRef.current();
+    // Only the window on top closes: Escape in an image opened from a card closes the image, not the card.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const windows = document.querySelectorAll(".modal");
+      if (windows[windows.length - 1] === self.current) onCloseRef.current();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${className}`} role="dialog">
+      <div ref={self} className={`modal ${className}`} role="dialog">
         {children}
       </div>
     </div>

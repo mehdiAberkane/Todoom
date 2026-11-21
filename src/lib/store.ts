@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Backend, FileEntry } from "./backend";
-import type { AgentStatus, AppSettings, Board, Card, CardComment, HistoryEvent, LinkType, Presence } from "../types";
+import type { AgentStatus, AppSettings, Attachment, Board, Card, CardComment, HistoryEvent, LinkType, Presence } from "../types";
 import { nextUpdatedAt, now, reorder, uid } from "./utils";
-import { agentProblem, boardProblem, cardProblem, commentProblem, historyProblem, settingsProblem, type IssueReason } from "./validate";
+import { agentProblem, attachmentProblem, boardProblem, cardProblem, commentProblem, historyProblem, settingsProblem, type IssueReason } from "./validate";
 import { changesBetween, commentPath, commentsDir, eventsFor, historyDir, historyPath, writerName } from "./activity";
 import { t } from "./i18n";
 import { inverseOf, withLink, withoutLink } from "./links";
 import { newClaim } from "./claim";
 import { boardSetup, fromSetup, type BoardTemplate } from "./templates";
+import { attachmentFilePath, attachmentMetaPath, attachmentsDir, MAX_ATTACHMENT_BYTES, readAsBase64, storedName } from "./attachments";
 
 /** A file of the data folder that couldn't be loaded, and why. */
 export interface FileIssue {
@@ -27,12 +28,14 @@ export interface Data {
   history: Record<string, Record<string, HistoryEvent[]>>;
   /** Agents watching each board, by board id. */
   agents: Record<string, AgentStatus[]>;
+  /** Attached files by card id, oldest first. */
+  attachments: Record<string, Attachment[]>;
 }
 
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
 export const DEFAULT_SETTINGS: AppSettings = { background: null, backgroundDim: 0.45, language: null, updatedAt: "" };
-const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [], comments: {}, history: {}, agents: {} };
+const EMPTY: Data = { boards: [], cards: {}, presence: [], settings: DEFAULT_SETTINGS, issues: [], comments: {}, history: {}, agents: {}, attachments: {} };
 const SETTINGS_PATH = "settings.json";
 // Safety net only: the folder watcher reports other machines' changes as they happen.
 const POLL_MS = 120_000;
@@ -93,7 +96,7 @@ function normalizeCard(raw: Partial<Card>, boardId: string): Card {
   };
 }
 
-type Kind = "board" | "card" | "settings" | "presence" | "comment" | "history" | "agent";
+type Kind = "board" | "card" | "settings" | "presence" | "comment" | "history" | "agent" | "attachment";
 
 /** Which kind of Todoom file a path is, or null for files Todoom doesn't own. */
 function kindOf(parts: string[]): Kind | null {
@@ -106,6 +109,7 @@ function kindOf(parts: string[]): Kind | null {
   if (parts.length === 4 && parts[2] === "agents") return "agent";
   if (parts.length === 5 && parts[2] === "comments") return "comment";
   if (parts.length === 5 && parts[2] === "history") return "history";
+  if (parts.length === 5 && parts[2] === "attachments" && parts[4].endsWith(".json")) return "attachment";
   return null;
 }
 
@@ -125,6 +129,7 @@ export function parse(files: FileEntry[], pending: string[] = []): Data {
   const comments = new Map<string, CardComment>();
   const history: Data["history"] = {};
   const agents: Data["agents"] = {};
+  const attachments = new Map<string, Attachment>();
 
   for (const file of files) {
     const parts = file.path.split("/");
@@ -153,7 +158,9 @@ export function parse(files: FileEntry[], pending: string[] = []): Data {
               ? historyProblem(raw)
               : kind === "agent"
                 ? agentProblem(raw)
-                : settingsProblem(raw);
+                : kind === "attachment"
+                  ? attachmentProblem(raw)
+                  : settingsProblem(raw);
     if (why) {
       issues.push({ path: file.path, reason: why });
       continue;
@@ -161,6 +168,10 @@ export function parse(files: FileEntry[], pending: string[] = []): Data {
     if (kind === "comment") {
       // A Drive conflict copy of a comment is the same comment.
       comments.set(raw.id, raw as CardComment);
+      continue;
+    }
+    if (kind === "attachment") {
+      attachments.set(raw.id, raw as Attachment);
       continue;
     }
     if (kind === "agent") {
@@ -217,7 +228,14 @@ export function parse(files: FileEntry[], pending: string[] = []): Data {
     comments: groupComments([...comments.values()]),
     history,
     agents,
+    attachments: groupAttachments([...attachments.values()]),
   };
+}
+
+function groupAttachments(list: Attachment[]): Record<string, Attachment[]> {
+  const out: Record<string, Attachment[]> = {};
+  for (const a of list.sort((x, y) => x.createdAt.localeCompare(y.createdAt))) (out[a.cardId] ??= []).push(a);
+  return out;
 }
 
 function groupComments(list: CardComment[]): Record<string, CardComment[]> {
@@ -467,6 +485,7 @@ export function useTodoom(backend: Backend) {
       removePath(cardPath(card));
       removePath(commentsDir(card.boardId, card.id));
       removePath(historyDir(card.boardId, card.id));
+      removePath(attachmentsDir(card.boardId, card.id));
     };
 
     const saveBoard = (board: Board) => {
@@ -529,6 +548,38 @@ export function useTodoom(backend: Backend) {
           return { ...d, boards: d.boards.filter((b) => b.id !== boardId), cards };
         });
         removePath(boardDir(boardId));
+      },
+
+/**
+       * Attaches a file: the file itself is written right away (it can't wait in
+       * the queue, being large), then its description. Fails with a message when
+       * the file is too big or the folder refuses it.
+       */
+      async addAttachment(card: Card, file: File) {
+        if (file.size > MAX_ATTACHMENT_BYTES) throw new Error(t("attach.tooBig", { name: file.name }));
+        const id = uid();
+        const attachment: Attachment = {
+          id,
+          cardId: card.id,
+          name: file.name || t("attach.pasted"),
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          file: storedName(id, file.name || "capture.png"),
+          createdAt: now(),
+          author: { host: hostRef.current },
+        };
+        await backend.writeAttachment(attachmentFilePath(attachment, card.boardId), await readAsBase64(file));
+        setData((d) => ({ ...d, attachments: { ...d.attachments, [card.id]: [...(d.attachments[card.id] ?? []), attachment] } }));
+        writeJson(attachmentMetaPath(attachment, card.boardId), attachment);
+      },
+
+      removeAttachment(attachment: Attachment, boardId: string) {
+        setData((d) => ({
+          ...d,
+          attachments: { ...d.attachments, [attachment.cardId]: (d.attachments[attachment.cardId] ?? []).filter((a) => a.id !== attachment.id) },
+        }));
+        removePath(attachmentMetaPath(attachment, boardId));
+        removePath(attachmentFilePath(attachment, boardId));
       },
 
       addComment(card: Card, text: string) {

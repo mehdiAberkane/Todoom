@@ -27,6 +27,11 @@ export interface Backend {
   remove(path: string): Promise<void>;
   /** Fires when another machine changed the data folder. */
   onChange(cb: () => void): Promise<() => void>;
+  /** Writes an attached file once (base64), next to its card. */
+  writeAttachment(path: string, base64: string): Promise<void>;
+  readAttachment(path: string): Promise<string>;
+  /** Shows the attached file in the system's file manager. */
+  revealAttachment(path: string): Promise<void>;
   /** Language of the messages the backend itself writes (refusals, errors). */
   setLanguage(lang: "fr" | "en"): Promise<void>;
 }
@@ -46,10 +51,22 @@ const tauriBackend: Backend = {
   remove: (path) => invoke("remove_path", { path }),
   onChange: (cb) => listen("todoom://changed", () => cb()),
   setLanguage: (lang) => invoke("set_language", { lang }),
+  writeAttachment: (path, data) => invoke("write_attachment", { path, data }),
+  readAttachment: (path) => invoke<string>("read_attachment", { path }),
+  revealAttachment: (path) => invoke("reveal_attachment", { path }),
 };
 
 // Lets the UI run in a plain browser (vite dev) with the same file layout kept in localStorage.
 const FS_KEY = "todoom-fs";
+// Attached files, kept apart: they are never part of a load.
+const ATTACH_KEY = "todoom-attachments";
+const readAttachments = (): Record<string, string> => {
+  try {
+    return JSON.parse(localStorage.getItem(ATTACH_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+};
 
 function readFs(): Record<string, string> {
   try {
@@ -86,10 +103,12 @@ const browserBackend: Backend = {
   },
   remove: async (path) => {
     const fs = readFs();
-    for (const key of Object.keys(fs)) {
-      if (key === path || key.startsWith(path + "/")) delete fs[key];
-    }
+    const files = readAttachments();
+    const under = (key: string) => key === path || key.startsWith(path + "/");
+    for (const key of Object.keys(fs)) if (under(key)) delete fs[key];
+    for (const key of Object.keys(files)) if (under(key)) delete files[key];
     writeFs(fs);
+    localStorage.setItem(ATTACH_KEY, JSON.stringify(files));
   },
   onChange: async (cb) => {
     const handler = (e: StorageEvent) => e.key === FS_KEY && cb();
@@ -97,6 +116,18 @@ const browserBackend: Backend = {
     return () => window.removeEventListener("storage", handler);
   },
   setLanguage: async () => {},
+  writeAttachment: async (path, data) => {
+    const files = readAttachments();
+    if (path in files) throw new Error(`${path} existe déjà`);
+    files[path] = data;
+    localStorage.setItem(ATTACH_KEY, JSON.stringify(files));
+  },
+  readAttachment: async (path) => {
+    const data = readAttachments()[path];
+    if (data === undefined) throw new Error(`${path} introuvable`);
+    return data;
+  },
+  revealAttachment: async () => {},
 };
 
 export const isTauri = "__TAURI_INTERNALS__" in window;

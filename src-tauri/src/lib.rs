@@ -121,10 +121,32 @@ enum Access {
 /// The only paths the UI may write or delete, relative to the data folder: the
 /// files Todoom itself produces. Anything else is refused, so the commands can't
 /// be turned into "write or delete any file" even from injected script.
+fn is_id(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Name of an attached file, as the UI makes it: `<id>-<cleaned name>`. Never a
+/// JSON file (those are loaded as data), never hidden, no path in it.
+fn is_attachment_name(s: &str) -> bool {
+    s.len() <= 160
+        && s.split_once('-').is_some_and(|(id, rest)| is_id(id) && !rest.is_empty())
+        && !s.starts_with('.')
+        && !s.contains("..")
+        && !s.to_ascii_lowercase().ends_with(".json")
+        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// An attached file: boards/<board>/attachments/<card>/<id>-<name>.
+fn is_attachment(rel: &str) -> bool {
+    matches!(rel.split('/').collect::<Vec<_>>().as_slice(),
+        ["boards", board, "attachments", card, file] if is_id(board) && is_id(card) && is_attachment_name(file))
+}
+
+/// Largest attached file: Google Drive copies every one of them to every computer.
+const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
+
 fn allowed(rel: &str, access: Access) -> bool {
-    let id = |s: &str| {
-        !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    };
+    let id = is_id;
     let json_id = |s: &str| s.strip_suffix(".json").is_some_and(id);
     let parts: Vec<&str> = rel.split('/').collect();
     match (access, parts.as_slice()) {
@@ -136,8 +158,13 @@ fn allowed(rel: &str, access: Access) -> bool {
         (_, ["boards", board, "comments", card, file]) => id(board) && id(card) && json_id(file),
         // History: one file per card and per computer (or tool), only ever rewritten by it.
         (Access::Write, ["boards", board, "history", card, file]) => id(board) && id(card) && json_id(file),
-        // A card deleted for good takes its comments and history with it.
-        (Access::Remove, ["boards", board, "comments" | "history", card]) => id(board) && id(card),
+        // An attachment's description; the attached file itself goes through write_attachment.
+        (Access::Write, ["boards", board, "attachments", card, file]) => id(board) && id(card) && json_id(file),
+        (Access::Remove, ["boards", board, "attachments", card, file]) => {
+            id(board) && id(card) && (json_id(file) || is_attachment_name(file))
+        }
+        // A card deleted for good takes its comments, history and attachments with it.
+        (Access::Remove, ["boards", board, "comments" | "history" | "attachments", card]) => id(board) && id(card),
         (Access::Remove, ["boards", board]) => id(board),
         _ => false,
     }
@@ -556,6 +583,85 @@ async fn remove_path(app: AppHandle, path: String) -> Result<(), String> {
     logged(what, result)
 }
 
+fn refuse_attachment(rel: &str) -> Result<(), String> {
+    if is_attachment(rel) {
+        Ok(())
+    } else {
+        Err(tr(format!("Pièce jointe refusée : {rel}"), format!("Attachment refused: {rel}")))
+    }
+}
+
+/// Writes an attached file once: an existing one is never overwritten.
+fn store_attachment(root: &Path, rel: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    refuse_attachment(rel)?;
+    if bytes.len() > MAX_ATTACHMENT_BYTES {
+        return Err(tr(
+            format!("Fichier trop gros ({} Mo, 10 Mo au plus)", bytes.len() / (1024 * 1024)),
+            format!("File too big ({} MB, 10 MB at most)", bytes.len() / (1024 * 1024)),
+        ));
+    }
+    let target = resolve(root, rel)?;
+    if target.exists() {
+        return Err(tr(format!("{rel} existe déjà"), format!("{rel} already exists")));
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let tmp = target.with_extension("part");
+    fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &target).map_err(|e| e.to_string())?;
+    Ok(target)
+}
+
+fn load_attachment(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
+    refuse_attachment(rel)?;
+    let target = resolve(root, rel)?;
+    let len = fs::metadata(&target).map_err(|e| e.to_string())?.len();
+    if len as usize > MAX_ATTACHMENT_BYTES {
+        return Err(tr(format!("{rel} est trop gros pour être affiché"), format!("{rel} is too big to show")));
+    }
+    fs::read(&target).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn write_attachment(app: AppHandle, path: String, data: String) -> Result<(), String> {
+    use base64::Engine;
+    let what = format!("pièce jointe {path}");
+    let result = blocking(app, move |app| {
+        let state = app.state::<AppState>();
+        let root = data_root(&state)?;
+        let bytes = base64::engine::general_purpose::STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
+        let target = store_attachment(&root, &path, &bytes)?;
+        remember(&state, &root, &target, false);
+        Ok(())
+    })
+    .await;
+    logged(what, result)
+}
+
+#[tauri::command]
+async fn read_attachment(app: AppHandle, path: String) -> Result<String, String> {
+    use base64::Engine;
+    blocking(app, move |app| {
+        let root = data_root(&app.state::<AppState>())?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(load_attachment(&root, &path)?))
+    })
+    .await
+}
+
+/// Shows the attached file in the system's file manager. Attachments are never
+/// opened from Todoom: one could be a program.
+#[tauri::command]
+async fn reveal_attachment(app: AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    blocking(app, move |app| {
+        refuse_attachment(&path)?;
+        let target = resolve(&data_root(&app.state::<AppState>())?, &path)?;
+        app.opener().reveal_item_in_dir(target).map_err(|e| e.to_string())
+    })
+    .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -598,7 +704,10 @@ pub fn run() {
             hostname,
             load_all,
             write_file,
-            remove_path
+            remove_path,
+            write_attachment,
+            read_attachment,
+            reveal_attachment
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -730,6 +839,44 @@ mod tests {
         ] {
             assert!(!allowed(no, Access::Remove), "{no}");
         }
+    }
+
+    #[test]
+    fn attachments_are_named_files_in_their_card_folder_only() {
+        for ok in ["boards/b1/attachments/c1/mw1-capture.png", "boards/b1/attachments/c1/mw1-rapport_final.v2.pdf"] {
+            assert!(is_attachment(ok), "{ok}");
+            assert!(allowed(ok, Access::Remove), "{ok}");
+        }
+        assert!(allowed("boards/b1/attachments/c1/mw1.json", Access::Write));
+        assert!(allowed("boards/b1/attachments/c1", Access::Remove));
+        for no in [
+            "boards/b1/attachments/c1/mw1-data.json",
+            "boards/b1/attachments/c1/capture.png",
+            "boards/b1/attachments/c1/.hidden",
+            "boards/b1/attachments/c1/mw1-..png",
+            "boards/b1/attachments/c1/mw1-a b.png",
+            "boards/b1/attachments/c1/x/mw1-a.png",
+            "boards/b1/attachments/../cards/mw1-a.png",
+            "boards/b1/cards/mw1-a.png",
+        ] {
+            assert!(!is_attachment(no), "{no}");
+        }
+        assert!(!allowed("boards/b1/attachments/c1/mw1-capture.png", Access::Write), "binary files go through write_attachment");
+    }
+
+    #[test]
+    fn an_attachment_is_written_once_within_the_size_limit_and_read_back() {
+        let root = std::env::temp_dir().join(format!("todoom-attach-{}", std::process::id()));
+        let rel = "boards/b1/attachments/c1/mw1-capture.png";
+        let bytes = [0x89u8, b'P', b'N', b'G', 0, 1, 2, 255];
+        store_attachment(&root, rel, &bytes).unwrap();
+        assert_eq!(load_attachment(&root, rel).unwrap(), bytes);
+        assert!(store_attachment(&root, rel, &bytes).is_err(), "never overwritten");
+        let big = vec![0u8; MAX_ATTACHMENT_BYTES + 1];
+        assert!(store_attachment(&root, "boards/b1/attachments/c1/mw2-big.bin", &big).is_err());
+        assert!(store_attachment(&root, "boards/b1/cards/mw3-x.png", &bytes).is_err());
+        assert!(load_attachment(&root, "boards/b1/board.json").is_err());
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

@@ -18,6 +18,7 @@ interface Props {
   blockers: Map<string, string[]>;
   boardKey?: string;
   comments: Record<string, unknown[]>;
+  attachments: Record<string, unknown[]>;
   unsavedIds: ReadonlySet<string>;
   onOpen: (id: string) => void;
   selectedIds: ReadonlySet<string>;
@@ -31,7 +32,7 @@ interface Props {
   onUpdate: (patch: Partial<Column>) => void;
 }
 
-export function ColumnView({ column, cards, labels, priorities, blockers, boardKey, comments, unsavedIds, onOpen, selectedIds, onSelect, onAdd, onRename, onDelete, onSort, total, onUpdate }: Props) {
+export function ColumnView({ column, cards, labels, priorities, blockers, boardKey, comments, attachments, unsavedIds, onOpen, selectedIds, onSelect, onAdd, onRename, onDelete, onSort, total, onUpdate }: Props) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `col:${column.id}`,
   });
@@ -88,6 +89,7 @@ export function ColumnView({ column, cards, labels, priorities, blockers, boardK
               priorities={priorities}
               blockers={blockers.get(c.id)}
               commentCount={comments[c.id]?.length ?? 0}
+              attachmentCount={attachments[c.id]?.length ?? 0}
               unsaved={unsavedIds.has(c.id)}
               selected={selectedIds.has(c.id)}
               onOpen={onOpen}

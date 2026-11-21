@@ -17,6 +17,16 @@ const fr = {
 
   // Sidebar
   "status.loading": "Chargement…",
+  "field.attachments": "Pièces jointes",
+  "attach.add": "📎 joindre",
+  "attach.addTitle": "Joindre des fichiers (ou coller une capture, ou déposer des fichiers sur la fiche)",
+  "attach.empty": "Coller une capture (Ctrl + V) ou déposer un fichier ici",
+  "attach.reveal": "Afficher dans le dossier",
+  "attach.remove": "Supprimer la pièce jointe",
+  "attach.tooBig": "« {name} » dépasse 10 Mo : Drive le copierait sur chaque PC",
+  "attach.pasted": "capture.png",
+  "attach.drop": "Déposer pour joindre",
+  "card.attachmentsTitle": "Pièces jointes",
   "tpl.simple": "Modèle : simple",
   "tpl.dev": "Modèle : développement",
   "tpl.copy": "Copie de « {name} »",
@@ -400,6 +410,16 @@ const en: Record<Key, string> = {
 
   // Sidebar
   "status.loading": "Loading…",
+  "field.attachments": "Attachments",
+  "attach.add": "📎 attach",
+  "attach.addTitle": "Attach files (or paste a screenshot, or drop files on the card)",
+  "attach.empty": "Paste a screenshot (Ctrl + V) or drop a file here",
+  "attach.reveal": "Show in its folder",
+  "attach.remove": "Delete the attachment",
+  "attach.tooBig": "\"{name}\" is over 10 MB: Drive would copy it to every computer",
+  "attach.pasted": "screenshot.png",
+  "attach.drop": "Drop to attach",
+  "card.attachmentsTitle": "Attachments",
   "tpl.simple": "Template: simple",
   "tpl.dev": "Template: development",
   "tpl.copy": "Copy of \"{name}\"",

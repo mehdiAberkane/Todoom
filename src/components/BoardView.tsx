@@ -32,7 +32,7 @@ import { BoardContext, contextSummary } from "./BoardContext";
 import { BulkBar } from "./BulkBar";
 import { LanesView } from "./LanesView";
 import { loadLaneMode, saveLaneMode, type LaneMode } from "../lib/lanes";
-import type { Column } from "../types";
+import type { Attachment, Column } from "../types";
 import { focusCard, focusedCardId, isTyping, modalOpen, nextCard } from "../lib/keys";
 import { movedTogether, toggled, withRange } from "../lib/selection";
 import { DUE_FILTERS, loadFilter, matchesDue, saveFilter, sortCards, type DueFilter, type SortKey } from "../lib/sorting";
@@ -57,6 +57,7 @@ export function BoardView({
   comments,
   history,
   agents = [],
+  attachments,
 }: {
   board: Board;
   cards: Card[];
@@ -76,6 +77,8 @@ export function BoardView({
   history: Record<string, Record<string, HistoryEvent[]>>;
   /** Agents watching this board. */
   agents?: AgentStatus[];
+  /** Attached files by card id. */
+  attachments: Record<string, Attachment[]>;
 }) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
@@ -540,6 +543,7 @@ export function BoardView({
                 blockers={blockers}
                 boardKey={board.key}
                 comments={comments}
+                attachments={attachments}
                 unsavedIds={unsavedIds}
                 onOpen={openFromBoard}
                 selectedIds={selection}
@@ -598,6 +602,12 @@ export function BoardView({
             onLink: (type, target) => actions.linkCards(openCard, type, target),
             onUnlink: (targetId) => actions.unlinkCards(openCard, index.get(targetId)?.card, targetId),
             onOpen: openLinked,
+          }}
+          attachments={{
+            attachments: attachments[openCard.id] ?? [],
+            boardId: board.id,
+            onAdd: (file) => actions.addAttachment(openCard, file),
+            onRemove: (a) => actions.removeAttachment(a, board.id),
           }}
           activity={{
             comments: comments[openCard.id] ?? [],
