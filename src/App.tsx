@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
-import { backend } from "./lib/backend";
+import { backend, isTauri } from "./lib/backend";
 import { expiredBoards, useTodoom } from "./lib/store";
 import { indexCards } from "./lib/links";
 import { deriveKey, numbering } from "./lib/shortid";
@@ -19,6 +19,10 @@ import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
 import { CalendarPage } from "./components/CalendarPage";
 import { UndoToast } from "./components/UndoToast";
+import { CaptureForm } from "./components/QuickCapture";
+import { Modal } from "./components/ui";
+import { CAPTURE_BOARDS, CAPTURE_HELLO, CAPTURE_SEND, captureBoard, captureTitle, topOrder, type CaptureTarget } from "./lib/capture";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { dailySnapshot } from "./lib/snapshotter";
 import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
@@ -80,13 +84,18 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const [showSearch, setShowSearch] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showCapture, setShowCapture] = useState(false);
 
   // App-wide keys: Ctrl + Shift + F searches every board, Ctrl + K opens the palette
   // (Cmd on a Mac); ? shows the shortcuts and / searches, unless the user is typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.shiftKey && e.key.toLowerCase() === "f") {
+      if (mod && e.altKey && !e.shiftKey && e.key.toLowerCase() === "n") {
+        // Quick capture, inside the app (outside it, the same keys open the capture window).
+        e.preventDefault();
+        setShowCapture(true);
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setShowSearch(true);
       } else if (mod && !e.shiftKey && e.key.toLowerCase() === "k") {
@@ -137,6 +146,30 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         for (const card of dueForArchive(board, data.cards[board.id] ?? [], (id) => mergedHistory(data.history[id]))) actions.archiveCard(card);
     });
   }, [activeBoards, data.cards, data.history, incomplete, actions, hourTick]);
+  // Quick capture: an idea becomes a card at the top of the first column of the chosen board.
+  const target = captureBoard(activeBoards, data.settings.captureBoard);
+  const captureTarget: CaptureTarget = { boards: activeBoards.filter((b) => b.columns.length).map((b) => ({ id: b.id, name: b.name })), boardId: target?.id ?? null };
+  const capture = (boardId: string, title: string) => {
+    const b = activeBoards.find((x) => x.id === boardId);
+    const column = b?.columns[0];
+    if (!b || !column) return;
+    const orders = (data.cards[b.id] ?? []).filter((c) => c.columnId === column.id && !c.archivedAt).map((c) => c.order);
+    actions.newCard(b, column.id, title, topOrder(orders));
+  };
+  // The capture window asks for the boards, then sends the idea.
+  const captureRef = useRef({ target: captureTarget, capture });
+  captureRef.current = { target: captureTarget, capture };
+  useEffect(() => {
+    if (!isTauri || incomplete) return;
+    const offs = [
+      listen(CAPTURE_HELLO, () => emitTo("capture", CAPTURE_BOARDS, captureRef.current.target).catch(() => {})),
+      listen<{ boardId: string; title: string }>(CAPTURE_SEND, (e) => {
+        const title = captureTitle(e.payload.title);
+        if (title) captureRef.current.capture(e.payload.boardId, title);
+      }),
+    ];
+    return () => offs.forEach((off) => off.then((f) => f()));
+  }, [incomplete]);
   // Today's snapshot of the data folder, once the folder is read in full; checked again every hour.
   const snapshotKeep = data.settings.snapshotKeep;
   useEffect(() => {
@@ -205,6 +238,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       ? [{ id: "new", label: t("palette.newCard"), hint: "N", run: () => window.dispatchEvent(new Event("todoom:new-card")) }]
       : []),
     { id: "search", label: t("palette.searchAll"), hint: "Ctrl + Maj + F", run: () => setShowSearch(true) },
+    { id: "capture", label: t("palette.capture"), hint: "Ctrl + Alt + N", run: () => setShowCapture(true) },
     { id: "mywork", label: t("palette.myWork"), run: () => setPage("myWork") },
     { id: "calendar", label: t("palette.calendar"), run: () => setPage("calendar") },
     { id: "metrics", label: t("palette.metrics"), run: () => openMetrics(board && !page ? board.id : "all") },
@@ -306,6 +340,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             onSave={actions.saveSettings}
             boards={activeBoards}
             onRestored={reload}
+            captureBoardId={target?.id ?? null}
             dataDir={dataDir}
             onChangeDataDir={onSettings}
             version={updater.version}
@@ -361,6 +396,19 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       )}
       {showHelp && <ShortcutsHelp onClose={() => setShowHelp(false)} />}
       <UndoToast lastAction={lastAction} onUndo={actions.undo} />
+      {showCapture && (
+        <Modal onClose={() => setShowCapture(false)} className="capture-modal">
+          <h3>{t("capture.title")}</h3>
+          <CaptureForm
+            target={captureTarget}
+            onCancel={() => setShowCapture(false)}
+            onSubmit={(boardId, title) => {
+              capture(boardId, title);
+              setShowCapture(false);
+            }}
+          />
+        </Modal>
+      )}
       {showSearch && (
         <GlobalSearch boards={data.boards} cards={data.cards} comments={data.comments} onOpen={openElsewhere} onClose={() => setShowSearch(false)} />
       )}

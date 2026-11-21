@@ -63,6 +63,7 @@ const SETTINGS: Check[] = [
   ["theme", optional((v) => v === "dark" || v === "light" || v === "system")],
   ["compact", optional(isBoolean)],
   ["snapshotKeep", optional(isNumber)],
+  ["captureBoard", optional(isString)],
   ["updatedAt", optional(isString)],
 ];
 

@@ -16,6 +16,8 @@ interface Props {
   boards: Board[];
   /** After a snapshot is restored: read the folder again. */
   onRestored: () => void;
+  /** The board the quick capture adds to now. */
+  captureBoardId: string | null;
   dataDir: string;
   onChangeDataDir: () => void;
   version: string | null;
@@ -33,6 +35,7 @@ export function SettingsPage({
   onSave,
   boards,
   onRestored,
+  captureBoardId,
   dataDir,
   onChangeDataDir,
   version,
@@ -235,6 +238,25 @@ export function SettingsPage({
             <p className="hint">{t("settings.dimHint")}</p>
             {error && <div className="error-box">{error}</div>}
           </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>{t("capture.title")}</h2>
+        <p className="muted">{t("capture.intro")}</p>
+        <div className="settings-row">
+          <span className="muted">{t("capture.board")}</span>
+          <select
+            className="settings-select"
+            value={captureBoardId ?? ""}
+            onChange={(e) => onSave({ ...settings, backgroundDim: dim, captureBoard: e.target.value })}
+          >
+            {boards.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 

@@ -804,6 +804,77 @@ async fn save_export(app: AppHandle, path: String, content: String) -> Result<()
     blocking(app, move |_| fs::write(export_target(&path)?, content).map_err(|e| e.to_string())).await
 }
 
+// ---- Quick capture ---------------------------------------------------------
+// A small window to note an idea from anywhere: a global shortcut, or the
+// Todoom icon in the notification area. It only sends the title to the main
+// window, which makes the card like any other (number, history, undo).
+
+/// Ctrl + Alt + N, Cmd + Option + N on a Mac.
+const CAPTURE_SHORTCUT: &str = "CommandOrControl+Alt+N";
+
+fn open_capture(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("capture") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    let built = tauri::WebviewWindowBuilder::new(app, "capture", tauri::WebviewUrl::default())
+        .title(tr("Todoom · capture rapide".into(), "Todoom · quick capture".into()))
+        .inner_size(480.0, 190.0)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .center()
+        .focused(true)
+        .build();
+    if let Err(e) = built {
+        log::warn!("fenêtre de capture impossible : {e}");
+    }
+}
+
+fn show_main(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// The icon in the notification area (menu bar on a Mac): capture, show, quit.
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    let capture = MenuItem::with_id(app, "capture", tr("Capture rapide".into(), "Quick capture".into()), true, Some(CAPTURE_SHORTCUT))?;
+    let show = MenuItem::with_id(app, "show", tr("Afficher Todoom".into(), "Show Todoom".into()), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", tr("Quitter".into(), "Quit".into()), true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&capture, &show, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("todoom")
+        .tooltip("Todoom")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "capture" => open_capture(app),
+            "show" => show_main(app),
+            // Closing the main window goes through its guard (changes not written yet).
+            "quit" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.close();
+                }
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_main(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -833,6 +904,26 @@ pub fn run() {
             *state.config.lock().unwrap() = load_config(&handle);
             log::info!("Todoom {} démarré", app.package_info().version);
             start_watcher(&handle, &state);
+            // Quick capture: a shortcut taken by another program, or no notification
+            // area, only loses that way in; the app runs as usual.
+            {
+                use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+                let shortcuts = tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(|app, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            open_capture(app);
+                        }
+                    })
+                    .build();
+                if let Err(e) = app.handle().plugin(shortcuts) {
+                    log::warn!("raccourcis globaux indisponibles : {e}");
+                } else if let Err(e) = app.global_shortcut().register(CAPTURE_SHORTCUT) {
+                    log::warn!("raccourci {CAPTURE_SHORTCUT} indisponible : {e}");
+                }
+            }
+            if let Err(e) = build_tray(app) {
+                log::warn!("icône de notification impossible : {e}");
+            }
             // Shows which build is running, e.g. "Todoom v0.2.1".
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_title(&format!("Todoom v{}", app.package_info().version));

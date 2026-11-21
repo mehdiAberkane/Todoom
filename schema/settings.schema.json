@@ -80,6 +80,10 @@
       "maximum": 365,
       "description": "Daily snapshots of the data folder each computer keeps (on its own disk, outside the folder). Default 14."
     },
+    "captureBoard": {
+      "type": "string",
+      "description": "Id of the board the quick capture adds ideas to. Default: a board named « Global », else the first board."
+    },
     "updatedAt": {
       "type": "string"
     }

@@ -196,6 +196,8 @@ export interface AppSettings {
   compact?: boolean;
   /** Daily snapshots of the data folder kept on each computer; absent means 14. */
   snapshotKeep?: number;
+  /** Board the quick capture adds ideas to; absent means one named « Global », else the first. */
+  captureBoard?: string;
   updatedAt: string;
 }
 

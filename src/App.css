@@ -910,3 +910,15 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .import-board .link:hover { color: var(--text); }
 .import-board .check-failed { font-size: 12px; margin: 4px 0 0; }
 .export-menu .sort-options { min-width: 260px; }
+
+/* Quick capture: the small window, and the same form inside the app. */
+.capture-page body { overflow: hidden; }
+.capture-window { height: 100vh; padding: 16px; display: flex; flex-direction: column; justify-content: center; background: var(--panel); }
+.capture-form { display: flex; flex-direction: column; gap: 10px; }
+.capture-input { font-size: 16px; padding: 10px 12px; }
+.capture-row { display: flex; align-items: center; gap: 10px; }
+.capture-row select { max-width: 180px; }
+.capture-hint { flex: 1; font-size: 12px; text-align: right; }
+.capture-sent { text-align: center; font-size: 15px; color: var(--ok-text); }
+.capture-modal { width: min(520px, calc(100vw - 32px)); }
+.capture-modal h3 { margin: 0 0 12px; }

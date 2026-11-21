@@ -19,7 +19,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 notify-debouncer-mini = "0.6"
 gethostname = "1"
@@ -32,6 +32,7 @@ log = "0.4"
 tauri-plugin-opener = "2"
 base64 = "0.22"
 tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

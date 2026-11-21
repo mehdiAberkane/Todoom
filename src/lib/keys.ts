@@ -49,6 +49,7 @@ export const SHORTCUTS: [string, string][] = [
   ["E, Entrée", "keys.edit"],
   ["A", "keys.archive"],
   ["Ctrl + Z", "keys.undo"],
+  ["Ctrl + Alt + N", "keys.capture"],
   ["Ctrl + clic, Maj + clic", "keys.select"],
   ["Ctrl + Entrée", "keys.save"],
   ["Échap", "keys.escape"],

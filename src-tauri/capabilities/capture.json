@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "The quick capture window: it only talks to the main window and closes itself.",
+  "windows": [
+    "capture"
+  ],
+  "permissions": [
+    "core:event:default",
+    "core:window:allow-close",
+    "core:window:allow-set-focus"
+  ]
+}
