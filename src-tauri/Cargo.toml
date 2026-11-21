@@ -1,6 +1,6 @@
 [package]
 name = "todoom"
-version = "0.9.0"
+version = "0.10.0"
 description = "Todoom - gestion de tickets kanban"
 authors = ["devsecops-force"]
 license = "MIT"
