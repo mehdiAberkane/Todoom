@@ -33,6 +33,7 @@ import { BulkBar } from "./BulkBar";
 import { LanesView } from "./LanesView";
 import { loadLaneMode, saveLaneMode, type LaneMode } from "../lib/lanes";
 import type { Column } from "../types";
+import { focusCard, focusedCardId, isTyping, modalOpen, nextCard } from "../lib/keys";
 import { movedTogether, toggled, withRange } from "../lib/selection";
 import { DUE_FILTERS, loadFilter, matchesDue, saveFilter, sortCards, type DueFilter, type SortKey } from "../lib/sorting";
 import { AgentStatusChips } from "./AgentStatus";
@@ -98,6 +99,10 @@ export function BoardView({
   }, [board.id, query, labelFilter, priorityFilter, dueFilter]);
   const priorities = prioritiesOf(board);
   const [openCardId, setOpenCardId] = useState<string | null>(initialOpenCardId);
+  // A card asked for while this board is already shown (search, palette, link): open it too.
+  useEffect(() => {
+    if (initialOpenCardId) setOpenCardId(initialOpenCardId);
+  }, [initialOpenCardId]);
   // Cards selected with Ctrl / Shift + click, and the last one clicked, where a Shift range starts.
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchor = useRef<string | null>(null);
@@ -341,6 +346,62 @@ export function BoardView({
     },
     clear: clearSelection,
   };
+
+  // Board keys: N new card, E open, A archive, arrows from card to card.
+  // Read through a ref, so the listener is set once and sees the latest board.
+  const keys = useRef({ startCard: () => {}, open: (_id: string) => {}, archive: (_id: string) => {}, columns: [] as string[][], dragging: false, lanes: false, bulkArchive: () => {}, selected: 0 });
+  keys.current = {
+    startCard,
+    open: openFromBoard,
+    archive: (id: string) => {
+      const card = cardById.get(id);
+      if (card) actions.archiveCard(card);
+    },
+    columns: board.columns.filter((c) => !c.collapsed).map((c) => lists[c.id] ?? []),
+    dragging: !!activeId,
+    lanes: !!laneMode,
+    bulkArchive: bulk.archive,
+    selected: selected.length,
+  };
+  useEffect(() => {
+    const onNew = () => keys.current.startCard();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || modalOpen()) return;
+      const k = keys.current;
+      const focused = focusedCardId();
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (key === "n") {
+        e.preventDefault();
+        k.startCard();
+      } else if (key === "e" && focused) {
+        e.preventDefault();
+        k.open(focused);
+      } else if (key === "a" && (k.selected || focused)) {
+        e.preventDefault();
+        if (k.selected) k.bulkArchive();
+        else if (focused) {
+          // The card next to it takes the focus, so A can be pressed again.
+          const after = (["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"] as const)
+            .map((dir) => nextCard(k.columns, focused, dir))
+            .find((id) => id && id !== focused);
+          k.archive(focused);
+          setTimeout(() => focusCard(after), 50);
+        }
+      } else if (key.startsWith("Arrow") && !k.dragging && !k.lanes) {
+        const target = nextCard(k.columns, focused, key as "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight");
+        if (target) {
+          e.preventDefault();
+          focusCard(target);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("todoom:new-card", onNew);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("todoom:new-card", onNew);
+    };
+  }, []);
 
   const overdue = cards.filter((c) => dueStatus(c.due) === "overdue").length;
   // An archived card opens too (from the search, or a link): its editor offers to put it back.

@@ -28,6 +28,7 @@ interface Props {
   settingsOpen: boolean;
   myWorkOpen: boolean;
   onOpenSearch: () => void;
+  onShowKeys: () => void;
   myWorkCount: number;
   onOpenMyWork: () => void;
   onOpenSettings: () => void;
@@ -147,6 +148,9 @@ export function Sidebar(props: Props) {
             onClose={() => setShowTrash(false)}
           />
         )}
+        <button className="settings-link" onClick={props.onShowKeys} title={t("sidebar.keysTitle")}>
+          ⌨ ?
+        </button>
         <button className={`settings-link ${props.settingsOpen ? "active" : ""}`} onClick={props.onOpenSettings}>
           {t("sidebar.settings")}
         </button>

@@ -14,6 +14,8 @@ import { Setup } from "./components/Setup";
 import { SettingsPage } from "./components/SettingsPage";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 import { GlobalSearch } from "./components/GlobalSearch";
+import { CommandPalette, ShortcutsHelp, type Command } from "./components/CommandPalette";
+import { isTyping, modalOpen } from "./lib/keys";
 
 const PRESENCE_WINDOW_MS = 3 * 60_000;
 
@@ -58,13 +60,30 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const [showSettings, setShowSettings] = useState(false);
   const [showMyWork, setShowMyWork] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
-  // Ctrl + Shift + F (Cmd on a Mac) searches every board, from anywhere.
+  // App-wide keys: Ctrl + Shift + F searches every board, Ctrl + K opens the palette
+  // (Cmd on a Mac); ? shows the shortcuts and / searches, unless the user is typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setShowSearch(true);
+      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowPalette((open) => !open);
+      } else if (!mod && !e.altKey && !isTyping(e.target) && !modalOpen()) {
+        if (e.key === "?") {
+          e.preventDefault();
+          setShowHelp(true);
+        } else if (e.key === "/") {
+          e.preventDefault();
+          const field = document.querySelector<HTMLInputElement>(".board-tools .search");
+          if (field) field.focus();
+          else setShowSearch(true);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -126,6 +145,17 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     if (linkedCard) setLinkedCard(null);
   }, [linkedCard]);
 
+  const commands: Command[] = [
+    ...(board && !showSettings && !showMyWork
+      ? [{ id: "new", label: t("palette.newCard"), hint: "N", run: () => window.dispatchEvent(new Event("todoom:new-card")) }]
+      : []),
+    { id: "search", label: t("palette.searchAll"), hint: "Ctrl + Maj + F", run: () => setShowSearch(true) },
+    { id: "mywork", label: t("palette.myWork"), run: () => (setShowMyWork(true), setShowSettings(false)) },
+    ...activeBoards.map((b) => ({ id: `board:${b.id}`, label: t("palette.goTo", { name: b.name }), hint: b.key, run: () => openBoard(b.id) })),
+    { id: "settings", label: t("palette.settings"), run: () => (setShowSettings(true), setShowMyWork(false)) },
+    { id: "help", label: t("palette.help"), hint: "?", run: () => setShowHelp(true) },
+  ];
+
   const myWorkCount = useMemo(
     () => myWork(activeBoards, data.cards, myWorkColumns(data.settings)).reduce((n, g) => n + g.columns.reduce((m, c) => m + c.cards.length, 0), 0),
     [activeBoards, data.cards, data.settings],
@@ -155,6 +185,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         myWorkCount={myWorkCount}
         onOpenMyWork={() => (setShowMyWork(true), setShowSettings(false))}
         onOpenSearch={() => setShowSearch(true)}
+        onShowKeys={() => setShowHelp(true)}
         onMove={(movedId, ids) => actions.moveBoard(activeBoards, movedId, ids)}
         onSettings={onSettings}
         status={status}
@@ -227,6 +258,17 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
           </div>
         )}
       </main>
+      {showPalette && (
+        <CommandPalette
+          commands={commands}
+          boards={data.boards}
+          cards={data.cards}
+          comments={data.comments}
+          onOpenCard={openElsewhere}
+          onClose={() => setShowPalette(false)}
+        />
+      )}
+      {showHelp && <ShortcutsHelp onClose={() => setShowHelp(false)} />}
       {showSearch && (
         <GlobalSearch boards={data.boards} cards={data.cards} comments={data.comments} onOpen={openElsewhere} onClose={() => setShowSearch(false)} />
       )}

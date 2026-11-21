@@ -149,6 +149,7 @@ export function CardTile({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`card ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""} ${selected ? "selected" : ""}`}
       aria-selected={selected}
+      data-card-id={card.id}
       {...attributes}
       {...listeners}
       onClick={(e) => {

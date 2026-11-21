@@ -67,6 +67,7 @@ export function LanesView({
                         key={card.id}
                         className={`card ${selectedIds.has(card.id) ? "selected" : ""}`}
                         tabIndex={0}
+                        data-card-id={card.id}
                         onClick={(e) => {
                           if (e.ctrlKey || e.metaKey) onSelect(card.id, false);
                           else if (e.shiftKey) onSelect(card.id, true);
