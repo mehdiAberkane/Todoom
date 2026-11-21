@@ -36,7 +36,7 @@ import { LanesView } from "./LanesView";
 import { loadLaneMode, saveLaneMode, type LaneMode } from "../lib/lanes";
 import type { Attachment, Column } from "../types";
 import { focusCard, focusedCardId, isTyping, modalOpen, nextCard } from "../lib/keys";
-import { movedTogether, toggled, withRange } from "../lib/selection";
+import { blockOrders, dropTogether, movedTogether, toggled, withRange } from "../lib/selection";
 import { DUE_FILTERS, loadFilter, matchesDue, saveFilter, sortCards, type DueFilter, type SortKey } from "../lib/sorting";
 import { AgentStatusChips } from "./AgentStatus";
 import type { AgentStatus } from "../types";
@@ -255,6 +255,18 @@ export function BoardView({
       if (from !== to) list = arrayMove(list, from, to);
     }
 
+    // A selected card takes the other selected cards along: all of them land
+    // where it was dropped, in the order they had on the board.
+    const group = groupOf(cardId);
+    if (group.length > 1) {
+      const together = dropTogether({ ...listsRef.current, [col]: list }, group, cardId, col)[col];
+      for (const [id, order] of blockOrders(together, group, (id) => (group.includes(id) ? undefined : cardById.get(id)?.order))) {
+        const c = cardById.get(id);
+        if (c && (c.columnId !== col || c.order !== order)) actions.saveCard({ ...c, columnId: col, order });
+      }
+      return endDrag();
+    }
+
     const unchanged = card.columnId === col && list.join() === (computed[col] ?? []).join();
     if (!unchanged) {
       const updates = new Map(reorder(list, cardId, (id) => cardById.get(id)?.order));
@@ -266,6 +278,14 @@ export function BoardView({
       }
     }
     endDrag();
+  };
+
+  // The cards a drag of `cardId` moves: the selection, if the card is in it (board order first,
+  // then selected cards a filter hides); else that card alone.
+  const groupOf = (cardId: string): string[] => {
+    if (!selection.has(cardId) || selection.size < 2) return [cardId];
+    const shown = boardOrder.filter((id) => selection.has(id));
+    return [...shown, ...cards.filter((c) => selection.has(c.id) && !shown.includes(c.id)).map((c) => c.id)];
   };
 
   const nextOrder = (columnId: string) =>
@@ -422,11 +442,13 @@ export function BoardView({
   // An archived card opens too (from the search, or a link): its editor offers to put it back.
   const openCard = openCardId ? (cardById.get(openCardId) ?? archived.find((c) => c.id === openCardId)) : undefined;
   const activeCard = activeId?.startsWith(CARD) ? cardById.get(activeId.slice(CARD.length)) : undefined;
+  // How many cards the drag carries: more than one when the dragged card is in the selection.
+  const dragGroup = activeCard && selection.has(activeCard.id) ? selection.size : 0;
   const activeColumn = activeId?.startsWith(COL) ? board.columns.find((c) => c.id === activeId.slice(COL.length)) : undefined;
   const filtering = query.trim() !== "" || labelFilter.length > 0 || priorityFilter.length > 0 || dueFilter !== "";
 
   return (
-    <div className="board">
+    <div className={`board ${dragGroup > 1 ? "group-drag" : ""}`}>
       <header className="board-head">
         <div className="board-title-row">
           <InlineEdit value={board.name} onSave={(name) => actions.saveBoard({ ...board, name })} className="board-title" />
@@ -599,7 +621,11 @@ export function BoardView({
         </div>
         <DragOverlay>
           {activeCard && (
-            <div className={`card overlay ${colorOf(activeCard).className}`} style={colorOf(activeCard).style}>
+            <div
+              className={`card overlay ${colorOf(activeCard).className} ${dragGroup > 1 ? "stacked" : ""}`}
+              style={colorOf(activeCard).style}
+              data-count={dragGroup > 1 ? tn("board.dragCount", dragGroup) : undefined}
+            >
               <CardBody
                 card={activeCard}
                 cardRef={refOf(board, activeCard)}

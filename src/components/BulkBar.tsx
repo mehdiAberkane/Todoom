@@ -22,7 +22,7 @@ export function BulkBar({ board, count, actions }: { board: Board; count: number
 
   return (
     <div className="bulk-bar" role="toolbar" aria-label={t("bulk.title")}>
-      <strong>{tn("bulk.count", count)}</strong>
+      <strong title={t("bulk.dragHint")}>{tn("bulk.count", count)}</strong>
       <select defaultValue="" onChange={pick(actions.move)} aria-label={t("bulk.move")}>
         <option value="" disabled>
           {t("bulk.move")}
