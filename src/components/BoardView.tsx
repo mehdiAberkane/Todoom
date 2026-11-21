@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   closestCenter,
   closestCorners,
@@ -29,6 +29,8 @@ import { CardModal } from "./CardModal";
 import { LabelManager } from "./LabelManager";
 import { ArchiveModal } from "./ArchiveModal";
 import { BoardContext, contextSummary } from "./BoardContext";
+import { BulkBar } from "./BulkBar";
+import { movedTogether, toggled, withRange } from "../lib/selection";
 import { AgentStatusChips } from "./AgentStatus";
 import type { AgentStatus } from "../types";
 import { DangerButton, InlineEdit } from "./ui";
@@ -80,6 +82,9 @@ export function BoardView({
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const priorities = prioritiesOf(board);
   const [openCardId, setOpenCardId] = useState<string | null>(initialOpenCardId);
+  // Cards selected with Ctrl / Shift + click, and the last one clicked, where a Shift range starts.
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const anchor = useRef<string | null>(null);
   const [newCard, setNewCard] = useState<Card | null>(null);
   const [showLabels, setShowLabels] = useState(false);
   const [newColumn, setNewColumn] = useState("");
@@ -278,6 +283,44 @@ export function BoardView({
   const toggleFilter = (labelId: string) =>
     setLabelFilter((f) => (f.includes(labelId) ? f.filter((l) => l !== labelId) : [...f, labelId]));
 
+  // The board's order, column by column: what a Shift range follows and moved cards keep.
+  const boardOrder = board.columns.flatMap((c) => lists[c.id] ?? []);
+  // Cards archived or gone elsewhere drop out of the selection.
+  const selected = cards.filter((c) => selection.has(c.id));
+  const selectCard = (id: string, range: boolean) => {
+    setSelection((s) => (range ? withRange(s, boardOrder, anchor.current, id) : toggled(s, id)));
+    anchor.current = id;
+  };
+  const clearSelection = () => {
+    setSelection(new Set());
+    anchor.current = null;
+  };
+  const openFromBoard = (id: string) => {
+    clearSelection();
+    setOpenCardId(id);
+  };
+  useEffect(() => {
+    if (!selection.size) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".modal") && clearSelection();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selection.size]);
+  const bulk = {
+    move: (columnId: string) =>
+      movedTogether(selected, boardOrder, columnId, nextOrder(columnId)).forEach((c) => actions.saveCard(c)),
+    addLabel: (labelId: string) =>
+      selected.filter((c) => !c.labels.includes(labelId)).forEach((c) => actions.saveCard({ ...c, labels: [...c.labels, labelId] })),
+    removeLabel: (labelId: string) =>
+      selected.filter((c) => c.labels.includes(labelId)).forEach((c) => actions.saveCard({ ...c, labels: c.labels.filter((l) => l !== labelId) })),
+    setPriority: (priority: string | null) =>
+      selected.filter((c) => c.priority !== priority).forEach((c) => actions.saveCard({ ...c, priority })),
+    archive: () => {
+      selected.forEach((c) => actions.archiveCard(c));
+      clearSelection();
+    },
+    clear: clearSelection,
+  };
+
   const overdue = cards.filter((c) => dueStatus(c.due) === "overdue").length;
   // An archived card opens too (from the search, or a link): its editor offers to put it back.
   const openCard = openCardId ? (cardById.get(openCardId) ?? archived.find((c) => c.id === openCardId)) : undefined;
@@ -295,7 +338,7 @@ export function BoardView({
               <InlineEdit value={board.key} onSave={saveKey} />
             </span>
           )}
-          <span className="board-stats">
+          <span className="board-stats" title={t("card.selectHint")}>
             {tn("board.cards", cards.length)}
             {overdue > 0 && <span className="stat-overdue"> · {t("board.overdue", { n: overdue })}</span>}
           </span>
@@ -384,7 +427,9 @@ export function BoardView({
                 boardKey={board.key}
                 comments={comments}
                 unsavedIds={unsavedIds}
-                onOpen={setOpenCardId}
+                onOpen={openFromBoard}
+                selectedIds={selection}
+                onSelect={selectCard}
                 onAdd={(title) => addCard(col.id, title)}
                 onRename={(name) => renameColumn(col.id, name)}
                 onDelete={() => actions.deleteColumn(board, col.id, cards)}
@@ -458,6 +503,7 @@ export function BoardView({
           onManageLabels={() => setShowLabels(true)}
         />
       )}
+      {selected.length > 0 && <BulkBar board={board} count={selected.length} actions={bulk} />}
       {showContext && <BoardContext board={board} onSave={actions.saveBoard} onClose={() => setShowContext(false)} />}
       {showLabels && <LabelManager board={board} onSave={actions.saveBoard} onClose={() => setShowLabels(false)} />}
       {showArchive && (

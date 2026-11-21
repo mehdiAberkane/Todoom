@@ -19,13 +19,15 @@ interface Props {
   comments: Record<string, unknown[]>;
   unsavedIds: ReadonlySet<string>;
   onOpen: (id: string) => void;
+  selectedIds: ReadonlySet<string>;
+  onSelect: (id: string, range: boolean) => void;
   onAdd: (title: string) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onSortByPriority: () => void;
 }
 
-export function ColumnView({ column, cards, labels, priorities, blockers, boardKey, comments, unsavedIds, onOpen, onAdd, onRename, onDelete, onSortByPriority }: Props) {
+export function ColumnView({ column, cards, labels, priorities, blockers, boardKey, comments, unsavedIds, onOpen, selectedIds, onSelect, onAdd, onRename, onDelete, onSortByPriority }: Props) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `col:${column.id}`,
   });
@@ -64,7 +66,11 @@ export function ColumnView({ column, cards, labels, priorities, blockers, boardK
               priorities={priorities}
               blockers={blockers.get(c.id)}
               commentCount={comments[c.id]?.length ?? 0}
-              unsaved={unsavedIds.has(c.id)} onOpen={onOpen} />
+              unsaved={unsavedIds.has(c.id)}
+              selected={selectedIds.has(c.id)}
+              onOpen={onOpen}
+              onSelect={onSelect}
+            />
           ))}
           {cards.length === 0 && <div className="empty-col">{emptyColumnLine(column.id)}</div>}
         </div>

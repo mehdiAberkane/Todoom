@@ -610,3 +610,8 @@ textarea { resize: vertical; }
 .search-empty { padding: 10px; }
 .search-hint { margin-top: 10px; font-size: 11px; }
 .archived-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: rgba(255, 159, 28, 0.1); border: 1px solid rgba(255, 159, 28, 0.35); font-size: 13px; }
+
+/* Several cards selected */
+.card.selected { border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(255, 159, 28, 0.45); }
+.bulk-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: calc(100vw - 32px); padding: 10px 14px; background: var(--panel); border: 1px solid var(--accent-2); border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55); }
+.bulk-bar select { max-width: 160px; }

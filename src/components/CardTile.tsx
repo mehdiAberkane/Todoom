@@ -122,7 +122,9 @@ export function CardTile({
   blockers,
   commentCount,
   unsaved,
+  selected = false,
   onOpen,
+  onSelect,
 }: {
   card: Card;
   cardRef?: string | null;
@@ -132,7 +134,10 @@ export function CardTile({
   commentCount?: number;
   /** The disk hasn't confirmed the last change of this card yet. */
   unsaved: boolean;
+  selected?: boolean;
   onOpen: (id: string) => void;
+  /** Ctrl + click (range false) or Shift + click (range true). */
+  onSelect?: (id: string, range: boolean) => void;
 }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `card:${card.id}`,
@@ -142,10 +147,15 @@ export function CardTile({
     <article
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`card ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""}`}
+      className={`card ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""} ${selected ? "selected" : ""}`}
+      aria-selected={selected}
       {...attributes}
       {...listeners}
-      onClick={() => onOpen(card.id)}
+      onClick={(e) => {
+        if (onSelect && (e.ctrlKey || e.metaKey)) onSelect(card.id, false);
+        else if (onSelect && e.shiftKey) onSelect(card.id, true);
+        else onOpen(card.id);
+      }}
       onKeyDown={(e) => {
         // Enter opens the card; the drag sensor keeps Space and the arrows.
         if (e.key === "Enter" && !isDragging) onOpen(card.id);
