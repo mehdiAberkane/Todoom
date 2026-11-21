@@ -30,6 +30,10 @@ interface Props {
   settingsOpen: boolean;
   myWorkOpen: boolean;
   metricsOpen: boolean;
+  calendarOpen: boolean;
+  /** Cards late or due today. */
+  calendarCount: number;
+  onOpenCalendar: () => void;
   onOpenMetrics: () => void;
   onOpenSearch: () => void;
   onShowKeys: () => void;
@@ -95,6 +99,10 @@ export function Sidebar(props: Props) {
         <button className={`board-link my-work-link ${props.myWorkOpen ? "active" : ""}`} onClick={props.onOpenMyWork} title={t("myWork.linkTitle")}>
           <span className="board-name">{t("myWork.link")}</span>
           {props.myWorkCount > 0 && <span className="count">{props.myWorkCount}</span>}
+        </button>
+        <button className={`board-link my-work-link ${props.calendarOpen ? "active" : ""}`} onClick={props.onOpenCalendar} title={t("calendar.linkTitle")}>
+          <span className="board-name">{t("calendar.link")}</span>
+          {props.calendarCount > 0 && <span className="count urgent">{props.calendarCount}</span>}
         </button>
         <button className={`board-link my-work-link ${props.metricsOpen ? "active" : ""}`} onClick={props.onOpenMetrics} title={t("metrics.linkTitle")}>
           <span className="board-name">{t("metrics.link")}</span>

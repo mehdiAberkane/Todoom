@@ -8,7 +8,7 @@ import { useUpdater } from "./lib/updater";
 import { notifyChanges } from "./lib/notifier";
 import { useCloseGuard } from "./lib/closeGuard";
 import { getLang, setLang, systemLang, t } from "./lib/i18n";
-import { localGet, localSet } from "./lib/utils";
+import { localGet, localSet, toISODate } from "./lib/utils";
 import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
 import { Setup } from "./components/Setup";
@@ -17,6 +17,8 @@ import { defaultTemplate } from "./lib/templates";
 import { useAppearance } from "./lib/theme";
 import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
+import { CalendarPage } from "./components/CalendarPage";
+import { agenda, dueCards } from "./lib/calendar";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { CommandPalette, ShortcutsHelp, type Command } from "./components/CommandPalette";
@@ -62,11 +64,13 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const updater = useUpdater();
   useCloseGuard(unsaved.length, retryNow);
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
-  const [showSettings, setShowSettings] = useState(false);
-  const [showMyWork, setShowMyWork] = useState(false);
-  // The metrics page: "all", or the id of the board it shows; null when closed.
-  const [metrics, setMetrics] = useState<string | null>(null);
-  const openMetrics = (scope: string) => (setMetrics(scope), setShowSettings(false), setShowMyWork(false));
+  // The page shown in place of a board, if any; the metrics page carries its scope ("all" or a board id).
+  const [page, setPage] = useState<null | "settings" | "myWork" | "calendar" | { metrics: string }>(null);
+  const showSettings = page === "settings";
+  const showMyWork = page === "myWork";
+  const showCalendar = page === "calendar";
+  const metrics = page && typeof page === "object" ? page.metrics : null;
+  const openMetrics = (scope: string) => setPage({ metrics: scope });
   const [showSearch, setShowSearch] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -131,9 +135,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
 
   const openBoard = (id: string) => {
     setBoardId(id);
-    setShowSettings(false);
-    setShowMyWork(false);
-    setMetrics(null);
+    setPage(null);
   };
   const { background, backgroundDim } = data.settings;
   const theme = useAppearance(data.settings);
@@ -154,14 +156,15 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   }, [linkedCard]);
 
   const commands: Command[] = [
-    ...(board && !showSettings && !showMyWork && !metrics
+    ...(board && !page
       ? [{ id: "new", label: t("palette.newCard"), hint: "N", run: () => window.dispatchEvent(new Event("todoom:new-card")) }]
       : []),
     { id: "search", label: t("palette.searchAll"), hint: "Ctrl + Maj + F", run: () => setShowSearch(true) },
-    { id: "mywork", label: t("palette.myWork"), run: () => (setShowMyWork(true), setShowSettings(false), setMetrics(null)) },
-    { id: "metrics", label: t("palette.metrics"), run: () => openMetrics(board && !showSettings && !showMyWork && !metrics ? board.id : "all") },
+    { id: "mywork", label: t("palette.myWork"), run: () => setPage("myWork") },
+    { id: "calendar", label: t("palette.calendar"), run: () => setPage("calendar") },
+    { id: "metrics", label: t("palette.metrics"), run: () => openMetrics(board && !page ? board.id : "all") },
     ...activeBoards.map((b) => ({ id: `board:${b.id}`, label: t("palette.goTo", { name: b.name }), hint: b.key, run: () => openBoard(b.id) })),
-    { id: "settings", label: t("palette.settings"), run: () => (setShowSettings(true), setShowMyWork(false), setMetrics(null)) },
+    { id: "settings", label: t("palette.settings"), run: () => setPage("settings") },
     { id: "help", label: t("palette.help"), hint: "?", run: () => setShowHelp(true) },
   ];
 
@@ -169,6 +172,12 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     () => myWork(activeBoards, data.cards, myWorkColumns(data.settings)).reduce((n, g) => n + g.columns.reduce((m, c) => m + c.cards.length, 0), 0),
     [activeBoards, data.cards, data.settings],
   );
+
+  // Late or due today, every board: shown next to the calendar link.
+  const urgentCount = useMemo(() => {
+    const now = agenda(dueCards(activeBoards, data.cards), toISODate(new Date()));
+    return now.overdue.length + now.today.length;
+  }, [activeBoards, data.cards]);
 
   const counts = useMemo(
     () => Object.fromEntries(Object.entries(data.cards).map(([id, cards]) => [id, cards.filter((c) => !c.archivedAt).length])),
@@ -184,18 +193,21 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         cardsByBoard={data.cards}
         onRestore={actions.restoreBoard}
         onPurge={actions.purgeBoard}
-        currentId={showSettings || showMyWork || metrics ? undefined : board?.id}
+        currentId={page ? undefined : board?.id}
         counts={counts}
         onSelect={openBoard}
         onCreate={(name, template) => openBoard(actions.createBoard(name, data.boards, template).id)}
         defaultTemplate={defaultTemplate(data.settings.boardTemplate, activeBoards)}
         settingsOpen={showSettings}
-        onOpenSettings={() => (setShowSettings(true), setShowMyWork(false), setMetrics(null))}
-        myWorkOpen={showMyWork && !showSettings}
-        metricsOpen={!!metrics && !showSettings && !showMyWork}
+        onOpenSettings={() => setPage("settings")}
+        myWorkOpen={showMyWork}
+        metricsOpen={!!metrics}
+        calendarOpen={showCalendar}
+        calendarCount={urgentCount}
+        onOpenCalendar={() => setPage("calendar")}
         onOpenMetrics={() => openMetrics("all")}
         myWorkCount={myWorkCount}
-        onOpenMyWork={() => (setShowMyWork(true), setShowSettings(false), setMetrics(null))}
+        onOpenMyWork={() => setPage("myWork")}
         onOpenSearch={() => setShowSearch(true)}
         onShowKeys={() => setShowHelp(true)}
         onMove={(movedId, ids) => actions.moveBoard(activeBoards, movedId, ids)}
@@ -216,16 +228,23 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         onInstallUpdate={updater.install}
       />
       <main className="main">
-        {metrics && !showSettings && !showMyWork ? (
+        {showCalendar ? (
+          <CalendarPage
+            boards={activeBoards}
+            cards={data.cards}
+            onOpenCard={openElsewhere}
+            onReschedule={(card, due) => actions.saveCard({ ...card, due })}
+          />
+        ) : metrics ? (
           <MetricsPage
             boards={activeBoards}
             cards={data.cards}
             history={data.history}
             scope={metrics}
-            onScope={setMetrics}
+            onScope={openMetrics}
             onOpenCard={openElsewhere}
           />
-        ) : showMyWork && !showSettings ? (
+        ) : showMyWork ? (
           <MyWork
             boards={activeBoards}
             cards={data.cards}
@@ -247,7 +266,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             checkState={updater.checkState}
             onCheckUpdate={updater.checkNow}
             onInstallUpdate={updater.install}
-            onBack={() => setShowSettings(false)}
+            onBack={() => setPage(null)}
           />
         ) : board ? (
           <BoardView
