@@ -20,6 +20,8 @@ import { MetricsPage } from "./components/MetricsPage";
 import { CalendarPage } from "./components/CalendarPage";
 import { agenda, dueCards } from "./lib/calendar";
 import { pendingRepeats, successorOf } from "./lib/recurring";
+import { dueForArchive } from "./lib/autoArchive";
+import { mergedHistory } from "./lib/activity";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { CommandPalette, ShortcutsHelp, type Command } from "./components/CommandPalette";
@@ -118,6 +120,18 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       actions.purgeBoard(b.id);
     }
   }, [data.boards, incomplete, actions]);
+  // Columns with a delay archive the cards that stayed in them that long; see autoArchive.ts.
+  // Checked on every read of the folder, and every hour for an app left open.
+  const [hourTick, setHourTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setHourTick((n) => n + 1), 3_600_000);
+    return () => window.clearInterval(id);
+  }, []);
+  useEffect(() => {
+    if (incomplete) return;
+    for (const board of activeBoards)
+      for (const card of dueForArchive(board, data.cards[board.id] ?? [], (id) => mergedHistory(data.history[id]))) actions.archiveCard(card);
+  }, [activeBoards, data.cards, data.history, incomplete, actions, hourTick]);
   // A routine finished (in a « done » column) brings its next card; see recurring.ts.
   useEffect(() => {
     if (incomplete) return;

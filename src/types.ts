@@ -14,6 +14,8 @@ export interface Column {
   collapsed?: boolean;
   /** Most cards the column should hold; past it, the column is flagged. */
   limit?: number;
+  /** Cards that stayed this many days in the column are archived (« Terminé » after 14 days). */
+  archiveAfter?: number;
 }
 
 export interface Board {

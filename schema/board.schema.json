@@ -53,6 +53,11 @@
             "type": "integer",
             "minimum": 1,
             "description": "Most cards the column should hold; past it, the column is flagged."
+          },
+          "archiveAfter": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Cards that stayed this many days in the column are archived by the app (time from the cards' history)."
           }
         }
       }

@@ -7,7 +7,7 @@ import { DangerButton, InlineEdit } from "./ui";
 import { emptyColumnLine } from "../lib/utils";
 import { refOf } from "../lib/shortid";
 import { SORT_KEYS, type SortKey } from "../lib/sorting";
-import { t } from "../lib/i18n";
+import { t, tn } from "../lib/i18n";
 
 interface Props {
   column: Column;
@@ -69,6 +69,11 @@ export function ColumnView({ column, cards, labels, priorities, blockers, checkl
         <span className="count" title={over ? t("column.overLimit", { n: total, limit: column.limit! }) : undefined}>
           {column.limit !== undefined ? `${total}/${column.limit}` : cards.length}
         </span>
+        {column.archiveAfter && (
+          <span className="auto-archive" title={tn("column.autoArchiveTitle", column.archiveAfter)}>
+            🗄 {t("dur.d", { d: column.archiveAfter })}
+          </span>
+        )}
         <ColumnMenu column={column} canSort={cards.length > 1} onSort={onSort} onUpdate={onUpdate} />
         <DangerButton
           className="icon-btn"
@@ -164,7 +169,7 @@ function QuickAdd({ onAdd }: { onAdd: (title: string) => void }) {
   );
 }
 
-/** ⋯ on a column: sort it, collapse it, set its card limit. */
+/** ⋯ on a column: sort it, collapse it, set its card limit and its automatic archiving. */
 function ColumnMenu({
   column,
   canSort,
@@ -178,11 +183,21 @@ function ColumnMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [limit, setLimit] = useState(column.limit !== undefined ? String(column.limit) : "");
+  const [archiveAfter, setArchiveAfter] = useState(column.archiveAfter !== undefined ? String(column.archiveAfter) : "");
+  // A whole number above 0, or nothing (no limit, never archived).
+  const positive = (text: string) => {
+    const n = Math.floor(Number(text));
+    return text.trim() && n > 0 ? n : undefined;
+  };
   const saveLimit = () => {
-    const n = Math.floor(Number(limit));
-    const next = limit.trim() && n > 0 ? n : undefined;
-    if (next !== column.limit) onUpdate({ limit: next });
-    setLimit(next !== undefined ? String(next) : "");
+    const nextLimit = positive(limit);
+    const nextArchive = positive(archiveAfter);
+    const patch: Partial<Column> = {};
+    if (nextLimit !== column.limit) patch.limit = nextLimit;
+    if (nextArchive !== column.archiveAfter) patch.archiveAfter = nextArchive;
+    if (Object.keys(patch).length) onUpdate(patch);
+    setLimit(nextLimit !== undefined ? String(nextLimit) : "");
+    setArchiveAfter(nextArchive !== undefined ? String(nextArchive) : "");
   };
   return (
     <span className="sort-menu" onPointerDown={(e) => e.stopPropagation()} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && (saveLimit(), setOpen(false))}>
@@ -222,6 +237,17 @@ function ColumnMenu({
               value={limit}
               placeholder={t("column.limitPlaceholder")}
               onChange={(e) => setLimit(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (saveLimit(), setOpen(false))}
+            />
+          </label>
+          <label className="menu-limit" title={t("column.archiveAfterTitle")}>
+            {t("column.archiveAfter")}
+            <input
+              type="number"
+              min={1}
+              value={archiveAfter}
+              placeholder={t("column.archiveAfterPlaceholder")}
+              onChange={(e) => setArchiveAfter(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (saveLimit(), setOpen(false))}
             />
           </label>
