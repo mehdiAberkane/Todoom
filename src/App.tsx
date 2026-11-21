@@ -18,6 +18,7 @@ import { useAppearance } from "./lib/theme";
 import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
 import { CalendarPage } from "./components/CalendarPage";
+import { UndoToast } from "./components/UndoToast";
 import { agenda, dueCards } from "./lib/calendar";
 import { pendingRepeats, successorOf } from "./lib/recurring";
 import { dueForArchive } from "./lib/autoArchive";
@@ -54,7 +55,7 @@ export default function App() {
 }
 
 function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () => void }) {
-  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow } = useTodoom(backend, notifyChanges);
+  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow, lastAction } = useTodoom(backend, notifyChanges);
   // Automatic upkeep (numbers, keys, trash) waits for complete data: a card not downloaded yet
   // could take a number already used, a board not read yet could lose its key.
   const incomplete = status === "loading" || pending.length > 0;
@@ -129,8 +130,10 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   }, []);
   useEffect(() => {
     if (incomplete) return;
-    for (const board of activeBoards)
-      for (const card of dueForArchive(board, data.cards[board.id] ?? [], (id) => mergedHistory(data.history[id]))) actions.archiveCard(card);
+    actions.untracked(() => {
+      for (const board of activeBoards)
+        for (const card of dueForArchive(board, data.cards[board.id] ?? [], (id) => mergedHistory(data.history[id]))) actions.archiveCard(card);
+    });
   }, [activeBoards, data.cards, data.history, incomplete, actions, hourTick]);
   // A routine finished (in a « done » column) brings its next card; see recurring.ts.
   useEffect(() => {
@@ -143,8 +146,10 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       const last = cards.filter((c) => c.columnId === column.id && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1);
       const next = successorOf(card, board, today, last + 1);
       // Another computer may have made it already: then only the repetition is moved.
-      if (!cards.some((c) => c.id === next.id)) actions.saveCard(next);
-      actions.saveCard({ ...card, repeat: null });
+      actions.untracked(() => {
+        if (!cards.some((c) => c.id === next.id)) actions.saveCard(next);
+        actions.saveCard({ ...card, repeat: null });
+      });
     }
   }, [activeBoards, data.cards, incomplete, actions]);
   // Every board gets a key and every card a number (SOL-42). Same rules on every
@@ -157,9 +162,11 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       if (!b.key) {
         const key = deriveKey(b.name, taken);
         taken.add(key);
-        actions.saveBoard({ ...b, key });
+        actions.untracked(() => actions.saveBoard({ ...b, key }));
       }
-      for (const { card, number } of numbering(data.cards[b.id] ?? [])) actions.saveCard({ ...card, number });
+      actions.untracked(() => {
+        for (const { card, number } of numbering(data.cards[b.id] ?? [])) actions.saveCard({ ...card, number });
+      });
     }
   }, [data.boards, data.cards, incomplete, actions]);
 
@@ -343,6 +350,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         />
       )}
       {showHelp && <ShortcutsHelp onClose={() => setShowHelp(false)} />}
+      <UndoToast lastAction={lastAction} onUndo={actions.undo} />
       {showSearch && (
         <GlobalSearch boards={data.boards} cards={data.cards} comments={data.comments} onOpen={openElsewhere} onClose={() => setShowSearch(false)} />
       )}

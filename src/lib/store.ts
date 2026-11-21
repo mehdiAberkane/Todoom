@@ -11,6 +11,10 @@ import { boardSetup, DEFAULT_TEMPLATE, fromSetup, type BoardTemplate } from "./t
 import { duplicateOf, mapByName } from "./transfer";
 import { nextNumber } from "./shortid";
 import { attachmentFilePath, attachmentMetaPath, attachmentsDir, MAX_ATTACHMENT_BYTES, readAsBase64, storedName } from "./attachments";
+import { undoPlan, withEntry, type Deleted, type UndoEntry, type UndoGroup } from "./undo";
+
+/** How many actions can be undone, one after the other. */
+const UNDO_DEPTH = 30;
 
 /** A file of the data folder that couldn't be loaded, and why. */
 export interface FileIssue {
@@ -328,6 +332,13 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
   const flushAgain = useRef(false);
   const retryTimer = useRef<number | undefined>(undefined);
   const attempt = useRef(0);
+  // Undo (see undo.ts): the user's last actions; changes made in one go (a drag
+  // rewriting several cards) are one action. Automatic changes aren't kept.
+  const journal = useRef<UndoGroup[]>([]);
+  const openGroup = useRef<UndoGroup | null>(null);
+  const tracking = useRef(true);
+  const groupSeq = useRef(0);
+  const [lastAction, setLastAction] = useState<UndoGroup | null>(null);
 
   const reload = useCallback(async () => {
     // A reload racing a write in progress could briefly resurrect the old state.
@@ -483,12 +494,52 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
       writeJson(historyPath(next.boardId, next.id, writer), { cardId: next.id, writer, events: all });
     };
 
+    /** The card as it is now: saved here last, or read from the folder. */
+    const currentCard = (id: string, boardId: string): Card | undefined => {
+      const fromData = (dataRef.current.cards[boardId] ?? []).find((c) => c.id === id);
+      const fromHere = lastSaved.current.get(id);
+      return fromHere && fromHere.boardId === boardId && (!fromData || fromHere.updatedAt >= fromData.updatedAt) ? fromHere : fromData;
+    };
+
+    /** The attachments of deleted cards stay on disk while the deletion can be undone. */
+    const forget = (group: UndoGroup) => {
+      for (const e of group.entries) if (e.kind === "card" && !e.after && e.before) removePath(attachmentsDir(e.before.boardId, e.id));
+    };
+
+    /** Keeps a change of the user's in the current action, for undo. */
+    const track = (entry: UndoEntry, deleted?: Deleted) => {
+      if (!tracking.current) {
+        // A change that isn't the user's (a number given to a new card, an undo):
+        // the last action holding the thing now ends there, so it can still be undone.
+        if (!entry.after) return;
+        const groups = [...journal.current, openGroup.current].filter((g): g is UndoGroup => !!g);
+        const last = groups.reverse().find((g) => g.entries.some((e) => e.kind === entry.kind && e.id === entry.id && e.after));
+        if (last) last.entries = last.entries.map((e) => (e.kind === entry.kind && e.id === entry.id && e.after ? ({ ...e, after: entry.after } as UndoEntry) : e));
+        return;
+      }
+      let group = openGroup.current;
+      if (!group) {
+        const opened: UndoGroup = { id: ++groupSeq.current, entries: [], deleted: {} };
+        group = openGroup.current = opened;
+        // What happens in this task is one action; it closes once the task is over.
+        window.setTimeout(() => {
+          openGroup.current = null;
+          if (!opened.entries.length) return;
+          const all = [...journal.current, opened];
+          all.slice(0, Math.max(0, all.length - UNDO_DEPTH)).forEach(forget);
+          journal.current = all.slice(-UNDO_DEPTH);
+          setLastAction(opened);
+        }, 0);
+      }
+      group.entries = withEntry(group.entries, entry);
+      if (deleted) group.deleted[entry.id] = deleted;
+    };
+
     const saveCard = (card: Card) => {
-      const fromData = (dataRef.current.cards[card.boardId] ?? []).find((c) => c.id === card.id);
-      const fromHere = lastSaved.current.get(card.id);
-      const prev = fromHere && (!fromData || fromHere.updatedAt >= fromData.updatedAt) ? fromHere : fromData;
+      const prev = currentCard(card.id, card.boardId);
       const saved = { ...card, updatedAt: nextUpdatedAt(card.updatedAt) };
       lastSaved.current.set(saved.id, saved);
+      track({ kind: "card", id: saved.id, before: prev ?? null, after: saved });
       recordHistory(prev, saved);
       setData((d) => {
         const list = d.cards[saved.boardId] ?? [];
@@ -500,18 +551,47 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
     };
 
     const deleteCard = (card: Card) => {
-      setData((d) => ({
-        ...d,
-        cards: { ...d.cards, [card.boardId]: (d.cards[card.boardId] ?? []).filter((c) => c.id !== card.id) },
+      const d = dataRef.current;
+      const undoable = tracking.current;
+      track({ kind: "card", id: card.id, before: currentCard(card.id, card.boardId) ?? card, after: null }, { comments: d.comments[card.id] ?? [], history: d.history[card.id] ?? {} });
+      lastSaved.current.delete(card.id);
+      setData((s) => ({
+        ...s,
+        cards: { ...s.cards, [card.boardId]: (s.cards[card.boardId] ?? []).filter((c) => c.id !== card.id) },
       }));
       removePath(cardPath(card));
       removePath(commentsDir(card.boardId, card.id));
       removePath(historyDir(card.boardId, card.id));
-      removePath(attachmentsDir(card.boardId, card.id));
+      // Attached files can't be written back from memory: kept until the deletion can't be undone.
+      if (!undoable) removePath(attachmentsDir(card.boardId, card.id));
+    };
+
+    /** Writes a deleted card back, with its comments and history, as it was. */
+    const recreateCard = (card: Card, extra: Deleted | undefined) => {
+      const saved = { ...card, updatedAt: nextUpdatedAt(card.updatedAt) };
+      const comments = extra?.comments ?? [];
+      const history = extra?.history ?? {};
+      lastSaved.current.set(saved.id, saved);
+      dataRef.current = {
+        ...dataRef.current,
+        comments: { ...dataRef.current.comments, [card.id]: comments },
+        history: { ...dataRef.current.history, [card.id]: history },
+      };
+      setData((d) => ({
+        ...d,
+        cards: { ...d.cards, [saved.boardId]: [...(d.cards[saved.boardId] ?? []).filter((c) => c.id !== saved.id), saved] },
+        comments: { ...d.comments, [card.id]: comments },
+        history: { ...d.history, [card.id]: history },
+      }));
+      for (const c of comments) writeJson(commentPath(c, card.boardId), c);
+      for (const [writer, events] of Object.entries(history)) writeJson(historyPath(card.boardId, card.id, writer), { cardId: card.id, writer, events });
+      writeJson(cardPath(saved), saved);
     };
 
     const saveBoard = (board: Board) => {
+      const before = dataRef.current.boards.find((b) => b.id === board.id);
       const saved = { ...board, updatedAt: nextUpdatedAt(board.updatedAt) };
+      if (before) track({ kind: "board", id: saved.id, before, after: saved });
       setData((d) => ({ ...d, boards: sortBoards(d.boards.map((b) => (b.id === saved.id ? saved : b))) }));
       writeJson(boardPath(saved.id), saved);
     };
@@ -520,6 +600,44 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
       saveCard,
       deleteCard,
       saveBoard,
+
+      /** Runs changes that aren't the user's (numbering, routines, archiving): they can't be undone. */
+      untracked(change: () => void) {
+        const was = tracking.current;
+        tracking.current = false;
+        try {
+          change();
+        } finally {
+          tracking.current = was;
+        }
+      },
+
+      /**
+       * Undoes the user's last action: writes back the cards and boards as they
+       * were, except those changed since. Null when there is nothing to undo.
+       */
+      undo(): { group: UndoGroup; stale: number } | null {
+        const group = journal.current.pop();
+        if (!group) return null;
+        const boardOf = (id: string) => dataRef.current.boards.find((b) => b.id === id);
+        const cardOf = (id: string) => {
+          const entry = group.entries.find((e) => e.kind === "card" && e.id === id) as Extract<UndoEntry, { kind: "card" }> | undefined;
+          const boardId = (entry?.after ?? entry?.before)?.boardId;
+          return boardId ? currentCard(id, boardId) : undefined;
+        };
+        const plan = undoPlan(group, cardOf, boardOf);
+        tracking.current = false;
+        try {
+          plan.boards.forEach(saveBoard);
+          plan.save.forEach(saveCard);
+          plan.remove.forEach(deleteCard);
+          for (const card of plan.recreate) recreateCard(card, group.deleted[card.id]);
+        } finally {
+          tracking.current = true;
+        }
+        setLastAction(journal.current[journal.current.length - 1] ?? null);
+        return { group, stale: plan.stale };
+      },
 
       saveSettings(settings: AppSettings) {
         const saved = { ...settings, updatedAt: nextUpdatedAt(settings.updatedAt) };
@@ -744,7 +862,7 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
   // Ids of the cards and boards with a change the disk hasn't confirmed yet.
   const unsavedIds = useMemo(() => new Set(unsaved.map(idOfPath).filter((id): id is string => !!id)), [unsaved]);
 
-  return { data, status, error, host, actions, reload, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow };
+  return { data, status, error, host, actions, reload, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow, lastAction };
 }
 
 function blankCard(board: Board, columnId: string, title: string, order: number, number?: number): Card {
