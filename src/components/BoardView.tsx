@@ -30,6 +30,9 @@ import { LabelManager } from "./LabelManager";
 import { ArchiveModal } from "./ArchiveModal";
 import { BoardContext, contextSummary } from "./BoardContext";
 import { BulkBar } from "./BulkBar";
+import { LanesView } from "./LanesView";
+import { loadLaneMode, saveLaneMode, type LaneMode } from "../lib/lanes";
+import type { Column } from "../types";
 import { movedTogether, toggled, withRange } from "../lib/selection";
 import { DUE_FILTERS, loadFilter, matchesDue, saveFilter, sortCards, type DueFilter, type SortKey } from "../lib/sorting";
 import { AgentStatusChips } from "./AgentStatus";
@@ -84,6 +87,12 @@ export function BoardView({
   const [labelFilter, setLabelFilter] = useState<string[]>(saved.labels);
   const [priorityFilter, setPriorityFilter] = useState<string[]>(saved.priorities);
   const [dueFilter, setDueFilter] = useState<DueFilter>(saved.due);
+  // Swimlanes, kept per board on this computer.
+  const [laneMode, setLaneMode] = useState<LaneMode>(() => loadLaneMode(board.id));
+  const changeLaneMode = (mode: LaneMode) => {
+    setLaneMode(mode);
+    saveLaneMode(board.id, mode);
+  };
   useEffect(() => {
     saveFilter(board.id, { query, labels: labelFilter, priorities: priorityFilter, due: dueFilter });
   }, [board.id, query, labelFilter, priorityFilter, dueFilter]);
@@ -274,6 +283,9 @@ export function BoardView({
     setNewColumn("");
   };
 
+  const updateColumn = (columnId: string, patch: Partial<Column>) =>
+    actions.saveBoard({ ...board, columns: board.columns.map((c) => (c.id === columnId ? { ...c, ...patch } : c)) });
+
   const renameColumn = (columnId: string, name: string) =>
     actions.saveBoard({ ...board, columns: board.columns.map((c) => (c.id === columnId ? { ...c, name } : c)) });
 
@@ -366,6 +378,11 @@ export function BoardView({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <select className={`due-filter ${laneMode ? "on" : ""}`} value={laneMode} onChange={(e) => changeLaneMode(e.target.value as LaneMode)}>
+            <option value="">{t("lanes.none")}</option>
+            <option value="priority">{t("lanes.priority")}</option>
+            <option value="label">{t("lanes.label")}</option>
+          </select>
           <select
             className={`due-filter ${dueFilter ? "on" : ""}`}
             value={dueFilter}
@@ -428,6 +445,19 @@ export function BoardView({
         </div>
       </header>
 
+      {laneMode ? (
+        <LanesView
+          board={board}
+          mode={laneMode}
+          lists={lists}
+          cardById={cardById}
+          blockers={blockers}
+          comments={comments}
+          selectedIds={selection}
+          onOpen={openFromBoard}
+          onSelect={selectCard}
+        />
+      ) : (
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
@@ -457,6 +487,8 @@ export function BoardView({
                 onRename={(name) => renameColumn(col.id, name)}
                 onDelete={() => actions.deleteColumn(board, col.id, cards)}
                 onSort={(key) => sortColumn(col.id, key)}
+                total={cards.filter((c) => c.columnId === col.id).length}
+                onUpdate={(patch) => updateColumn(col.id, patch)}
               />
             ))}
           </SortableContext>
@@ -489,6 +521,7 @@ export function BoardView({
           {activeColumn && <ColumnPreview column={activeColumn} count={lists[activeColumn.id]?.length ?? 0} />}
         </DragOverlay>
       </DndContext>
+      )}
 
       {openCard && (
         <CardModal

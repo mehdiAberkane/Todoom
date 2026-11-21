@@ -37,7 +37,7 @@ const BOARD: Check[] = [
   ["name", optional(isString)],
   ["key", optional(isString)],
   ["description", optional(isString)],
-  ["columns", listOf(shaped([["id", isString], ["name", isString]]))],
+  ["columns", listOf(shaped([["id", isString], ["name", isString], ["collapsed", optional((v) => typeof v === "boolean")], ["limit", optional(isNumber)]]))],
   ["labels", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["priorities", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["order", optional(isNumber)],

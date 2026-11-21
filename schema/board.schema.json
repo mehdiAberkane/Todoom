@@ -40,6 +40,15 @@
           },
           "name": {
             "type": "string"
+          },
+          "collapsed": {
+            "type": "boolean",
+            "description": "Shown as a narrow strip; its cards stay in it."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Most cards the column should hold; past it, the column is flagged."
           }
         }
       }

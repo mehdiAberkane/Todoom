@@ -622,3 +622,24 @@ textarea { resize: vertical; }
 .sort-options button { background: none; border: none; text-align: left; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .sort-options button:hover { background: var(--card-hover); }
 .due-filter.on { border-color: var(--accent-2); color: var(--accent-2); }
+
+/* Collapsed columns, card limit */
+.column.collapsed { width: 44px; min-width: 44px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; }
+.column.collapsed:hover { background: var(--card); }
+.collapsed-name { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 700; color: var(--muted); white-space: nowrap; }
+.column.over-limit { box-shadow: inset 0 3px 0 var(--accent); }
+.column.over-limit .column-head .count, .column.collapsed.over-limit .count { background: var(--accent); color: #fff; }
+.menu-title { padding: 4px 10px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.menu-limit { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; font-size: 13px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
+.menu-limit input { width: 80px; }
+/* Swimlanes */
+.lanes { flex: 1; overflow: auto; padding: 0 20px 20px; }
+.lanes-grid { display: grid; gap: 0 12px; align-items: start; }
+.lane-col-head { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 4px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane-col-head.collapsed { text-align: center; }
+.lane { display: flex; flex-direction: column; margin-top: 12px; }
+.lane-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-left: 4px solid var(--lane, var(--border)); background: var(--panel); border-radius: 6px; font-weight: 700; }
+.lane-row { display: grid; gap: 12px; margin-top: 8px; align-items: start; }
+.lane-cell { display: flex; flex-direction: column; gap: 8px; min-height: 8px; }
+.lane-cell.collapsed { align-items: center; color: var(--muted); font-size: 12px; }
+.lane-cell .card { cursor: pointer; }

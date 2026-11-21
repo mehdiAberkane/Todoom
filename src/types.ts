@@ -10,6 +10,10 @@ export type Priority = Label;
 export interface Column {
   id: string;
   name: string;
+  /** Shown as a narrow strip (« Terminé », « Backlog »…); its cards are still there. */
+  collapsed?: boolean;
+  /** Most cards the column should hold; past it, the column is flagged. */
+  limit?: number;
 }
 
 export interface Board {
