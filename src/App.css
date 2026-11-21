@@ -885,3 +885,6 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .day-card.late { border-left-color: var(--accent); }
 .day-card .card-ref { margin-right: 4px; }
 .board-link .count.urgent { background: var(--accent); color: #fff; }
+
+/* Repetition of a card (routine). */
+.repeat-select { width: 100%; }

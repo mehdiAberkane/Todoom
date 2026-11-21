@@ -19,6 +19,7 @@ import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
 import { CalendarPage } from "./components/CalendarPage";
 import { agenda, dueCards } from "./lib/calendar";
+import { pendingRepeats, successorOf } from "./lib/recurring";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { CommandPalette, ShortcutsHelp, type Command } from "./components/CommandPalette";
@@ -117,6 +118,21 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       actions.purgeBoard(b.id);
     }
   }, [data.boards, incomplete, actions]);
+  // A routine finished (in a « done » column) brings its next card; see recurring.ts.
+  useEffect(() => {
+    if (incomplete) return;
+    const today = toISODate(new Date());
+    for (const { card, board } of pendingRepeats(activeBoards, data.cards)) {
+      const column = board.columns[0];
+      if (!column) continue;
+      const cards = data.cards[board.id] ?? [];
+      const last = cards.filter((c) => c.columnId === column.id && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1);
+      const next = successorOf(card, board, today, last + 1);
+      // Another computer may have made it already: then only the repetition is moved.
+      if (!cards.some((c) => c.id === next.id)) actions.saveCard(next);
+      actions.saveCard({ ...card, repeat: null });
+    }
+  }, [activeBoards, data.cards, incomplete, actions]);
   // Every board gets a key and every card a number (SOL-42). Same rules on every
   // computer, so two of them doing it at once write the same thing.
   useEffect(() => {

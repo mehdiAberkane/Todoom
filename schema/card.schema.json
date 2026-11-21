@@ -145,6 +145,25 @@
       ],
       "description": "Color of the band at the top of the card (#rrggbb), or null for none."
     },
+    "repeat": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "every"
+      ],
+      "properties": {
+        "every": {
+          "enum": [
+            "day",
+            "week",
+            "month"
+          ]
+        }
+      },
+      "description": "A routine: once the card is in a « done » column, the app makes the next one (id <this id>r<YYYYMMDD>) in the first column, due one period later, and moves the repetition to it."
+    },
     "claimedBy": {
       "type": [
         "object",

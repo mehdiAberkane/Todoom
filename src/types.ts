@@ -85,6 +85,8 @@ export interface Card {
   mergeRequest: MergeRequest | null;
   /** A color band at the top of the card (one of the palette's), or null/absent for none. */
   color?: string | null;
+  /** A routine: when the card reaches a « done » column, the next one is made, due one period later. */
+  repeat?: { every: "day" | "week" | "month" } | null;
   /** Who is working on the card, or null when nobody is. */
   claimedBy: Claim | null;
   /** Set when the card is archived: it leaves the board but can be restored. */

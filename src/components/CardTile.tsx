@@ -64,7 +64,7 @@ export function CardBody({
         {cardRef && <span className="card-ref">{cardRef}</span>}
         {card.title}
       </div>
-      {(card.due || total > 0 || card.description || card.links.length > 0 || commentCount > 0 || card.branch || card.mergeRequest || card.claimedBy || attachmentCount > 0) && (
+      {(card.due || total > 0 || card.description || card.links.length > 0 || commentCount > 0 || card.branch || card.mergeRequest || card.claimedBy || attachmentCount > 0 || card.repeat) && (
         <div className="card-badges">
           {blockers.length > 0 && (
             <span className="badge badge-blocked" title={t("card.blockedTitle", { titles: blockers.join(", ") })}>
@@ -74,6 +74,11 @@ export function CardBody({
           {card.due && (
             <span className={`badge due-${due}`} title={t("card.due")}>
               {due === "overdue" ? "🔥" : "📅"} {formatDue(card.due)}
+            </span>
+          )}
+          {card.repeat && (
+            <span className="badge" title={t("repeat.badge", { every: t(`repeat.${card.repeat.every}`) })}>
+              🔁
             </span>
           )}
           {total > 0 && (

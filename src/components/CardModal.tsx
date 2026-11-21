@@ -14,7 +14,8 @@ import { toggleTask } from "../lib/markdown";
 import { applyTemplate, CARD_TEMPLATES } from "../lib/templates";
 import { AttachmentsSection, filesOf, type AttachmentProps } from "./AttachmentsSection";
 import { branchName, branchUrl, MR_STATES, webUrl } from "../lib/dev";
-import { CARD_COLORS } from "../lib/utils";
+import { CARD_COLORS, toISODate } from "../lib/utils";
+import { nextDue, REPEATS, type Repeat } from "../lib/recurring";
 import { claimLabel } from "../lib/claim";
 import { checklistDone, isFinished } from "../lib/links";
 import { refOf } from "../lib/shortid";
@@ -504,6 +505,23 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             )}
           </div>
 
+          <h4>{t("field.repeat")}</h4>
+          <select
+            className="repeat-select"
+            value={draft.repeat?.every ?? ""}
+            onChange={(e) => set({ repeat: e.target.value ? { every: e.target.value as Repeat["every"] } : null })}
+          >
+            <option value="">{t("repeat.never")}</option>
+            {REPEATS.map((r) => (
+              <option key={r} value={r}>
+                {t(`repeat.${r}`)}
+              </option>
+            ))}
+          </select>
+          {draft.repeat && (
+            <p className="hint">{t("repeat.hint", { date: formatDue(nextDue(draft.due, draft.repeat, toISODate(new Date()))) })}</p>
+          )}
+
           <h4>{t("field.branch")}</h4>
           <div className="git-row">
             <input
@@ -698,6 +716,8 @@ function describe(field: Field, card: Card, board: Board): string {
       return card.branch ?? t("describe.none");
     case "color":
       return card.color ?? t("describe.none");
+    case "repeat":
+      return card.repeat ? t(`repeat.${card.repeat.every}`) : t("repeat.never");
     case "mergeRequest":
       return card.mergeRequest ? `${card.mergeRequest.url} (${t(`mr.${card.mergeRequest.state}`)})` : t("describe.none");
     case "checklist": {
