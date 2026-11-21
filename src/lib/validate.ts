@@ -62,6 +62,7 @@ const SETTINGS: Check[] = [
   ["boardTemplate", optional(isString)],
   ["theme", optional((v) => v === "dark" || v === "light" || v === "system")],
   ["compact", optional(isBoolean)],
+  ["snapshotKeep", optional(isNumber)],
   ["updatedAt", optional(isString)],
 ];
 

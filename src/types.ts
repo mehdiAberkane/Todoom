@@ -194,6 +194,8 @@ export interface AppSettings {
   theme?: "dark" | "light" | "system";
   /** Smaller cards: title, short id and colored label marks only. */
   compact?: boolean;
+  /** Daily snapshots of the data folder kept on each computer; absent means 14. */
+  snapshotKeep?: number;
   updatedAt: string;
 }
 

@@ -19,6 +19,8 @@ import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
 import { CalendarPage } from "./components/CalendarPage";
 import { UndoToast } from "./components/UndoToast";
+import { dailySnapshot } from "./lib/snapshotter";
+import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
 import { pendingRepeats, successorOf } from "./lib/recurring";
 import { dueForArchive } from "./lib/autoArchive";
@@ -55,7 +57,7 @@ export default function App() {
 }
 
 function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () => void }) {
-  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow, lastAction } = useTodoom(backend, notifyChanges);
+  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow, lastAction, reload } = useTodoom(backend, notifyChanges);
   // Automatic upkeep (numbers, keys, trash) waits for complete data: a card not downloaded yet
   // could take a number already used, a board not read yet could lose its key.
   const incomplete = status === "loading" || pending.length > 0;
@@ -135,6 +137,12 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         for (const card of dueForArchive(board, data.cards[board.id] ?? [], (id) => mergedHistory(data.history[id]))) actions.archiveCard(card);
     });
   }, [activeBoards, data.cards, data.history, incomplete, actions, hourTick]);
+  // Today's snapshot of the data folder, once the folder is read in full; checked again every hour.
+  const snapshotKeep = data.settings.snapshotKeep;
+  useEffect(() => {
+    if (incomplete || error) return;
+    dailySnapshot(snapshotKeep ?? DEFAULT_KEEP).catch((e) => console.warn("snapshot", e));
+  }, [incomplete, error, hourTick, snapshotKeep]);
   // A routine finished (in a « done » column) brings its next card; see recurring.ts.
   useEffect(() => {
     if (incomplete) return;
@@ -296,6 +304,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             settings={data.settings}
             onSave={actions.saveSettings}
             boards={activeBoards}
+            onRestored={reload}
             dataDir={dataDir}
             onChangeDataDir={onSettings}
             version={updater.version}

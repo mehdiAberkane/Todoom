@@ -6,6 +6,7 @@ import { imageToBackground } from "../lib/image";
 import { t } from "../lib/i18n";
 import { boardSetup, defaultTemplate } from "../lib/templates";
 import { THEMES, veilOf, type ThemeChoice } from "../lib/appearance";
+import { SnapshotsSection } from "./SnapshotsSection";
 import type { CheckState, UpdateState } from "../lib/updater";
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
   onSave: (settings: AppSettings) => void;
   /** Boards in use, for the names of their columns. */
   boards: Board[];
+  /** After a snapshot is restored: read the folder again. */
+  onRestored: () => void;
   dataDir: string;
   onChangeDataDir: () => void;
   version: string | null;
@@ -29,6 +32,7 @@ export function SettingsPage({
   settings,
   onSave,
   boards,
+  onRestored,
   dataDir,
   onChangeDataDir,
   version,
@@ -233,6 +237,12 @@ export function SettingsPage({
           </div>
         </div>
       </section>
+
+      <SnapshotsSection
+        keep={settings.snapshotKeep}
+        onKeep={(n) => onSave({ ...settings, backgroundDim: dim, snapshotKeep: n })}
+        onRestored={onRestored}
+      />
 
       <section className="settings-section">
         <h2>{t("settings.dataDir")}</h2>

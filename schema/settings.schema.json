@@ -74,6 +74,12 @@
       "type": "boolean",
       "description": "Compact cards: title, short id and labels as dots. Default false."
     },
+    "snapshotKeep": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 365,
+      "description": "Daily snapshots of the data folder each computer keeps (on its own disk, outside the folder). Default 14."
+    },
     "updatedAt": {
       "type": "string"
     }

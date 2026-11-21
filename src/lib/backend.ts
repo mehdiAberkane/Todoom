@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { t } from "./i18n";
+import { restorePlan, type SnapshotInfo } from "./snapshots";
 
 export interface FileEntry {
   /** Relative to the data folder, always with "/" separators. */
@@ -34,6 +35,12 @@ export interface Backend {
   revealAttachment(path: string): Promise<void>;
   /** Language of the messages the backend itself writes (refusals, errors). */
   setLanguage(lang: "fr" | "en"): Promise<void>;
+  /** Snapshots of the data folder, kept on this computer (see snapshots.ts), newest first. */
+  listSnapshots(): Promise<SnapshotInfo[]>;
+  saveSnapshot(name: string, content: string): Promise<void>;
+  deleteSnapshot(name: string): Promise<void>;
+  /** Puts the data files back as in the snapshot; the data files made since are removed. */
+  restoreSnapshot(name: string): Promise<{ written: number; removed: number }>;
 }
 
 const tauriBackend: Backend = {
@@ -54,6 +61,10 @@ const tauriBackend: Backend = {
   writeAttachment: (path, data) => invoke("write_attachment", { path, data }),
   readAttachment: (path) => invoke<string>("read_attachment", { path }),
   revealAttachment: (path) => invoke("reveal_attachment", { path }),
+  listSnapshots: () => invoke<SnapshotInfo[]>("list_snapshots"),
+  saveSnapshot: (name, content) => invoke("save_snapshot", { name, content }),
+  deleteSnapshot: (name) => invoke("delete_snapshot", { name }),
+  restoreSnapshot: (name) => invoke<{ written: number; removed: number }>("restore_snapshot", { name }),
 };
 
 // Lets the UI run in a plain browser (vite dev) with the same file layout kept in localStorage.
@@ -67,6 +78,17 @@ const readAttachments = (): Record<string, string> => {
     return {};
   }
 };
+
+// Snapshots, by name: in the browser they live next to the files.
+const SNAP_KEY = "todoom-snapshots";
+const readSnapshots = (): Record<string, string> => {
+  try {
+    return JSON.parse(localStorage.getItem(SNAP_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+};
+const writeSnapshots = (all: Record<string, string>) => localStorage.setItem(SNAP_KEY, JSON.stringify(all));
 
 function readFs(): Record<string, string> {
   try {
@@ -128,6 +150,26 @@ const browserBackend: Backend = {
     return data;
   },
   revealAttachment: async () => {},
+  listSnapshots: async () =>
+    Object.entries(readSnapshots())
+      .map(([name, content]) => ({ name, size: content.length }))
+      .sort((a, b) => b.name.localeCompare(a.name)),
+  saveSnapshot: async (name, content) => writeSnapshots({ ...readSnapshots(), [name]: content }),
+  deleteSnapshot: async (name) => {
+    const all = readSnapshots();
+    delete all[name];
+    writeSnapshots(all);
+  },
+  restoreSnapshot: async (name) => {
+    const raw = readSnapshots()[name];
+    if (raw === undefined) throw new Error(`${name} introuvable`);
+    const files = readFs();
+    const plan = restorePlan(JSON.parse(raw), Object.keys(files));
+    for (const path of plan.remove) delete files[path];
+    for (const [path, content] of plan.write) files[path] = content;
+    writeFs(files);
+    return { written: plan.write.length, removed: plan.remove.length };
+  },
 };
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
