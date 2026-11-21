@@ -13,6 +13,7 @@ import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
 import { Setup } from "./components/Setup";
 import { SettingsPage } from "./components/SettingsPage";
+import { MetricsPage } from "./components/MetricsPage";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { CommandPalette, ShortcutsHelp, type Command } from "./components/CommandPalette";
@@ -60,6 +61,9 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   const [showSettings, setShowSettings] = useState(false);
   const [showMyWork, setShowMyWork] = useState(false);
+  // The metrics page: "all", or the id of the board it shows; null when closed.
+  const [metrics, setMetrics] = useState<string | null>(null);
+  const openMetrics = (scope: string) => (setMetrics(scope), setShowSettings(false), setShowMyWork(false));
   const [showSearch, setShowSearch] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -126,6 +130,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     setBoardId(id);
     setShowSettings(false);
     setShowMyWork(false);
+    setMetrics(null);
   };
   const { background, backgroundDim } = data.settings;
   const backgroundStyle = background
@@ -147,13 +152,14 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   }, [linkedCard]);
 
   const commands: Command[] = [
-    ...(board && !showSettings && !showMyWork
+    ...(board && !showSettings && !showMyWork && !metrics
       ? [{ id: "new", label: t("palette.newCard"), hint: "N", run: () => window.dispatchEvent(new Event("todoom:new-card")) }]
       : []),
     { id: "search", label: t("palette.searchAll"), hint: "Ctrl + Maj + F", run: () => setShowSearch(true) },
-    { id: "mywork", label: t("palette.myWork"), run: () => (setShowMyWork(true), setShowSettings(false)) },
+    { id: "mywork", label: t("palette.myWork"), run: () => (setShowMyWork(true), setShowSettings(false), setMetrics(null)) },
+    { id: "metrics", label: t("palette.metrics"), run: () => openMetrics(board && !showSettings && !showMyWork && !metrics ? board.id : "all") },
     ...activeBoards.map((b) => ({ id: `board:${b.id}`, label: t("palette.goTo", { name: b.name }), hint: b.key, run: () => openBoard(b.id) })),
-    { id: "settings", label: t("palette.settings"), run: () => (setShowSettings(true), setShowMyWork(false)) },
+    { id: "settings", label: t("palette.settings"), run: () => (setShowSettings(true), setShowMyWork(false), setMetrics(null)) },
     { id: "help", label: t("palette.help"), hint: "?", run: () => setShowHelp(true) },
   ];
 
@@ -176,15 +182,17 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         cardsByBoard={data.cards}
         onRestore={actions.restoreBoard}
         onPurge={actions.purgeBoard}
-        currentId={showSettings || showMyWork ? undefined : board?.id}
+        currentId={showSettings || showMyWork || metrics ? undefined : board?.id}
         counts={counts}
         onSelect={openBoard}
         onCreate={(name, template) => openBoard(actions.createBoard(name, data.boards, template).id)}
         settingsOpen={showSettings}
-        onOpenSettings={() => (setShowSettings(true), setShowMyWork(false))}
+        onOpenSettings={() => (setShowSettings(true), setShowMyWork(false), setMetrics(null))}
         myWorkOpen={showMyWork && !showSettings}
+        metricsOpen={!!metrics && !showSettings && !showMyWork}
+        onOpenMetrics={() => openMetrics("all")}
         myWorkCount={myWorkCount}
-        onOpenMyWork={() => (setShowMyWork(true), setShowSettings(false))}
+        onOpenMyWork={() => (setShowMyWork(true), setShowSettings(false), setMetrics(null))}
         onOpenSearch={() => setShowSearch(true)}
         onShowKeys={() => setShowHelp(true)}
         onMove={(movedId, ids) => actions.moveBoard(activeBoards, movedId, ids)}
@@ -205,7 +213,16 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         onInstallUpdate={updater.install}
       />
       <main className="main">
-        {showMyWork && !showSettings ? (
+        {metrics && !showSettings && !showMyWork ? (
+          <MetricsPage
+            boards={activeBoards}
+            cards={data.cards}
+            history={data.history}
+            scope={metrics}
+            onScope={setMetrics}
+            onOpenCard={openElsewhere}
+          />
+        ) : showMyWork && !showSettings ? (
           <MyWork
             boards={activeBoards}
             cards={data.cards}
@@ -239,6 +256,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             index={cardIndex}
             otherKeys={data.boards.filter((b) => b.id !== board.id && b.key).map((b) => b.key!)}
             onOpenElsewhere={openElsewhere}
+            onOpenMetrics={() => openMetrics(board.id)}
             initialOpenCardId={linkedCard}
             comments={data.comments}
             agents={data.agents[board.id]}

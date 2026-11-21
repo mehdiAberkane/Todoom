@@ -27,6 +27,8 @@ interface Props {
   onMove: (movedId: string, ids: string[]) => void;
   settingsOpen: boolean;
   myWorkOpen: boolean;
+  metricsOpen: boolean;
+  onOpenMetrics: () => void;
   onOpenSearch: () => void;
   onShowKeys: () => void;
   myWorkCount: number;
@@ -88,6 +90,9 @@ export function Sidebar(props: Props) {
         <button className={`board-link my-work-link ${props.myWorkOpen ? "active" : ""}`} onClick={props.onOpenMyWork} title={t("myWork.linkTitle")}>
           <span className="board-name">{t("myWork.link")}</span>
           {props.myWorkCount > 0 && <span className="count">{props.myWorkCount}</span>}
+        </button>
+        <button className={`board-link my-work-link ${props.metricsOpen ? "active" : ""}`} onClick={props.onOpenMetrics} title={t("metrics.linkTitle")}>
+          <span className="board-name">{t("metrics.link")}</span>
         </button>
         <div className="section-title">{t("sidebar.boards")}</div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

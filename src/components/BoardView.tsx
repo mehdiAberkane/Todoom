@@ -53,6 +53,7 @@ export function BoardView({
   unsavedIds,
   index,
   onOpenElsewhere,
+  onOpenMetrics,
   initialOpenCardId = null,
   otherKeys,
   comments,
@@ -69,6 +70,8 @@ export function BoardView({
   index: Map<string, Located>;
   /** Opens a card of another board. */
   onOpenElsewhere: (boardId: string, cardId: string) => void;
+  /** Opens the metrics page on this board. */
+  onOpenMetrics: () => void;
   /** Card to open when the board shows, after following a link from another board. */
   initialOpenCardId?: string | null;
   /** Keys of the other boards, which this one can't take. */
@@ -512,6 +515,9 @@ export function BoardView({
           </button>
           <button className="btn-ghost" onClick={() => setShowContext(true)} title={t("board.contextTitle")}>
             {t("board.context")}
+          </button>
+          <button className="btn-ghost" onClick={onOpenMetrics} title={t("metrics.boardTitle")}>
+            {t("metrics.button")}
           </button>
           <button className="btn-ghost" onClick={() => setShowArchive(true)} title={t("board.archivesTitle")}>
             {t("board.archives")}{archived.length > 0 && ` (${archived.length})`}
