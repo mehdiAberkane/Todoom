@@ -5,7 +5,8 @@ import { nextUpdatedAt, now, reorder, uid } from "./utils";
 import { agentProblem, attachmentProblem, boardProblem, cardProblem, commentProblem, historyProblem, settingsProblem, type IssueReason } from "./validate";
 import { changesBetween, commentPath, commentsDir, eventsFor, historyDir, historyPath, writerName } from "./activity";
 import { t } from "./i18n";
-import { inverseOf, withLink, withoutLink } from "./links";
+import { inverseOf, isDoneName, withLink, withoutLink } from "./links";
+import type { ImportedBoard } from "./importer";
 import { newClaim } from "./claim";
 import { boardSetup, DEFAULT_TEMPLATE, fromSetup, type BoardTemplate } from "./templates";
 import { duplicateOf, mapByName } from "./transfer";
@@ -652,6 +653,74 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
           const b = byId.get(id);
           if (b) saveBoard({ ...b, order });
         }
+      },
+
+      /**
+       * A new board from a Trello board or GitLab issues: its columns, labels and
+       * cards (numbered in order), checklists, comments (signed with their author's
+       * name in the text). Not an action to undo: the board can go to the trash.
+       */
+      importBoard(imported: ImportedBoard, existing: Board[]): Board {
+        const at = now();
+        const orders = existing.map((b) => b.order).filter((o): o is number => o !== undefined);
+        const columns = imported.columns.map((name) => ({ id: uid(), name, ...(isDoneName(name) ? { collapsed: true } : {}) }));
+        const labels = imported.labels.map((l) => ({ id: uid(), name: l.name, color: l.color }));
+        const board: Board = {
+          id: uid(),
+          name: imported.name,
+          columns,
+          labels,
+          ...(orders.length ? { order: Math.max(...orders) + 1 } : {}),
+          createdAt: at,
+          updatedAt: at,
+        };
+        setData((d) => ({ ...d, boards: sortBoards([...d.boards, board]), cards: { ...d.cards, [board.id]: [] } }));
+        writeJson(boardPath(board.id), board);
+        const inColumn = new Map<string, number>();
+        const was = tracking.current;
+        tracking.current = false;
+        try {
+          imported.cards.forEach((c, i) => {
+            const columnId = columns.find((col) => col.name === c.column)?.id ?? columns[0].id;
+            const order = inColumn.get(columnId) ?? 0;
+            inColumn.set(columnId, order + 1);
+            const card: Card = {
+              id: uid(),
+              number: i + 1,
+              boardId: board.id,
+              columnId,
+              order,
+              title: c.title,
+              description: c.description,
+              labels: c.labels.map((name) => labels.find((l) => l.name === name)?.id).filter((id): id is string => !!id),
+              priority: null,
+              due: c.due,
+              checklist: c.checklist.map((item) => ({ id: uid(), text: item.text, done: item.done })),
+              links: [],
+              branch: null,
+              mergeRequest: null,
+              claimedBy: null,
+              archivedAt: c.archived ? at : null,
+              createdAt: at,
+              updatedAt: at,
+            };
+            saveCard(card);
+            const comments: CardComment[] = c.comments.map((m) => ({
+              id: uid(),
+              cardId: card.id,
+              createdAt: /^\d{4}-\d{2}-\d{2}T/.test(m.date) ? new Date(m.date).toISOString() : at,
+              author: { host: hostRef.current },
+              text: t("import.commentBy", { author: m.author, source: imported.source === "trello" ? "Trello" : "GitLab", text: m.text }),
+            }));
+            if (comments.length) {
+              setData((d) => ({ ...d, comments: { ...d.comments, [card.id]: comments } }));
+              for (const comment of comments) writeJson(commentPath(comment, board.id), comment);
+            }
+          });
+        } finally {
+          tracking.current = was;
+        }
+        return board;
       },
 
       /** A new board, set up from a template (simple, development, or a copy of a board's set-up). */

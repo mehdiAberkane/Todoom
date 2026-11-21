@@ -243,6 +243,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         onSelect={openBoard}
         onCreate={(name, template) => openBoard(actions.createBoard(name, data.boards, template).id)}
         defaultTemplate={defaultTemplate(data.settings.boardTemplate, activeBoards)}
+        onImport={(imported) => openBoard(actions.importBoard(imported, data.boards).id)}
         settingsOpen={showSettings}
         onOpenSettings={() => setPage("settings")}
         myWorkOpen={showMyWork}

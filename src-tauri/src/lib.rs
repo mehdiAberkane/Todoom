@@ -788,6 +788,22 @@ async fn restore_snapshot(app: AppHandle, name: String) -> Result<Restored, Stri
     logged(what, result)
 }
 
+/// Exports go where the user chose in the save dialog; only text reports
+/// (Markdown, CSV), never a program or a data file of the folder.
+fn export_target(path: &str) -> Result<PathBuf, String> {
+    let target = PathBuf::from(path);
+    let ext = target.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase());
+    if !target.is_absolute() || !matches!(ext.as_deref(), Some("md" | "csv" | "txt")) {
+        return Err(tr(format!("Export refusé : {path}"), format!("Export refused: {path}")));
+    }
+    Ok(target)
+}
+
+#[tauri::command]
+async fn save_export(app: AppHandle, path: String, content: String) -> Result<(), String> {
+    blocking(app, move |_| fs::write(export_target(&path)?, content).map_err(|e| e.to_string())).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -838,7 +854,8 @@ pub fn run() {
             list_snapshots,
             save_snapshot,
             delete_snapshot,
-            restore_snapshot
+            restore_snapshot,
+            save_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -847,6 +864,17 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exports_are_text_reports_at_a_chosen_place() {
+        let base = std::env::temp_dir();
+        assert!(export_target(base.join("todoom.md").to_str().unwrap()).is_ok());
+        assert!(export_target(base.join("todoom.CSV").to_str().unwrap()).is_ok());
+        for bad in ["x.exe", "x.json", "x.md.bat", "x"] {
+            assert!(export_target(base.join(bad).to_str().unwrap()).is_err(), "{bad}");
+        }
+        assert!(export_target("relative.md").is_err());
+    }
 
     #[test]
     fn snapshot_names_hold_no_path() {

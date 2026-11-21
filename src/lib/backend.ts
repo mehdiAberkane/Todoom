@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { t } from "./i18n";
 import { restorePlan, type SnapshotInfo } from "./snapshots";
 
@@ -35,6 +35,8 @@ export interface Backend {
   revealAttachment(path: string): Promise<void>;
   /** Language of the messages the backend itself writes (refusals, errors). */
   setLanguage(lang: "fr" | "en"): Promise<void>;
+  /** Saves an export (Markdown, CSV) where the user chooses; false when they cancel. */
+  saveExport(fileName: string, content: string): Promise<boolean>;
   /** Snapshots of the data folder, kept on this computer (see snapshots.ts), newest first. */
   listSnapshots(): Promise<SnapshotInfo[]>;
   saveSnapshot(name: string, content: string): Promise<void>;
@@ -61,6 +63,13 @@ const tauriBackend: Backend = {
   writeAttachment: (path, data) => invoke("write_attachment", { path, data }),
   readAttachment: (path) => invoke<string>("read_attachment", { path }),
   revealAttachment: (path) => invoke("reveal_attachment", { path }),
+  saveExport: async (fileName, content) => {
+    const ext = fileName.split(".").pop() ?? "txt";
+    const path = await save({ defaultPath: fileName, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
+    if (!path) return false;
+    await invoke("save_export", { path, content });
+    return true;
+  },
   listSnapshots: () => invoke<SnapshotInfo[]>("list_snapshots"),
   saveSnapshot: (name, content) => invoke("save_snapshot", { name, content }),
   deleteSnapshot: (name) => invoke("delete_snapshot", { name }),
@@ -150,6 +159,15 @@ const browserBackend: Backend = {
     return data;
   },
   revealAttachment: async () => {},
+  saveExport: async (fileName, content) => {
+    const url = URL.createObjectURL(new Blob([content], { type: fileName.endsWith(".csv") ? "text/csv" : "text/markdown" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
+  },
   listSnapshots: async () =>
     Object.entries(readSnapshots())
       .map(([name, content]) => ({ name, size: content.length }))

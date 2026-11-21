@@ -903,3 +903,10 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .snapshot-list li { display: grid; grid-template-columns: minmax(130px, auto) 1fr auto auto; gap: 12px; align-items: center; padding: 4px 6px; border-radius: 6px; font-size: 13px; }
 .snapshot-list li:hover { background: rgb(var(--ink) / 0.04); }
 .snapshot-size { font-variant-numeric: tabular-nums; }
+
+/* Import a board (sidebar) and export one (board header). */
+.import-board { padding: 2px 10px 0; }
+.import-board .link { margin-left: 0; color: var(--muted); }
+.import-board .link:hover { color: var(--text); }
+.import-board .check-failed { font-size: 12px; margin: 4px 0 0; }
+.export-menu .sort-options { min-width: 260px; }

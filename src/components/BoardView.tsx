@@ -26,6 +26,7 @@ import { t, tn } from "../lib/i18n";
 import { TRASH_DAYS } from "../lib/store";
 import { ColumnPreview, ColumnView } from "./ColumnView";
 import { CardBody, colorOf } from "./CardTile";
+import { ExportMenu } from "./ExportMenu";
 import { CardModal } from "./CardModal";
 import { LabelManager } from "./LabelManager";
 import { ArchiveModal } from "./ArchiveModal";
@@ -516,6 +517,7 @@ export function BoardView({
           <button className="btn-ghost" onClick={() => setShowContext(true)} title={t("board.contextTitle")}>
             {t("board.context")}
           </button>
+          <ExportMenu board={board} cards={cards} />
           <button className="btn-ghost" onClick={onOpenMetrics} title={t("metrics.boardTitle")}>
             {t("metrics.button")}
           </button>

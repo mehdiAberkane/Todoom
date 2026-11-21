@@ -12,6 +12,7 @@
     "process:allow-restart",
     "notification:default",
     "dialog:allow-ask",
+    "dialog:allow-save",
     "core:window:allow-destroy",
     "core:window:allow-set-theme",
     "core:webview:allow-set-webview-zoom",

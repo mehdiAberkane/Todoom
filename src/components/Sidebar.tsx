@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { importFile, ImportError, type ImportedBoard } from "../lib/importer";
 import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { useDragSensors } from "../lib/dnd";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -24,6 +25,8 @@ interface Props {
   counts: Record<string, number>;
   onSelect: (id: string) => void;
   onCreate: (name: string, template: string) => void;
+  /** A board read from a Trello or GitLab file. */
+  onImport: (board: ImportedBoard) => void;
   /** The template chosen in the settings, preselected for a new board. */
   defaultTemplate: string;
   onMove: (movedId: string, ids: string[]) => void;
@@ -58,6 +61,39 @@ interface Props {
   version: string | null;
   update: UpdateState;
   onInstallUpdate: () => void;
+}
+
+/** « Import (Trello, GitLab)… »: reads the chosen file and makes a board of it. */
+function ImportLink({ onImport }: { onImport: (board: ImportedBoard) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!error) return;
+    const id = window.setTimeout(() => setError(null), 10_000);
+    return () => window.clearTimeout(id);
+  }, [error]);
+  const read = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    try {
+      const board = importFile(file.name, await file.text());
+      if (!board.cards.length) throw new ImportError("empty");
+      onImport(board);
+    } catch (e) {
+      setError(e instanceof ImportError ? t(`import.error.${e.message}` as "import.error.json") : String(e));
+    } finally {
+      if (input.current) input.current.value = "";
+    }
+  };
+  return (
+    <div className="import-board">
+      <button className="link" onClick={() => input.current?.click()} title={t("import.title")}>
+        {t("import.link")}
+      </button>
+      <input ref={input} type="file" accept=".json,.csv" hidden onChange={(e) => read(e.target.files?.[0])} />
+      {error && <p className="check-failed">{error}</p>}
+    </div>
+  );
 }
 
 export function Sidebar(props: Props) {
@@ -144,6 +180,7 @@ export function Sidebar(props: Props) {
             </button>
           </div>
         )}
+        <ImportLink onImport={props.onImport} />
       </nav>
 
       <footer className="sidebar-foot">
