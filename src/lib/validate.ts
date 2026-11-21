@@ -23,7 +23,7 @@ const CARD: Check[] = [
   ["labels", listOf(isString)],
   ["priority", nullable(isString)],
   ["due", nullable(isString)],
-  ["checklist", listOf(shaped([["id", isString], ["text", isString], ["done", (v) => typeof v === "boolean"]]))],
+  ["checklist", listOf(shaped([["id", isString], ["text", isString], ["done", (v) => typeof v === "boolean"], ["cardId", optional(isString)]]))],
   ["links", listOf(shaped([["type", isString], ["cardId", isString]]))],
   ["branch", nullable(isString)],
   ["mergeRequest", nullable(shaped([["url", isString], ["state", (v) => v === "open" || v === "merged" || v === "closed"]]))],

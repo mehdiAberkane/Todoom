@@ -17,6 +17,9 @@ const fr = {
 
   // Sidebar
   "status.loading": "Chargement…",
+  "checklist.toCard": "Transformer en carte (liée à celle-ci, qui en dépend)",
+  "checklist.open": "Ouvrir la carte",
+  "checklist.cardGone": "carte introuvable",
   "field.attachments": "Pièces jointes",
   "attach.add": "📎 joindre",
   "attach.addTitle": "Joindre des fichiers (ou coller une capture, ou déposer des fichiers sur la fiche)",
@@ -410,6 +413,9 @@ const en: Record<Key, string> = {
 
   // Sidebar
   "status.loading": "Loading…",
+  "checklist.toCard": "Turn into a card (linked to this one, which depends on it)",
+  "checklist.open": "Open the card",
+  "checklist.cardGone": "card not found",
   "field.attachments": "Attachments",
   "attach.add": "📎 attach",
   "attach.addTitle": "Attach files (or paste a screenshot, or drop files on the card)",

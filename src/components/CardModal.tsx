@@ -15,6 +15,8 @@ import { applyTemplate, CARD_TEMPLATES } from "../lib/templates";
 import { AttachmentsSection, filesOf, type AttachmentProps } from "./AttachmentsSection";
 import { branchUrl, MR_STATES, webUrl } from "../lib/dev";
 import { claimLabel } from "../lib/claim";
+import { checklistDone, isFinished } from "../lib/links";
+import { refOf } from "../lib/shortid";
 import { openExternal } from "../lib/open";
 import type { MergeRequestState } from "../types";
 
@@ -38,6 +40,8 @@ interface Props {
   onRestore?: () => void;
   /** Files attached to the card; left out for a card not saved yet. */
   attachments?: AttachmentProps;
+  /** Makes a card of a checklist item's text, which this card then depends on. */
+  onItemToCard?: (text: string) => Card;
 }
 
 /**
@@ -46,7 +50,7 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim, onRestore, attachments }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim, onRestore, attachments, onItemToCard }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
@@ -135,10 +139,10 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
     setNewItem("");
   };
 
-  const updateItem = (id: string, patch: { text?: string; done?: boolean }) =>
+  const updateItem = (id: string, patch: { text?: string; done?: boolean; cardId?: string }) =>
     set({ checklist: draft.checklist.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
 
-  const done = draft.checklist.filter((i) => i.done).length;
+  const done = links ? checklistDone(draft, links.index) : draft.checklist.filter((i) => i.done).length;
   const total = draft.checklist.length;
   const due = dueStatus(draft.due);
 
@@ -308,10 +312,42 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             </div>
           )}
           <ul className="checklist">
-            {draft.checklist.map((item) => (
-              <li key={item.id} className={item.done ? "done" : ""}>
-                <input type="checkbox" checked={item.done} onChange={(e) => updateItem(item.id, { done: e.target.checked })} />
+            {draft.checklist.map((item) => {
+              // An item turned into a card follows that card: ticked once it is finished.
+              const linked = item.cardId ? links?.index.get(item.cardId) : undefined;
+              const done = linked ? isFinished(linked.card, linked.board) : item.done;
+              return (
+              <li key={item.id} className={done ? "done" : ""}>
+                <input
+                  type="checkbox"
+                  checked={done}
+                  disabled={!!item.cardId}
+                  onChange={(e) => updateItem(item.id, { done: e.target.checked })}
+                />
                 <input className="check-text" value={item.text} onChange={(e) => updateItem(item.id, { text: e.target.value })} />
+                {item.cardId ? (
+                  linked ? (
+                    <button className="link item-card" onClick={() => openLinked(linked.board.id, linked.card.id)} title={t("checklist.open")}>
+                      {refOf(linked.board, linked.card) ?? "↗"} · {linked.board.columns.find((c) => c.id === linked.card.columnId)?.name ?? "—"}
+                    </button>
+                  ) : (
+                    <span className="muted item-card">{t("checklist.cardGone")}</span>
+                  )
+                ) : (
+                  onItemToCard &&
+                  item.text.trim() && (
+                    <button
+                      className="icon-btn"
+                      title={t("checklist.toCard")}
+                      onClick={() => {
+                        const made = onItemToCard(item.text.trim());
+                        updateItem(item.id, { cardId: made.id });
+                      }}
+                    >
+                      ↗
+                    </button>
+                  )
+                )}
                 <button
                   className="icon-btn"
                   title={t("cardModal.remove")}
@@ -320,7 +356,8 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
                   ✕
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
           <div className="check-add">
             <input

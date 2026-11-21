@@ -39,6 +39,8 @@ export interface ChecklistItem {
   id: string;
   text: string;
   done: boolean;
+  /** The card this item became; the item then shows that card's state. */
+  cardId?: string;
 }
 
 /** How a card relates to another, seen from the card that holds the link. */

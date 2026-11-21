@@ -53,6 +53,14 @@ export function indexCards(boards: Board[], cards: Record<string, Card[]>): Map<
   return index;
 }
 
+/** Checklist items done: ticked, or turned into a card that is finished. */
+export function checklistDone(card: Card, index: Map<string, Located>): number {
+  return card.checklist.filter((i) => {
+    const linked = i.cardId ? index.get(i.cardId) : undefined;
+    return linked ? isFinished(linked.card, linked.board) : i.done;
+  }).length;
+}
+
 /** The cards this one depends on that aren't finished yet. */
 export function openBlockers(card: Card, index: Map<string, Located>): Located[] {
   return card.links

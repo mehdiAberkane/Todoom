@@ -693,3 +693,6 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .attach-size { font-size: 12px; white-space: nowrap; }
 .lightbox { width: min(1100px, 100%); }
 .lightbox img { display: block; max-width: 100%; max-height: 75vh; margin: 0 auto; border-radius: 8px; }
+
+/* Checklist item turned into a card */
+.item-card { flex: none; font-size: 12px; white-space: nowrap; }

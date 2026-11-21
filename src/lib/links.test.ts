@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Board, Card } from "../types";
-import { indexCards, inverseOf, isFinished, openBlockers, withLink, withoutLink } from "./links";
+import { checklistDone, indexCards, inverseOf, isFinished, openBlockers, withLink, withoutLink } from "./links";
 import { cardProblem } from "./validate";
 
 const board = (id: string, columns: string[]): Board => ({
@@ -72,6 +72,21 @@ describe("links", () => {
       nyx: [card("n1", "nyx", "nyx-c0"), card("n2", "nyx", "nyx-c1"), card("n3", "nyx", "nyx-c0")],
     });
     expect(openBlockers(a, index).map((l) => l.card.id)).toEqual(["n1"]);
+  });
+
+  it("counts a checklist item turned into a card as done once that card is finished", () => {
+    const b = board("b", ["À faire", "Terminé"]);
+    const index = indexCards([b], { b: [card("open", "b", "b-c0"), card("closed", "b", "b-c1")] });
+    const parent = card("p", "b", "b-c0", {
+      checklist: [
+        { id: "1", text: "x", done: true },
+        { id: "2", text: "y", done: false, cardId: "closed" },
+        { id: "3", text: "z", done: true, cardId: "open" },
+        { id: "4", text: "w", done: false, cardId: "gone" },
+      ],
+    });
+    expect(checklistDone(parent, index)).toBe(2);
+    expect(cardProblem({ id: "x", checklist: [{ id: "1", text: "t", done: false, cardId: 3 }] })).toEqual({ code: "bad_field", field: "checklist" });
   });
 
   it("is checked when files are read", () => {

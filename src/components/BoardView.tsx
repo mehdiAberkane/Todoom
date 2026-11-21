@@ -16,7 +16,7 @@ import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
 import { prioritiesOf } from "../lib/priority";
-import { openBlockers, type Located } from "../lib/links";
+import { checklistDone, openBlockers, type Located } from "../lib/links";
 import { mergedHistory } from "../lib/activity";
 import type { CardComment, HistoryEvent } from "../types";
 import { cleanKey, nextNumber, parseRef, refOf } from "../lib/shortid";
@@ -116,6 +116,8 @@ export function BoardView({
   const [dragLists, setDragLists] = useState<Lists | null>(null);
 
   const cardById = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
+
+  const doneItems = useMemo(() => new Map(cards.map((c) => [c.id, checklistDone(c, index)])), [cards, index]);
 
   const blockers = useMemo(
     () => new Map(cards.map((c) => [c.id, openBlockers(c, index).map((b) => b.card.title)])),
@@ -541,6 +543,7 @@ export function BoardView({
                 labels={board.labels}
                 priorities={priorities}
                 blockers={blockers}
+                checklistDone={doneItems}
                 boardKey={board.key}
                 comments={comments}
                 attachments={attachments}
@@ -602,6 +605,13 @@ export function BoardView({
             onLink: (type, target) => actions.linkCards(openCard, type, target),
             onUnlink: (targetId) => actions.unlinkCards(openCard, index.get(targetId)?.card, targetId),
             onOpen: openLinked,
+          }}
+          onItemToCard={(text) => {
+            // A new card at the bottom of the first column, that this one depends on.
+            const first = board.columns[0];
+            const made = actions.newCard(board, first?.id ?? openCard.columnId, text, nextOrder(first?.id ?? openCard.columnId), nextNumber(allCards));
+            actions.linkCards(openCard, "dependsOn", made);
+            return made;
           }}
           attachments={{
             attachments: attachments[openCard.id] ?? [],

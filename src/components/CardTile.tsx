@@ -15,6 +15,7 @@ export function CardBody({
   blockers = [],
   commentCount = 0,
   attachmentCount = 0,
+  checklistDone,
 }: {
   card: Card;
   /** Short id such as SOL-42. */
@@ -25,10 +26,12 @@ export function CardBody({
   blockers?: string[];
   commentCount?: number;
   attachmentCount?: number;
+  /** Items done, counting those turned into finished cards; else the ticked ones. */
+  checklistDone?: number;
 }) {
   const cardLabels = card.labels.map((id) => labels.find((l) => l.id === id)).filter((l): l is Label => !!l);
   const priority = card.priority ? priorities.find((p) => p.id === card.priority) : undefined;
-  const done = card.checklist.filter((i) => i.done).length;
+  const done = checklistDone ?? card.checklist.filter((i) => i.done).length;
   const total = card.checklist.length;
   const due = dueStatus(card.due);
 
@@ -129,6 +132,7 @@ export function CardTile({
   blockers,
   commentCount,
   attachmentCount,
+  checklistDone,
   unsaved,
   selected = false,
   onOpen,
@@ -141,6 +145,7 @@ export function CardTile({
   blockers?: string[];
   commentCount?: number;
   attachmentCount?: number;
+  checklistDone?: number;
   /** The disk hasn't confirmed the last change of this card yet. */
   unsaved: boolean;
   selected?: boolean;
@@ -177,7 +182,7 @@ export function CardTile({
           {t("card.unsaved")}
         </div>
       )}
-      <CardBody card={card} cardRef={cardRef} labels={labels} priorities={priorities} blockers={blockers} commentCount={commentCount} attachmentCount={attachmentCount} />
+      <CardBody card={card} cardRef={cardRef} labels={labels} priorities={priorities} blockers={blockers} commentCount={commentCount} attachmentCount={attachmentCount} checklistDone={checklistDone} />
     </article>
   );
 }
