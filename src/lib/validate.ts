@@ -9,6 +9,7 @@ type Check = [field: string, ok: (v: unknown) => boolean];
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isString = (v: unknown) => typeof v === "string";
 const isNumber = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+const isBoolean = (v: unknown) => typeof v === "boolean";
 const optional = (ok: (v: unknown) => boolean) => (v: unknown) => v === undefined || ok(v);
 const nullable = (ok: (v: unknown) => boolean) => (v: unknown) => v === undefined || v === null || ok(v);
 const listOf = (ok: (v: unknown) => boolean) => (v: unknown) => v === undefined || (Array.isArray(v) && v.every(ok));
@@ -54,6 +55,7 @@ const SETTINGS: Check[] = [
   ["backgroundDim", optional(isNumber)],
   ["language", nullable((v) => v === "fr" || v === "en")],
   ["myWorkColumns", listOf(isString)],
+  ["notifications", optional(shaped([["enabled", optional(isBoolean)], ["columns", listOf(isString)], ["due", optional(isBoolean)]]))],
   ["updatedAt", optional(isString)],
 ];
 

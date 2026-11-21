@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppSettings } from "../types";
+import type { AppSettings, Board } from "../types";
+import { notifySettings, plain } from "../lib/notify";
+import { ensurePermission, notifyPermission, show } from "../lib/notifier";
 import { imageToBackground } from "../lib/image";
 import { t } from "../lib/i18n";
 import type { CheckState, UpdateState } from "../lib/updater";
@@ -7,6 +9,8 @@ import type { CheckState, UpdateState } from "../lib/updater";
 interface Props {
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
+  /** Boards in use, for the names of their columns. */
+  boards: Board[];
   dataDir: string;
   onChangeDataDir: () => void;
   version: string | null;
@@ -22,6 +26,7 @@ const SAVE_DELAY_MS = 300;
 export function SettingsPage({
   settings,
   onSave,
+  boards,
   dataDir,
   onChangeDataDir,
   version,
@@ -42,6 +47,27 @@ export function SettingsPage({
     const timer = setTimeout(() => onSave({ ...settings, backgroundDim: dim }), SAVE_DELAY_MS);
     return () => clearTimeout(timer);
   }, [dim]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notifications: the columns of every board, by name, once. A watched name no
+  // board uses (« Failed » in French) stays watched but isn't shown.
+  const notify = notifySettings(settings);
+  const columnNames = (() => {
+    const seen = new Map<string, string>();
+    for (const b of boards) for (const c of b.columns) if (!seen.has(plain(c.name))) seen.set(plain(c.name), c.name);
+    return [...seen.values()];
+  })();
+  const watched = (name: string) => notify.columns.some((c) => plain(c) === plain(name));
+  const saveNotify = (change: Partial<typeof notify>) =>
+    onSave({ ...settings, backgroundDim: dim, notifications: { ...notify, ...change } });
+  const [denied, setDenied] = useState(false);
+  useEffect(() => {
+    notifyPermission().then((p) => setDenied(p === "denied")).catch(() => {});
+  }, []);
+  const test = async () => {
+    const ok = await ensurePermission().catch(() => false);
+    setDenied(!ok);
+    if (ok) await show([{ title: "Todoom", body: t("notify.test") }]);
+  };
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
@@ -77,6 +103,43 @@ export function SettingsPage({
           <option value="fr">Français</option>
           <option value="en">English</option>
         </select>
+      </section>
+
+      <section className="settings-section">
+        <h2>{t("settings.notifications")}</h2>
+        <p className="muted">{t("settings.notifyShared")}</p>
+        <label className="settings-check">
+          <input type="checkbox" checked={notify.enabled} onChange={(e) => saveNotify({ enabled: e.target.checked })} />
+          {t("settings.notifyEnabled")}
+        </label>
+        <div className={`notify-options ${notify.enabled ? "" : "off"}`}>
+          <div className="settings-row">
+            <span className="muted">{t("settings.notifyColumns")}</span>
+            {columnNames.map((name) => (
+              <button
+                key={name}
+                className={`filter-chip ${watched(name) ? "on" : ""}`}
+                disabled={!notify.enabled}
+                onClick={() =>
+                  saveNotify({ columns: watched(name) ? notify.columns.filter((c) => plain(c) !== plain(name)) : [...notify.columns, name] })
+                }
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+          <p className="hint">{t("settings.notifyColumnsHint")}</p>
+          <label className="settings-check">
+            <input type="checkbox" checked={notify.due} disabled={!notify.enabled} onChange={(e) => saveNotify({ due: e.target.checked })} />
+            {t("settings.notifyDue")}
+          </label>
+          <div className="settings-row">
+            <button className="btn-ghost" onClick={test} disabled={!notify.enabled}>
+              {t("settings.notifyTest")}
+            </button>
+            {denied && <span className="check-failed">{t("settings.notifyDenied")}</span>}
+          </div>
+        </div>
       </section>
 
       <section className="settings-section">

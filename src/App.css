@@ -702,3 +702,9 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .transfer-form { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
 .transfer-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
 .transfer-form .hint { margin: 0; font-size: 11px; }
+
+/* Notifications settings */
+.settings-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; cursor: pointer; }
+.notify-options { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.notify-options.off { opacity: 0.5; }
+.notify-options .hint { margin: 0; font-size: 12px; }

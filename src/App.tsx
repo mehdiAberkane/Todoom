@@ -5,6 +5,7 @@ import { expiredBoards, useTodoom } from "./lib/store";
 import { indexCards } from "./lib/links";
 import { deriveKey, numbering } from "./lib/shortid";
 import { useUpdater } from "./lib/updater";
+import { notifyChanges } from "./lib/notifier";
 import { useCloseGuard } from "./lib/closeGuard";
 import { getLang, setLang, systemLang, t } from "./lib/i18n";
 import { localGet, localSet } from "./lib/utils";
@@ -44,7 +45,7 @@ export default function App() {
 }
 
 function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () => void }) {
-  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow } = useTodoom(backend);
+  const { data, status, error, host, actions, unsaved, unsavedIds, failures, nextRetry, retryNow, pending, slow } = useTodoom(backend, notifyChanges);
   // Automatic upkeep (numbers, keys, trash) waits for complete data: a card not downloaded yet
   // could take a number already used, a board not read yet could lose its key.
   const incomplete = status === "loading" || pending.length > 0;
@@ -218,6 +219,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
           <SettingsPage
             settings={data.settings}
             onSave={actions.saveSettings}
+            boards={activeBoards}
             dataDir={dataDir}
             onChangeDataDir={onSettings}
             version={updater.version}

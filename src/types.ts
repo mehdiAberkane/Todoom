@@ -178,6 +178,8 @@ export interface AppSettings {
   language: "fr" | "en" | null;
   /** Columns shown in « My work », by name; absent means the usual ones (En cours, A verifier…). */
   myWorkColumns?: string[];
+  /** System notifications; absent means on, for « A verifier » and « Echec », and for due dates. */
+  notifications?: { enabled?: boolean; columns?: string[]; due?: boolean };
   updatedAt: string;
 }
 

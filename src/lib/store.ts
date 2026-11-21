@@ -295,7 +295,14 @@ export function overlay(files: FileEntry[], queue: ReadonlyMap<string, PendingOp
   return [...out].map(([path, content]) => ({ path, content }));
 }
 
-export function useTodoom(backend: Backend) {
+/** Told of every read of the data folder: what was shown before, what was read, and whether the previous read was complete. */
+export type OnLoaded = (prev: Data, next: Data, prevComplete: boolean) => void;
+
+export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
+  // Whether the last read had every file; the first read has nothing to compare to.
+  const lastComplete = useRef(false);
   const [data, setData] = useState<Data>(EMPTY);
   const [status, setStatus] = useState<SyncStatus>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -329,7 +336,16 @@ export function useTodoom(backend: Backend) {
     try {
       const { files, pending } = await backend.loadAll();
       if (flushing.current) return;
-      setData(parse(overlay(files, queue.current), pending));
+      const next = parse(overlay(files, queue.current), pending);
+      const prev = dataRef.current;
+      const prevComplete = lastComplete.current;
+      lastComplete.current = pending.length === 0;
+      setData(next);
+      try {
+        onLoadedRef.current?.(prev, next, prevComplete);
+      } catch {
+        /* a listener failing must not break loading */
+      }
       setPending(pending);
       setError(null);
       setStatus(queue.current.size ? "error" : "synced");

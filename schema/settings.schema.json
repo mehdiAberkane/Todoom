@@ -30,6 +30,34 @@
       ],
       "description": "Interface language; null follows the system language."
     },
+    "myWorkColumns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Columns shown in « My work », by name (case and accents ignored)."
+    },
+    "notifications": {
+      "type": "object",
+      "description": "System notifications. Missing fields keep their defaults.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Default true."
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Columns that notify when a card arrives, by name. Default: A verifier, Echec, To review, Failed."
+        },
+        "due": {
+          "type": "boolean",
+          "description": "Notify the cards due today, once a day per computer. Default true."
+        }
+      }
+    },
     "updatedAt": {
       "type": "string"
     }
