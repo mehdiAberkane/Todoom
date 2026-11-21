@@ -38,8 +38,11 @@ const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCa
 export function isFinished(card: Card, board: Board | undefined): boolean {
   if (card.archivedAt) return true;
   const column = board?.columns.find((c) => c.id === card.columnId);
-  return !!column && DONE_NAMES.includes(plain(column.name));
+  return !!column && isDoneName(column.name);
 }
+
+/** A column name meaning finished: « Terminé », « Done »… (case and accents ignored). */
+export const isDoneName = (name: string) => DONE_NAMES.includes(plain(name));
 
 export interface Located {
   card: Card;

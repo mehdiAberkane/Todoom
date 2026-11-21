@@ -708,3 +708,10 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .notify-options { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .notify-options.off { opacity: 0.5; }
 .notify-options .hint { margin: 0; font-size: 12px; }
+
+/* Tracking: dates and time per column */
+.tracking { display: flex; flex-direction: column; gap: 3px; font-size: 12px; margin-top: 14px; }
+.time-columns { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.time-columns li { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+.time-columns li.now { color: var(--text); font-weight: 600; }
+.stat-done { color: #7bd88f; }

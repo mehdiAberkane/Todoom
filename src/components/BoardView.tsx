@@ -14,10 +14,11 @@ import {
 import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
-import { dueStatus, reorder, uid } from "../lib/utils";
+import { dueStatus, formatDue, reorder, uid } from "../lib/utils";
 import { prioritiesOf } from "../lib/priority";
 import { checklistDone, openBlockers, type Located } from "../lib/links";
 import { mergedHistory } from "../lib/activity";
+import { finishedPerWeek } from "../lib/timeline";
 import type { CardComment, HistoryEvent } from "../types";
 import { cleanKey, nextNumber, parseRef, refOf } from "../lib/shortid";
 import { useDragSensors } from "../lib/dnd";
@@ -86,6 +87,8 @@ export function BoardView({
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
   const archived = useMemo(() => allCards.filter((c) => c.archivedAt), [allCards]);
+  // Cards finished per week, from the history: the last one is this week.
+  const weekly = useMemo(() => finishedPerWeek(board, allCards, (id) => mergedHistory(history[id])), [board, allCards, history]);
   const [showArchive, setShowArchive] = useState(false);
   const [showContext, setShowContext] = useState(false);
   // The filter bar comes back as it was left on this board (kept on this computer).
@@ -431,6 +434,15 @@ export function BoardView({
           <span className="board-stats" title={t("card.selectHint")}>
             {tn("board.cards", cards.length)}
             {overdue > 0 && <span className="stat-overdue"> · {t("board.overdue", { n: overdue })}</span>}
+            {weekly.some((w) => w.count > 0) && (
+              <span
+                className="stat-done"
+                title={[t("board.doneWeeksTitle"), ...weekly.map((w) => `${formatDue(w.week)} : ${w.count}`).reverse()].join("\n")}
+              >
+                {" · "}
+                {t("board.doneThisWeek", { n: weekly[weekly.length - 1].count })}
+              </span>
+            )}
           </span>
           <AgentStatusChips agents={agents} cardById={cardById} refOf={(c) => refOf(board, c)} />
         </div>

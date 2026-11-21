@@ -18,6 +18,7 @@ import { claimLabel } from "../lib/claim";
 import { checklistDone, isFinished } from "../lib/links";
 import { refOf } from "../lib/shortid";
 import { openExternal } from "../lib/open";
+import { datesOf, formatDuration, staysOf, timeByColumn } from "../lib/timeline";
 import type { MergeRequestState } from "../types";
 
 interface Props {
@@ -535,6 +536,8 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             </select>
           )}
 
+          {activity && <Tracking card={card} board={board} history={activity.history} />}
+
           <div className="meta">
             <div>{t("cardModal.created", { date: formatDateTime(card.createdAt) })}</div>
             {card.updatedAt && <div>{t("cardModal.updated", { date: formatDateTime(card.updatedAt) })}</div>}
@@ -661,4 +664,36 @@ function describe(field: Field, card: Card, board: Board): string {
       return text ? (text.length > 280 ? `${text.slice(0, 280)}…` : text) : t("describe.empty");
     }
   }
+}
+
+/** Start and end dates and time per column, read from the card's history. */
+function Tracking({ card, board, history }: { card: Card; board: Board; history: ActivityProps["history"] }) {
+  const stays = staysOf(card, board, history);
+  const { started, finished } = datesOf(card, board, stays);
+  const times = timeByColumn(card, stays);
+  const current = stays[stays.length - 1];
+  return (
+    <div className="tracking">
+      <h4>{t("tracking.title")}</h4>
+      <div>
+        {started ? t("tracking.started", { date: formatDateTime(started) }) : <span className="muted">{t("tracking.notStarted")}</span>}
+      </div>
+      {finished && (
+        <div>
+          {t("tracking.finished", { date: formatDateTime(finished) })}
+          <span className="muted"> · {t("tracking.took", { time: formatDuration(Date.parse(finished) - Date.parse(started ?? card.createdAt)) })}</span>
+        </div>
+      )}
+      {times.length > 0 && (
+        <ul className="time-columns" title={t("tracking.timeTitle")}>
+          {times.map(({ column, ms }) => (
+            <li key={column} className={column === current?.column && !current.guessed && !card.archivedAt ? "now" : ""}>
+              <span>{column}</span>
+              <span>{formatDuration(ms)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
