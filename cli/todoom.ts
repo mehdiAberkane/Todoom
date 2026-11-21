@@ -25,7 +25,8 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
                 [--label <nom>]... [--unlabel <nom>]... [--priority <nom> | --no-priority]
                 [--due AAAA-MM-JJ | --no-due] [--branch <nom> | --no-branch]
                 [--mr <adresse>] [--mr-state open|merged|closed] [--no-mr]
-  todoom move <carte> <colonne> [--top]
+  todoom move <carte> <colonne> [--top] [--board <tableau>]
+                                              --board : vers un autre tableau (étiquettes par nom)
   todoom link <carte> <type> <autre carte>    type : depends-on, blocks, duplicate-of,
                                               duplicated-by, relates-to (écrit sur les deux cartes)
   todoom unlink <carte> <autre carte>
@@ -78,6 +79,7 @@ export async function main(argv: string[]): Promise<number> {
       "mr-state": { type: "string" },
       "no-mr": { type: "boolean" },
       move: { type: "string" },
+      board: { type: "string" },
       conversation: { type: "string" },
       force: { type: "boolean" },
       due: { type: "string" },
@@ -194,8 +196,12 @@ export async function main(argv: string[]): Promise<number> {
     }
 
     case "move":
-      need(2, "move <carte> <colonne> [--top]");
-      out(store().move(rest[0], rest.slice(1).join(" "), o.top ? "top" : "bottom"));
+      need(2, "move <carte> <colonne> [--top] [--board <tableau>]");
+      out(
+        o.board
+          ? store().moveToBoard(rest[0], o.board, rest.slice(1).join(" "))
+          : store().move(rest[0], rest.slice(1).join(" "), o.top ? "top" : "bottom"),
+      );
       return 0;
 
     case "link":

@@ -136,7 +136,8 @@ export type HistoryField =
   | "archived"
   | "branch"
   | "mergeRequest"
-  | "claimedBy";
+  | "claimedBy"
+  | "board";
 
 /** One change of a card. from/to are names as they were at the time. */
 export interface HistoryEvent {

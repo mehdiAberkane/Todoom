@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -179,6 +179,23 @@ describe("writes", () => {
     const raw = JSON.parse(readFileSync(join(dir, "boards", "b1", "board.json"), "utf8"));
     expect(raw.labels).toEqual([{ id: "l1", name: "Bug", color: "#f00" }]);
     expect(raw.description).toBe("## Dépôt\nC:/projets/todoom");
+  });
+
+  it("moves a card to another board with its comments, labels matched by name, a new number", () => {
+    mkdirSync(join(dir, "boards", "b2", "cards"), { recursive: true });
+    writeFileSync(
+      join(dir, "boards", "b2", "board.json"),
+      JSON.stringify({ id: "b2", name: "Nyx", key: "NYX", columns: [{ id: "n0", name: "Backlog" }, { id: "n1", name: "En cours" }], labels: [{ id: "nb", name: "bug", color: "#f00" }] }),
+    );
+    const a = store.create("Todoom", "Un", { labels: ["Bug"] });
+    store.comment(a.id, "Avant le déplacement");
+    const moved = store.moveToBoard(a.id, "nyx", "en cours");
+    expect(moved).toMatchObject({ id: a.id, board: "Nyx", column: "En cours", labels: ["bug"], ref: "NYX-1" });
+    expect(existsSync(join(dir, "boards", "b1", "cards", `${a.id}.json`))).toBe(false);
+    expect(existsSync(join(dir, "boards", "b1", "comments", a.id))).toBe(false);
+    const shown = store.detail(store.card(a.id).card, store.board("Nyx"));
+    expect(shown.comments.map((c) => c.text)).toEqual(["Avant le déplacement"]);
+    expect(shown.history.at(-1)).toMatchObject({ field: "board", from: "Todoom / À faire", to: "Nyx / En cours" });
   });
 
   it("archives and restores at the bottom of the column", () => {

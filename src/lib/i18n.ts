@@ -17,6 +17,15 @@ const fr = {
 
   // Sidebar
   "status.loading": "Chargement…",
+  "transfer.duplicate": "⧉ Dupliquer",
+  "transfer.duplicateTitle": "Une copie de la carte dans la même colonne (sans liens, commentaires ni pièces jointes)",
+  "transfer.copyTitle": "{title} (copie)",
+  "transfer.move": "↦ Déplacer vers un autre tableau",
+  "transfer.board": "Tableau",
+  "transfer.column": "Colonne",
+  "transfer.go": "Déplacer",
+  "transfer.hint": "Les étiquettes et la priorité suivent par leur nom ; les commentaires, l'historique et les pièces jointes suivent aussi. La carte prend un nouveau numéro.",
+  "history.board": "Tableau : {from} → {to}",
   "checklist.toCard": "Transformer en carte (liée à celle-ci, qui en dépend)",
   "checklist.open": "Ouvrir la carte",
   "checklist.cardGone": "carte introuvable",
@@ -413,6 +422,15 @@ const en: Record<Key, string> = {
 
   // Sidebar
   "status.loading": "Loading…",
+  "transfer.duplicate": "⧉ Duplicate",
+  "transfer.duplicateTitle": "A copy of the card in the same column (without links, comments or attachments)",
+  "transfer.copyTitle": "{title} (copy)",
+  "transfer.move": "↦ Move to another board",
+  "transfer.board": "Board",
+  "transfer.column": "Column",
+  "transfer.go": "Move",
+  "transfer.hint": "Labels and priority follow by name; comments, history and attachments come along. The card gets a new number.",
+  "history.board": "Board: {from} → {to}",
   "checklist.toCard": "Turn into a card (linked to this one, which depends on it)",
   "checklist.open": "Open the card",
   "checklist.cardGone": "card not found",

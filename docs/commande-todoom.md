@@ -45,7 +45,7 @@ noms possibles quand un nom n'est pas reconnu.
 | `todoom show <carte>` | une carte entière, avec ses commentaires, son historique et ses liens (titre, tableau, colonne, terminée ou non) |
 | `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
 | `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--priority … \| --no-priority] [--due … \| --no-due] [--branch … \| --no-branch] [--mr <adresse>] [--mr-state open\|merged\|closed] [--no-mr]` | modifie les champs donnés, garde les autres ; une merge request garde son état quand son adresse change |
-| `todoom move <carte> <colonne> [--top]` | déplace en bas (ou en haut) d'une colonne |
+| `todoom move <carte> <colonne> [--top] [--board <tableau>]` | déplace en bas (ou en haut) d'une colonne ; avec `--board`, vers un autre tableau : même identifiant interne, étiquettes et priorité par leur nom, commentaires, historique et pièces jointes déplacés, nouveau numéro |
 | `todoom link <carte> <type> <autre carte>` | lie deux cartes, même sur deux tableaux, et écrit le lien sur les deux. Types : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` |
 | `todoom unlink <carte> <autre carte>` | retire le lien des deux cartes |
 | `todoom claim <carte> [--move <colonne>] [--conversation <nom>] [--force]` | prend le ticket (« Pris par » : ce PC, l'agent, la conversation), en le déplaçant au passage ; refusé s'il est pris par quelqu'un d'autre |

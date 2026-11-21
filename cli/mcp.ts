@@ -189,15 +189,18 @@ export function createServer(dir: string): McpServer {
     "move_card",
     {
       title: "Move a card",
-      description: `Moves a card to a column of its board, at the bottom (or the top). ${NAMES}`,
+      description:
+        `Moves a card to a column of its board, at the bottom (or the top). With board, moves it to another board: same id, labels and priority matched by name, comments, history and attachments moved along, a new short id. ${NAMES}`,
       inputSchema: {
         card: z.string().describe("Card short id (SOL-42) or id"),
         column: z.string().describe("Column name, e.g. « En cours »"),
         position: z.enum(["top", "bottom"]).optional(),
+        board: z.string().optional().describe("Another board to move the card to"),
       },
       annotations: { ...writes, idempotentHint: true },
     },
-    ({ card, column, position }) => run(() => store.move(card, column, position ?? "bottom")),
+    ({ card, column, position, board }) =>
+      run(() => (board ? store.moveToBoard(card, board, column) : store.move(card, column, position ?? "bottom"))),
   );
 
   server.registerTool(

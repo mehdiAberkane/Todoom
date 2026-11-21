@@ -133,6 +133,8 @@ function describeEvent(e: HistoryEvent): string {
       return t(`history.${e.field}`, { from: v(e.from), to: v(e.to) });
     case "mergeRequest":
       return t("history.mergeRequest", { from: mrText(e.from), to: mrText(e.to) });
+    case "board":
+      return t("history.board", { from: v(e.from), to: v(e.to) });
     case "claimedBy":
       return e.to ? t("history.claimed", { to: e.to }) : t("history.released", { from: v(e.from) });
     default:

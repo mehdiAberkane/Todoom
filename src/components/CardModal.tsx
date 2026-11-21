@@ -42,6 +42,12 @@ interface Props {
   attachments?: AttachmentProps;
   /** Makes a card of a checklist item's text, which this card then depends on. */
   onItemToCard?: (text: string) => Card;
+  /** Copy and move; left out for a card not saved yet. They get the card with the edits made here. */
+  transfer?: {
+    boards: Board[];
+    onDuplicate: (current: Card) => void;
+    onMoveToBoard: (current: Card, boardId: string, columnId: string) => Promise<void>;
+  };
 }
 
 /**
@@ -50,12 +56,33 @@ interface Props {
  * fields edited here are written over it, so changes made elsewhere (another
  * PC, the agent) are kept.
  */
-export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim, onRestore, attachments, onItemToCard }: Props) {
+export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew = false, links, cardRef, activity, claim, onRestore, attachments, onItemToCard, transfer }: Props) {
   // The version the edits started from, moved forward as outside changes come in.
   const [base, setBase] = useState(card);
   const [draft, setDraft] = useState(card);
   // The description is read as Markdown; it is edited as text when empty, or on demand.
   const [editingDesc, setEditingDesc] = useState(() => !card.description.trim());
+  // The card as it would be saved now: what a copy or a move takes.
+  const current = () => mergeEdits(base, cleaned(), card) ?? card;
+  const [moving, setMoving] = useState(false);
+  const [moveTo, setMoveTo] = useState<{ boardId: string; columnId: string } | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const otherBoards = transfer?.boards.filter((b) => b.id !== board.id && !b.archivedAt) ?? [];
+  const targetBoard = otherBoards.find((b) => b.id === moveTo?.boardId);
+  const pickBoard = (boardId: string) => {
+    const b = otherBoards.find((x) => x.id === boardId);
+    setMoveTo(b ? { boardId: b.id, columnId: b.columns[0]?.id ?? "" } : null);
+  };
+  const doMove = async () => {
+    if (!transfer || !moveTo?.columnId) return;
+    setMoveError(null);
+    try {
+      await transfer.onMoveToBoard(current(), moveTo.boardId, moveTo.columnId);
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   // Files pasted, dropped or picked are attached right away, like comments.
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
@@ -513,6 +540,55 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             {card.updatedAt && <div>{t("cardModal.updated", { date: formatDateTime(card.updatedAt) })}</div>}
           </div>
 
+          {transfer && !card.archivedAt && (
+            <div className="transfer">
+              <button
+                className="btn-ghost full"
+                title={t("transfer.duplicateTitle")}
+                onClick={() => {
+                  const now = current();
+                  finish(false, new Set());
+                  transfer.onDuplicate(now);
+                }}
+              >
+                {t("transfer.duplicate")}
+              </button>
+              {otherBoards.length > 0 && (
+                <button className="btn-ghost full" onClick={() => (setMoving((m) => !m), pickBoard(otherBoards[0].id))}>
+                  {t("transfer.move")}
+                </button>
+              )}
+              {moving && moveTo && (
+                <div className="transfer-form">
+                  <label>
+                    {t("transfer.board")}
+                    <select value={moveTo.boardId} onChange={(e) => pickBoard(e.target.value)}>
+                      {otherBoards.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {t("transfer.column")}
+                    <select value={moveTo.columnId} onChange={(e) => setMoveTo({ ...moveTo, columnId: e.target.value })}>
+                      {targetBoard?.columns.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="hint">{t("transfer.hint")}</p>
+                  {moveError && <div className="error-box">{moveError}</div>}
+                  <button className="btn-primary small" onClick={doMove} disabled={!moveTo.columnId}>
+                    {t("transfer.go")}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {!isNew && !card.archivedAt && (
             <button className="btn-ghost full" onClick={archive} title={t("cardModal.archiveTitle")}>
               {t("cardModal.archive")}

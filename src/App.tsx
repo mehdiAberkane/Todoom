@@ -241,6 +241,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             comments={data.comments}
             agents={data.agents[board.id]}
             attachments={data.attachments}
+            allBoards={activeBoards}
             history={data.history}
           />
         ) : status === "loading" || pending.length > 0 ? (

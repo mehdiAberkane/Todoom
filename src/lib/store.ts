@@ -8,6 +8,8 @@ import { t } from "./i18n";
 import { inverseOf, withLink, withoutLink } from "./links";
 import { newClaim } from "./claim";
 import { boardSetup, fromSetup, type BoardTemplate } from "./templates";
+import { duplicateOf, mapByName } from "./transfer";
+import { nextNumber } from "./shortid";
 import { attachmentFilePath, attachmentMetaPath, attachmentsDir, MAX_ATTACHMENT_BYTES, readAsBase64, storedName } from "./attachments";
 
 /** A file of the data folder that couldn't be loaded, and why. */
@@ -449,8 +451,12 @@ export function useTodoom(backend: Backend) {
     const recordHistory = (prev: Card | undefined, next: Card) => {
       const board = dataRef.current.boards.find((b) => b.id === next.boardId);
       if (!board || !hostRef.current) return;
-      const events = eventsFor(changesBetween(prev, next, board), { host: hostRef.current });
-      if (!events.length) return;
+      appendHistory(next, eventsFor(changesBetween(prev, next, board), { host: hostRef.current }));
+    };
+
+    /** Adds events to this computer's history file of the card, where the card is now. */
+    const appendHistory = (next: Card, events: HistoryEvent[]) => {
+      if (!events.length || !hostRef.current) return;
       const writer = writerName(hostRef.current);
       const all = [...(dataRef.current.history[next.id]?.[writer] ?? []), ...events];
       dataRef.current = {
@@ -580,6 +586,76 @@ export function useTodoom(backend: Backend) {
         }));
         removePath(attachmentMetaPath(attachment, boardId));
         removePath(attachmentFilePath(attachment, boardId));
+      },
+
+/** A copy of the card at the bottom of its column, with the board's next number. */
+      duplicateCard(card: Card): Card {
+        const siblings = dataRef.current.cards[card.boardId] ?? [];
+        const bottom = siblings.filter((c) => c.columnId === card.columnId && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1) + 1;
+        const copy = duplicateOf(card, t("transfer.copyTitle", { title: card.title }), bottom, nextNumber(siblings));
+        saveCard(copy);
+        return copy;
+      },
+
+      /**
+       * Moves a card to another board, in the given column, at its bottom. The card
+       * keeps its id, so links to it still work; labels and priority follow by
+       * name; its comments, history and attachments move with it. It gets the
+       * new board's next number. Returns the moved card.
+       */
+      async moveCardToBoard(card: Card, target: Board, columnId: string): Promise<Card> {
+        const d = dataRef.current;
+        const source = d.boards.find((b) => b.id === card.boardId);
+        if (!source || source.id === target.id) return card;
+        const targetCards = (d.cards[target.id] ?? []).filter((c) => c.id !== card.id);
+        const order = targetCards.filter((c) => c.columnId === columnId && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1) + 1;
+        const moved: Card = {
+          ...card,
+          ...mapByName(card, source, target),
+          boardId: target.id,
+          columnId,
+          order,
+          number: nextNumber(targetCards),
+          updatedAt: nextUpdatedAt(card.updatedAt),
+        };
+
+        // Attached files first: they are the only part that can fail (size, disk).
+        for (const a of d.attachments[card.id] ?? []) {
+          const data = await backend.readAttachment(attachmentFilePath(a, source.id));
+          await backend.writeAttachment(attachmentFilePath(a, target.id), data);
+          writeJson(attachmentMetaPath(a, target.id), a);
+        }
+        for (const c of d.comments[card.id] ?? []) writeJson(commentPath(c, target.id), c);
+        for (const [writer, events] of Object.entries(d.history[card.id] ?? {})) {
+          writeJson(historyPath(target.id, card.id, writer), { cardId: card.id, writer, events });
+        }
+
+        setData((s) => ({
+          ...s,
+          cards: {
+            ...s.cards,
+            [source.id]: (s.cards[source.id] ?? []).filter((c) => c.id !== card.id),
+            [target.id]: [...(s.cards[target.id] ?? []).filter((c) => c.id !== card.id), moved],
+          },
+        }));
+        lastSaved.current.set(moved.id, moved);
+        writeJson(cardPath(moved), moved);
+        const column = (b: Board, id: string) => b.columns.find((c) => c.id === id)?.name ?? "?";
+        appendHistory(moved, [
+          {
+            at: now(),
+            by: { host: hostRef.current },
+            field: "board",
+            from: `${source.name} / ${column(source, card.columnId)}`,
+            to: `${target.name} / ${column(target, columnId)}`,
+          },
+        ]);
+
+        removePath(cardPath(card));
+        removePath(commentsDir(source.id, card.id));
+        removePath(historyDir(source.id, card.id));
+        removePath(attachmentsDir(source.id, card.id));
+        return moved;
       },
 
       addComment(card: Card, text: string) {

@@ -58,6 +58,7 @@ export function BoardView({
   history,
   agents = [],
   attachments,
+  allBoards,
 }: {
   board: Board;
   cards: Card[];
@@ -79,6 +80,8 @@ export function BoardView({
   agents?: AgentStatus[];
   /** Attached files by card id. */
   attachments: Record<string, Attachment[]>;
+  /** Every board, to move a card to another one. */
+  allBoards: Board[];
 }) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
   const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
@@ -605,6 +608,19 @@ export function BoardView({
             onLink: (type, target) => actions.linkCards(openCard, type, target),
             onUnlink: (targetId) => actions.unlinkCards(openCard, index.get(targetId)?.card, targetId),
             onOpen: openLinked,
+          }}
+          transfer={{
+            boards: allBoards,
+            onDuplicate: (current) => {
+              const copy = actions.duplicateCard(current);
+              setTimeout(() => setOpenCardId(copy.id), 0);
+            },
+            onMoveToBoard: async (current, boardId, columnId) => {
+              const target = allBoards.find((b) => b.id === boardId);
+              if (!target) return;
+              const moved = await actions.moveCardToBoard(current, target, columnId);
+              onOpenElsewhere(target.id, moved.id);
+            },
           }}
           onItemToCard={(text) => {
             // A new card at the bottom of the first column, that this one depends on.

@@ -3,7 +3,7 @@
 // same files, same checks, atomic writes, updatedAt that always moves forward.
 // The app watches the folder and picks the changes up by itself.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import type { Board, Card, Column } from "../src/types";
@@ -19,6 +19,7 @@ import { MR_STATES, webUrl } from "../src/lib/dev";
 import { claimLabel, mayClaim, newClaim, sameClaimant } from "../src/lib/claim";
 import type { Claim } from "../src/types";
 import type { MergeRequest, MergeRequestState } from "../src/types";
+import { mapByName } from "../src/lib/transfer";
 
 export class TodoomError extends Error {}
 
@@ -324,7 +325,10 @@ export class Store {
 
   /** Adds what changed to this tool's history file of the card, as the app does for its own. */
   private record(board: Board, previous: Card | undefined, next: Card) {
-    const events = eventsFor(changesBetween(previous, next, board), this.who.author);
+    this.appendEvents(board, next, eventsFor(changesBetween(previous, next, board), this.who.author));
+  }
+
+  private appendEvents(board: Board, next: Card, events: HistoryEvent[]) {
     if (!events.length) return;
     const writer = writerName(this.who.author.host, this.who.tool);
     const path = join(this.dir, historyPath(board.id, next.id, writer));
@@ -430,6 +434,47 @@ export class Store {
     const column = this.column(board, columnName);
     const next = { ...card, columnId: column.id, order: this.position(board, column.id, where, card.id) };
     return this.view(this.save(board, next, card), board);
+  }
+
+  /**
+   * Moves a card to another board, at the bottom of a column. Same rules as the
+   * app: same id (links keep working), labels and priority by name, comments,
+   * history and attachments moved along, the new board's next number.
+   */
+  moveToBoard(cardId: string, boardName: string, columnName?: string): CardView {
+    const { card, board: source } = this.card(cardId);
+    const found = this.board(boardName);
+    if (found.archivedAt) throw new TodoomError(`Le tableau « ${found.name} » est dans la corbeille`);
+    if (found.id === source.id) return columnName ? this.move(cardId, columnName) : this.view(card, source);
+    const target = this.ensureKey(found);
+    const column = columnName ? this.column(target, columnName) : target.columns[0];
+    if (!column) throw new TodoomError(`Le tableau « ${target.name} » n'a aucune colonne`);
+    const moved: Card = {
+      ...card,
+      ...mapByName(card, source, target),
+      boardId: target.id,
+      columnId: column.id,
+      order: this.position(target, column.id, "bottom"),
+      number: nextNumber(this.cards(target)),
+    };
+    // Comments, history and attachments: their folders move as they are.
+    for (const kind of ["comments", "history", "attachments"]) {
+      const from = join(this.boardDir(source.id), kind, card.id);
+      if (!existsSync(from)) continue;
+      const to = join(this.boardDir(target.id), kind, card.id);
+      mkdirSync(dirname(to), { recursive: true });
+      renameSync(from, to);
+    }
+    const saved = { ...moved, updatedAt: nextUpdatedAt(card.updatedAt) };
+    const problem = cardProblem(saved);
+    if (problem) throw new TodoomError(`Carte refusée (${problem.code})`);
+    writeAtomic(join(this.boardDir(target.id), "cards", `${card.id}.json`), saved);
+    rmSync(join(this.boardDir(source.id), "cards", `${card.id}.json`), { force: true });
+    const columnName0 = source.columns.find((c) => c.id === card.columnId)?.name ?? "?";
+    this.appendEvents(target, saved, [
+      { at: new Date().toISOString(), by: this.who.author, field: "board", from: `${source.name} / ${columnName0}`, to: `${target.name} / ${column.name}` },
+    ]);
+    return this.view(saved, target);
   }
 
   archive(cardId: string): CardView {
