@@ -142,6 +142,21 @@ describe("writes", () => {
     expect(() => store.card("TOD-99")).toThrow(/introuvable/);
   });
 
+  it("suggests the branch from the board's format until one is set, and can record it", () => {
+    const a = store.create("Todoom", "Thème clair", { labels: ["bug"] });
+    expect(a.suggestedBranch).toBe("fix/TOD-1-theme-clair");
+    expect(store.branch(a.id)).toBe("fix/TOD-1-theme-clair");
+    expect(onDisk(a.id).branch).toBeNull();
+    expect(store.branch(a.id, { save: true })).toBe("fix/TOD-1-theme-clair");
+    expect(onDisk(a.id).branch).toBe("fix/TOD-1-theme-clair");
+    const shown = store.detail(store.card(a.id).card, store.board("Todoom"));
+    expect(shown).toMatchObject({ branch: "fix/TOD-1-theme-clair" });
+    expect("suggestedBranch" in shown).toBe(false);
+    // A branch named otherwise is kept.
+    store.update(a.id, { branch: "hotfix/theme" });
+    expect(store.branch(a.id, { save: true })).toBe("hotfix/theme");
+  });
+
   it("sets the branch and the merge request, which keeps its state when its address changes", () => {
     const a = store.create("Todoom", "Un");
     const url = "https://gitlab.com/g/p/-/merge_requests/4";

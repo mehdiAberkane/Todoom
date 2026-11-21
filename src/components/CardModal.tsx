@@ -13,7 +13,7 @@ import { MarkdownView } from "./Markdown";
 import { toggleTask } from "../lib/markdown";
 import { applyTemplate, CARD_TEMPLATES } from "../lib/templates";
 import { AttachmentsSection, filesOf, type AttachmentProps } from "./AttachmentsSection";
-import { branchUrl, MR_STATES, webUrl } from "../lib/dev";
+import { branchName, branchUrl, MR_STATES, webUrl } from "../lib/dev";
 import { claimLabel } from "../lib/claim";
 import { checklistDone, isFinished } from "../lib/links";
 import { refOf } from "../lib/shortid";
@@ -114,6 +114,8 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
     mergeRequest: draft.mergeRequest && webUrl(draft.mergeRequest.url) ? { ...draft.mergeRequest, url: webUrl(draft.mergeRequest.url)! } : null,
   });
   const mrUrlOk = !draft.mergeRequest?.url.trim() || !!webUrl(draft.mergeRequest.url);
+  // The name a branch for this card gets (board format), offered while the field is empty.
+  const suggestedBranch = branchName(draft, board);
   const branchLink = branchUrl(draft.branch, draft.mergeRequest && webUrl(draft.mergeRequest.url) ? draft.mergeRequest : null);
   const pending = conflicts(base, cleaned(), card);
 
@@ -493,10 +495,17 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
           <div className="git-row">
             <input
               value={draft.branch ?? ""}
-              placeholder={t("git.branchPlaceholder")}
+              placeholder={suggestedBranch}
               spellCheck={false}
               onChange={(e) => set({ branch: e.target.value || null })}
             />
+            {draft.branch?.trim() ? (
+              <CopyButton value={`git switch -c ${draft.branch.trim()}`} title={t("git.copyCommand")} />
+            ) : (
+              <button className="icon-btn" onClick={() => set({ branch: suggestedBranch })} title={t("git.useSuggested", { name: suggestedBranch })}>
+                ↵
+              </button>
+            )}
             {branchLink && (
               <button className="icon-btn" onClick={() => openExternal(branchLink)} title={t("git.open")}>
                 ↗
@@ -610,29 +619,50 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
   );
 }
 
-/** The card's short id; a click copies it, to paste in a commit, a merge request or another ticket. */
-function CopyRef({ value }: { value: string }) {
+/** Copies text; false when neither the clipboard API nor the older copy command works. */
+async function copyText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    // Some webviews refuse the clipboard API; the older copy command still works there.
+    const area = document.createElement("textarea");
+    area.value = value;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  }
+}
+
+/** "Copied" for a moment after a successful copy. */
+function useCopy() {
   const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    let ok = false;
-    try {
-      await navigator.clipboard.writeText(value);
-      ok = true;
-    } catch {
-      // Some webviews refuse the clipboard API; the older copy command still works there.
-      const area = document.createElement("textarea");
-      area.value = value;
-      area.style.position = "fixed";
-      area.style.opacity = "0";
-      document.body.appendChild(area);
-      area.select();
-      ok = document.execCommand("copy");
-      area.remove();
-    }
-    if (!ok) return;
+  const copy = async (value: string) => {
+    if (!(await copyText(value))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
+  return { copied, copy };
+}
+
+/** A small button that copies a command, e.g. the one creating the card's branch. */
+function CopyButton({ value, title }: { value: string; title: string }) {
+  const { copied, copy } = useCopy();
+  return (
+    <button className="icon-btn" onClick={() => copy(value)} title={`${title}\n${value}`}>
+      {copied ? "✓" : "⧉"}
+    </button>
+  );
+}
+
+/** The card's short id; a click copies it, to paste in a commit, a merge request or another ticket. */
+function CopyRef({ value }: { value: string }) {
+  const { copied, copy: copyValue } = useCopy();
+  const copy = () => copyValue(value);
   return (
     <button className="card-ref-chip" onClick={copy} title={t("card.copyRef")}>
       {copied ? `✓ ${t("card.copied")}` : value}

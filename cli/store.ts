@@ -15,7 +15,7 @@ import type { Author, CardComment, HistoryEvent, LinkType } from "../src/types";
 import { deriveKey, nextNumber, parseRef, refOf } from "../src/lib/shortid";
 import { changesBetween, commentPath, eventsFor, historyPath, writerName } from "../src/lib/activity";
 import { agentProblem, commentProblem, historyProblem } from "../src/lib/validate";
-import { MR_STATES, webUrl } from "../src/lib/dev";
+import { branchName, MR_STATES, webUrl } from "../src/lib/dev";
 import { claimLabel, mayClaim, newClaim, sameClaimant } from "../src/lib/claim";
 import type { Claim } from "../src/types";
 import type { MergeRequest, MergeRequestState } from "../src/types";
@@ -99,6 +99,8 @@ export interface CardView {
   checklist: Card["checklist"];
   links: Card["links"];
   branch: string | null;
+  /** While the card has no branch: the name its branch should get (the board's format). */
+  suggestedBranch?: string;
   mergeRequest: MergeRequest | null;
   claimedBy: Claim | null;
   order: number;
@@ -282,6 +284,7 @@ export class Store {
       checklist: card.checklist,
       links: card.links,
       branch: card.branch,
+      ...(card.branch ? {} : { suggestedBranch: branchName(card, board) }),
       mergeRequest: card.mergeRequest,
       claimedBy: card.claimedBy,
       order: card.order,
@@ -567,6 +570,15 @@ export class Store {
       if (column.id !== card.columnId) next = { ...next, columnId: column.id, order: this.position(board, column.id, "bottom", card.id) };
     }
     return this.view(this.save(board, next, card), board);
+  }
+
+  /** The card's branch, or the name it should get; `save` records that name on the card. */
+  branch(cardId: string, opts: { save?: boolean } = {}): string {
+    const { card, board } = this.card(cardId);
+    if (card.branch) return card.branch;
+    const name = branchName(card, board);
+    if (opts.save) this.update(card.id, { branch: name });
+    return name;
   }
 
   /** Nobody works on the card any more. Only its holder may release it, unless forced. */

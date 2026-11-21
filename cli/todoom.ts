@@ -33,6 +33,10 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
   todoom claim <carte> [--move <colonne>] [--conversation <nom>] [--force]
                                               prendre le ticket (refusé s'il est pris par un autre)
   todoom release <carte> [--force]            le libérer
+  todoom branch <carte> [--save]              nom de la branche du ticket (texte seul), celui
+                                              de la carte ou celui proposé par le format du
+                                              tableau ; --save l'enregistre sur la carte.
+                                              Ex. : git switch -c $(todoom branch SOL-42 --save)
   todoom comment <carte> <texte>              commentaire daté et signé (PC, TODOOM_AGENT)
   todoom archive <carte>
   todoom restore <carte>
@@ -85,6 +89,7 @@ export async function main(argv: string[]): Promise<number> {
       due: { type: "string" },
       "no-due": { type: "boolean" },
       top: { type: "boolean" },
+      save: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -222,6 +227,12 @@ export async function main(argv: string[]): Promise<number> {
     case "release":
       need(1, "release <carte> [--force]");
       out(store().release(rest[0], { force: o.force, conversation: o.conversation ?? process.env.TODOOM_CONVERSATION }));
+      return 0;
+
+    case "branch":
+      need(1, "branch <carte> [--save]");
+      // Plain text, not JSON: made to be used in a git command.
+      process.stdout.write(store().branch(rest[0], { save: o.save }) + "\n");
       return 0;
 
     case "comment":

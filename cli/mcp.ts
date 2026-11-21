@@ -175,7 +175,7 @@ export function createServer(dir: string): McpServer {
         removeLabels: z.array(z.string()).optional().describe("Label names to remove"),
         priority: z.string().nullable().optional().describe("Priority level name, or null to remove it"),
         due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("YYYY-MM-DD, or null to remove the due date"),
-        branch: z.string().nullable().optional().describe("Git branch of the work, or null to remove it"),
+        branch: z.string().nullable().optional().describe("Git branch of the work (the card's suggestedBranch, unless the branch already has another name), or null to remove it"),
         mergeRequestUrl: z.string().nullable().optional().describe("Web address of the merge request / pull request, or null to remove it"),
         mergeRequestState: z.enum(["open", "merged", "closed"]).optional(),
       },
@@ -244,7 +244,9 @@ export function createServer(dir: string): McpServer {
       description:
         "Marks the card as being worked on by this computer and this conversation, and optionally moves it (e.g. to « En cours »). " +
         "Refused when someone else (another computer, agent or conversation) holds it: then leave it, unless the user says otherwise. " +
-        "Take a card before working on it (after reading its board's context with get_board), and release it when done.",
+        "Take a card before working on it (after reading its board's context with get_board), and release it when done. " +
+          "If the work goes on a git branch, name it as the card's suggestedBranch and record it with update_card (branch); " +
+          "once the merge request / pull request is opened, record its address with update_card (mergeRequestUrl), and its state when it is merged or closed.",
       inputSchema: {
         card: z.string().describe("Card short id (SOL-42) or id"),
         column: z.string().optional().describe("Column to move the card to at the same time"),

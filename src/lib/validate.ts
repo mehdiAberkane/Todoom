@@ -38,6 +38,7 @@ const BOARD: Check[] = [
   ["name", optional(isString)],
   ["key", optional(isString)],
   ["description", optional(isString)],
+  ["branchFormat", optional(isString)],
   ["columns", listOf(shaped([["id", isString], ["name", isString], ["collapsed", optional((v) => typeof v === "boolean")], ["limit", optional(isNumber)]]))],
   ["labels", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["priorities", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],

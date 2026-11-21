@@ -25,6 +25,10 @@
       "type": "string",
       "description": "Context page of the board: repository, working rules, vocabulary, meaning of the columns. Agents read it before taking a ticket."
     },
+    "branchFormat": {
+      "type": "string",
+      "description": "How the cards' git branches are named: {type} (feat or fix), {ref} (TOD-51), {key}, {number}, {slug} (the title). Default \"{type}/{ref}-{slug}\"."
+    },
     "columns": {
       "type": "array",
       "description": "In display order.",

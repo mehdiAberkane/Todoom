@@ -564,6 +564,10 @@ textarea { resize: vertical; }
 .git-row { display: flex; gap: 4px; align-items: center; }
 .git-row input { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .git-row input.invalid { border-color: var(--accent); }
+.branch-format { margin-top: 10px; }
+.branch-format label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.branch-format input { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.branch-format .hint { margin: 4px 0 0; }
 .mr-state { margin-top: 6px; width: 100%; }
 .mr-open { color: var(--accent-2); }
 .mr-merged { color: #b58cff; }

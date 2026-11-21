@@ -25,6 +25,8 @@ export interface Board {
   description?: string;
   columns: Column[];
   labels: Label[];
+  /** How the cards' git branches are named, e.g. "{type}/{ref}-{slug}"; absent means that one. */
+  branchFormat?: string;
   /** Priority levels, highest first; absent means the defaults P1, P2, P3. */
   priorities?: Priority[];
   /** Fractional position in the sidebar; absent on boards created before reordering existed. */

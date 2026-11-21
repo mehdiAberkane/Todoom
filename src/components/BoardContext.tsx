@@ -3,6 +3,7 @@ import type { Board } from "../types";
 import { t } from "../lib/i18n";
 import { Modal } from "./ui";
 import { Markdown } from "./Markdown";
+import { branchName, DEFAULT_BRANCH_FORMAT } from "../lib/dev";
 
 /**
  * The board's context page: repository, working rules, vocabulary, what each
@@ -11,12 +12,24 @@ import { Markdown } from "./Markdown";
 export function BoardContext({ board, onSave, onClose }: { board: Board; onSave: (b: Board) => void; onClose: () => void }) {
   const [text, setText] = useState(board.description ?? "");
   const [preview, setPreview] = useState(false);
+  const [format, setFormat] = useState(board.branchFormat ?? "");
 
   const close = () => {
     const value = text.trim() ? text.replace(/\s+$/, "") : "";
-    if (value !== (board.description ?? "")) onSave({ ...board, description: value });
+    // The default format is not written: the board keeps following it if it changes.
+    const branchFormat = format.trim() && format.trim() !== DEFAULT_BRANCH_FORMAT ? format.trim() : undefined;
+    if (value !== (board.description ?? "") || branchFormat !== board.branchFormat) {
+      const { branchFormat: _old, ...rest } = board;
+      onSave({ ...rest, description: value, ...(branchFormat ? { branchFormat } : {}) });
+    }
     onClose();
   };
+  // An example card of this board, to show what the format gives.
+  const example = branchName(
+    { id: "example", number: 51, title: t("context.branchExampleTitle"), labels: [] } as unknown as Parameters<typeof branchName>[0],
+    board,
+    format.trim() || DEFAULT_BRANCH_FORMAT,
+  );
 
   const template = () =>
     setText(
@@ -41,6 +54,13 @@ export function BoardContext({ board, onSave, onClose }: { board: Board; onSave:
       ) : (
         <textarea className="context-text" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("context.placeholder")} autoFocus />
       )}
+      <div className="branch-format">
+        <label>
+          {t("context.branchFormat")}
+          <input value={format} placeholder={DEFAULT_BRANCH_FORMAT} spellCheck={false} onChange={(e) => setFormat(e.target.value)} />
+        </label>
+        <p className="hint">{t("context.branchFormatHint", { example })}</p>
+      </div>
       <div className="modal-foot">
         {text.trim() && (
           <button className="btn-ghost" onClick={() => setPreview((p) => !p)}>

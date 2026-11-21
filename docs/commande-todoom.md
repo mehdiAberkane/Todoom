@@ -50,6 +50,7 @@ noms possibles quand un nom n'est pas reconnu.
 | `todoom unlink <carte> <autre carte>` | retire le lien des deux cartes |
 | `todoom claim <carte> [--move <colonne>] [--conversation <nom>] [--force]` | prend le ticket (« Pris par » : ce PC, l'agent, la conversation), en le déplaçant au passage ; refusé s'il est pris par quelqu'un d'autre |
 | `todoom release <carte> [--force]` | libère le ticket ; seul celui qui l'a pris peut le libérer, sauf `--force` |
+| `todoom branch <carte> [--save]` | nom de la branche du ticket, en texte seul : celui de la carte, sinon celui que propose le format du tableau (`feat/TOD-51-titre` par défaut, réglable dans la page de contexte) ; `--save` l’enregistre sur la carte. Ex. : `git switch -c $(todoom branch TOD-51 --save)` |
 | `todoom comment <carte> <texte>` | ajoute un commentaire daté, signé du nom du PC (et de l'agent avec `--as` ou `TODOOM_AGENT`) |
 | `todoom archive <carte>` / `todoom restore <carte>` | archive, ou remet en bas de sa colonne |
 | `todoom mcp` | lance le serveur MCP |
