@@ -615,3 +615,10 @@ textarea { resize: vertical; }
 .card.selected { border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(255, 159, 28, 0.45); }
 .bulk-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: calc(100vw - 32px); padding: 10px 14px; background: var(--panel); border: 1px solid var(--accent-2); border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55); }
 .bulk-bar select { max-width: 160px; }
+
+/* Sorting a column, due date filter */
+.sort-menu { position: relative; display: inline-flex; }
+.sort-options { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; min-width: 190px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+.sort-options button { background: none; border: none; text-align: left; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.sort-options button:hover { background: var(--card-hover); }
+.due-filter.on { border-color: var(--accent-2); color: var(--accent-2); }

@@ -6,6 +6,7 @@ import { CardTile } from "./CardTile";
 import { DangerButton, InlineEdit } from "./ui";
 import { emptyColumnLine } from "../lib/utils";
 import { refOf } from "../lib/shortid";
+import { SORT_KEYS, type SortKey } from "../lib/sorting";
 import { t } from "../lib/i18n";
 
 interface Props {
@@ -24,10 +25,10 @@ interface Props {
   onAdd: (title: string) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
-  onSortByPriority: () => void;
+  onSort: (key: SortKey) => void;
 }
 
-export function ColumnView({ column, cards, labels, priorities, blockers, boardKey, comments, unsavedIds, onOpen, selectedIds, onSelect, onAdd, onRename, onDelete, onSortByPriority }: Props) {
+export function ColumnView({ column, cards, labels, priorities, blockers, boardKey, comments, unsavedIds, onOpen, selectedIds, onSelect, onAdd, onRename, onDelete, onSort }: Props) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `col:${column.id}`,
   });
@@ -41,11 +42,7 @@ export function ColumnView({ column, cards, labels, priorities, blockers, boardK
       <header className="column-head" {...attributes} {...listeners}>
         <InlineEdit value={column.name} onSave={onRename} className="column-title" />
         <span className="count">{cards.length}</span>
-        {cards.some((c) => c.priority) && (
-          <button className="icon-btn" onClick={onSortByPriority} title={t("column.sortPriority")}>
-            ⇅
-          </button>
-        )}
+        {cards.length > 1 && <SortMenu onSort={onSort} />}
         <DangerButton
           className="icon-btn"
           onConfirm={onDelete}
@@ -135,5 +132,33 @@ function QuickAdd({ onAdd }: { onAdd: (title: string) => void }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/** ⇅ opens the ways to sort the column; picking one rewrites the cards' positions. */
+function SortMenu({ onSort }: { onSort: (key: SortKey) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="sort-menu" onPointerDown={(e) => e.stopPropagation()} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setOpen(false)}>
+      <button className="icon-btn" onClick={() => setOpen((o) => !o)} title={t("sort.title")} aria-expanded={open}>
+        ⇅
+      </button>
+      {open && (
+        <div className="sort-options" role="menu">
+          {SORT_KEYS.map((key) => (
+            <button
+              key={key}
+              role="menuitem"
+              onClick={() => {
+                onSort(key);
+                setOpen(false);
+              }}
+            >
+              {t(`sort.${key}`)}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }

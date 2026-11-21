@@ -15,7 +15,7 @@ import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
 import { dueStatus, reorder, uid } from "../lib/utils";
-import { byPriority, prioritiesOf } from "../lib/priority";
+import { prioritiesOf } from "../lib/priority";
 import { openBlockers, type Located } from "../lib/links";
 import { mergedHistory } from "../lib/activity";
 import type { CardComment, HistoryEvent } from "../types";
@@ -31,6 +31,7 @@ import { ArchiveModal } from "./ArchiveModal";
 import { BoardContext, contextSummary } from "./BoardContext";
 import { BulkBar } from "./BulkBar";
 import { movedTogether, toggled, withRange } from "../lib/selection";
+import { DUE_FILTERS, loadFilter, matchesDue, saveFilter, sortCards, type DueFilter, type SortKey } from "../lib/sorting";
 import { AgentStatusChips } from "./AgentStatus";
 import type { AgentStatus } from "../types";
 import { DangerButton, InlineEdit } from "./ui";
@@ -77,9 +78,15 @@ export function BoardView({
   const archived = useMemo(() => allCards.filter((c) => c.archivedAt), [allCards]);
   const [showArchive, setShowArchive] = useState(false);
   const [showContext, setShowContext] = useState(false);
-  const [query, setQuery] = useState("");
-  const [labelFilter, setLabelFilter] = useState<string[]>([]);
-  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
+  // The filter bar comes back as it was left on this board (kept on this computer).
+  const [saved] = useState(() => loadFilter(board.id));
+  const [query, setQuery] = useState(saved.query);
+  const [labelFilter, setLabelFilter] = useState<string[]>(saved.labels);
+  const [priorityFilter, setPriorityFilter] = useState<string[]>(saved.priorities);
+  const [dueFilter, setDueFilter] = useState<DueFilter>(saved.due);
+  useEffect(() => {
+    saveFilter(board.id, { query, labels: labelFilter, priorities: priorityFilter, due: dueFilter });
+  }, [board.id, query, labelFilter, priorityFilter, dueFilter]);
   const priorities = prioritiesOf(board);
   const [openCardId, setOpenCardId] = useState<string | null>(initialOpenCardId);
   // Cards selected with Ctrl / Shift + click, and the last one clicked, where a Shift range starts.
@@ -111,7 +118,8 @@ export function BoardView({
     const visible = (c: Card) =>
       (!q || byRef(c) || c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)) &&
       labelFilter.every((l) => c.labels.includes(l)) &&
-      (!priorityFilter.length || (!!c.priority && priorityFilter.includes(c.priority)));
+      (!priorityFilter.length || (!!c.priority && priorityFilter.includes(c.priority))) &&
+      matchesDue(c, dueFilter);
     const lists: Lists = Object.fromEntries(board.columns.map((c) => [c.id, []]));
     const fallback = board.columns[0]?.id;
     for (const c of [...cards].sort((a, b) => a.order - b.order)) {
@@ -121,7 +129,7 @@ export function BoardView({
       if (col) lists[col].push(c.id);
     }
     return lists;
-  }, [cards, board.columns, board.key, query, labelFilter, priorityFilter]);
+  }, [cards, board.columns, board.key, query, labelFilter, priorityFilter, dueFilter]);
 
   const lists = dragLists ?? computed;
   const listsRef = useRef(lists);
@@ -270,8 +278,9 @@ export function BoardView({
     actions.saveBoard({ ...board, columns: board.columns.map((c) => (c.id === columnId ? { ...c, name } : c)) });
 
   // Rewrites the positions of the column's cards: highest priority first, then the current order.
-  const sortByPriority = (columnId: string) => {
-    const sorted = byPriority(board, cards.filter((c) => c.columnId === columnId));
+  // Rewrites the positions of the column's cards in the chosen order.
+  const sortColumn = (columnId: string, key: SortKey) => {
+    const sorted = sortCards(cards.filter((c) => c.columnId === columnId), key, board);
     sorted.forEach((c, i) => {
       if (c.order !== i) actions.saveCard({ ...c, order: i });
     });
@@ -326,7 +335,7 @@ export function BoardView({
   const openCard = openCardId ? (cardById.get(openCardId) ?? archived.find((c) => c.id === openCardId)) : undefined;
   const activeCard = activeId?.startsWith(CARD) ? cardById.get(activeId.slice(CARD.length)) : undefined;
   const activeColumn = activeId?.startsWith(COL) ? board.columns.find((c) => c.id === activeId.slice(COL.length)) : undefined;
-  const filtering = query.trim() !== "" || labelFilter.length > 0 || priorityFilter.length > 0;
+  const filtering = query.trim() !== "" || labelFilter.length > 0 || priorityFilter.length > 0 || dueFilter !== "";
 
   return (
     <div className="board">
@@ -357,6 +366,19 @@ export function BoardView({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <select
+            className={`due-filter ${dueFilter ? "on" : ""}`}
+            value={dueFilter}
+            onChange={(e) => setDueFilter(e.target.value as DueFilter)}
+            aria-label={t("dueFilter.all")}
+          >
+            <option value="">{t("dueFilter.all")}</option>
+            {DUE_FILTERS.map((d) => (
+              <option key={d} value={d}>
+                {t(`dueFilter.${d}`)}
+              </option>
+            ))}
+          </select>
           <div className="label-filters">
             {priorities.map((p) => (
               <button
@@ -381,7 +403,8 @@ export function BoardView({
               </button>
             ))}
             {filtering && (
-              <button className="btn-ghost small" onClick={() => (setQuery(""), setLabelFilter([]), setPriorityFilter([]))}>
+              <button className="btn-ghost small" onClick={() => (setQuery(""), setLabelFilter([]), setPriorityFilter([]), setDueFilter(""))}
+                title={t("board.filterSaved")}>
                 {t("board.clearFilters")}
               </button>
             )}
@@ -433,7 +456,7 @@ export function BoardView({
                 onAdd={(title) => addCard(col.id, title)}
                 onRename={(name) => renameColumn(col.id, name)}
                 onDelete={() => actions.deleteColumn(board, col.id, cards)}
-                onSortByPriority={() => sortByPriority(col.id)}
+                onSort={(key) => sortColumn(col.id, key)}
               />
             ))}
           </SortableContext>
