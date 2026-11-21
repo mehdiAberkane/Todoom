@@ -180,6 +180,8 @@ export interface AppSettings {
   myWorkColumns?: string[];
   /** System notifications; absent means on, for « A verifier » and « Echec », and for due dates. */
   notifications?: { enabled?: boolean; columns?: string[]; due?: boolean };
+  /** Template a new board starts from: "simple", "dev" or "copy:<board id>"; absent means "dev". */
+  boardTemplate?: string;
   updatedAt: string;
 }
 

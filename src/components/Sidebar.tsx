@@ -24,6 +24,8 @@ interface Props {
   counts: Record<string, number>;
   onSelect: (id: string) => void;
   onCreate: (name: string, template: string) => void;
+  /** The template chosen in the settings, preselected for a new board. */
+  defaultTemplate: string;
   onMove: (movedId: string, ids: string[]) => void;
   settingsOpen: boolean;
   myWorkOpen: boolean;
@@ -68,12 +70,15 @@ export function Sidebar(props: Props) {
     onMove(String(active.id), moved);
   };
 
-  const [template, setTemplate] = useState("simple");
+  // null: the default template from the settings, until another one is picked for this board.
+  const [picked, setTemplate] = useState<string | null>(null);
+  const template = picked ?? props.defaultTemplate;
   const create = () => {
     const n = name.trim();
     if (!n) return;
     onCreate(n, template);
     setName("");
+    setTemplate(null);
   };
 
   return (

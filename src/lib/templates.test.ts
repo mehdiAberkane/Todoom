@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Board, Card } from "../types";
 import { setLang } from "./i18n";
-import { applyTemplate, boardSetup, fromSetup } from "./templates";
+import { applyTemplate, boardSetup, defaultTemplate, fromSetup } from "./templates";
 
 // The templates follow the app's language, which defaults to the system's:
 // pin it so the test reads the same on a French PC and an English CI runner.
@@ -48,6 +48,15 @@ describe("board templates", () => {
     expect(made.priorities?.map((p) => p.name)).toEqual(["Haute"]);
     expect(made.description).toBe(source.description);
     expect("key" in made).toBe(false);
+  });
+
+  it("starts new boards from the development set-up unless the settings choose another", () => {
+    expect(defaultTemplate(undefined, [source])).toBe("dev");
+    expect(defaultTemplate("simple", [source])).toBe("simple");
+    expect(defaultTemplate("copy:src", [source])).toBe("copy:src");
+    // The copied board was deleted, or the setting is unknown: back to the development set-up.
+    expect(defaultTemplate("copy:gone", [source])).toBe("dev");
+    expect(defaultTemplate("kanban", [source])).toBe("dev");
   });
 
   it("falls back to the simple set-up", () => {

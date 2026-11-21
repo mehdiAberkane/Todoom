@@ -7,7 +7,7 @@ import { changesBetween, commentPath, commentsDir, eventsFor, historyDir, histor
 import { t } from "./i18n";
 import { inverseOf, withLink, withoutLink } from "./links";
 import { newClaim } from "./claim";
-import { boardSetup, fromSetup, type BoardTemplate } from "./templates";
+import { boardSetup, DEFAULT_TEMPLATE, fromSetup, type BoardTemplate } from "./templates";
 import { duplicateOf, mapByName } from "./transfer";
 import { nextNumber } from "./shortid";
 import { attachmentFilePath, attachmentMetaPath, attachmentsDir, MAX_ATTACHMENT_BYTES, readAsBase64, storedName } from "./attachments";
@@ -537,7 +537,7 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
       },
 
       /** A new board, set up from a template (simple, development, or a copy of a board's set-up). */
-      createBoard(name: string, existing: Board[], template: BoardTemplate = "simple"): Board {
+      createBoard(name: string, existing: Board[], template: BoardTemplate = DEFAULT_TEMPLATE): Board {
         const t = now();
         const orders = existing.map((b) => b.order).filter((o): o is number => o !== undefined);
         const board: Board = {

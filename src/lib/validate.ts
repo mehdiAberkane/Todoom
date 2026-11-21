@@ -56,6 +56,7 @@ const SETTINGS: Check[] = [
   ["language", nullable((v) => v === "fr" || v === "en")],
   ["myWorkColumns", listOf(isString)],
   ["notifications", optional(shaped([["enabled", optional(isBoolean)], ["columns", listOf(isString)], ["due", optional(isBoolean)]]))],
+  ["boardTemplate", optional(isString)],
   ["updatedAt", optional(isString)],
 ];
 

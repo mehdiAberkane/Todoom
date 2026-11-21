@@ -13,6 +13,7 @@ import { Sidebar } from "./components/Sidebar";
 import { BoardView } from "./components/BoardView";
 import { Setup } from "./components/Setup";
 import { SettingsPage } from "./components/SettingsPage";
+import { defaultTemplate } from "./lib/templates";
 import { MetricsPage } from "./components/MetricsPage";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
 import { GlobalSearch } from "./components/GlobalSearch";
@@ -186,6 +187,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         counts={counts}
         onSelect={openBoard}
         onCreate={(name, template) => openBoard(actions.createBoard(name, data.boards, template).id)}
+        defaultTemplate={defaultTemplate(data.settings.boardTemplate, activeBoards)}
         settingsOpen={showSettings}
         onOpenSettings={() => (setShowSettings(true), setShowMyWork(false), setMetrics(null))}
         myWorkOpen={showMyWork && !showSettings}
@@ -274,7 +276,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             <div className="empty-skull">💀</div>
             <h2>{t("empty.title")}</h2>
             <p>{t("empty.tagline")}</p>
-            <button className="btn-primary big" onClick={() => setBoardId(actions.createBoard(t("empty.firstBoard"), data.boards).id)}>
+            <button className="btn-primary big" onClick={() => setBoardId(actions.createBoard(t("empty.firstBoard"), data.boards, defaultTemplate(data.settings.boardTemplate, activeBoards)).id)}>
               {t("empty.create")}
             </button>
           </div>

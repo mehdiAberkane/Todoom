@@ -4,6 +4,7 @@ import { notifySettings, plain } from "../lib/notify";
 import { ensurePermission, notifyPermission, show } from "../lib/notifier";
 import { imageToBackground } from "../lib/image";
 import { t } from "../lib/i18n";
+import { boardSetup, defaultTemplate } from "../lib/templates";
 import type { CheckState, UpdateState } from "../lib/updater";
 
 interface Props {
@@ -68,6 +69,7 @@ export function SettingsPage({
     setDenied(!ok);
     if (ok) await show([{ title: "Todoom", body: t("notify.test") }]);
   };
+  const template = defaultTemplate(settings.boardTemplate, boards);
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
@@ -103,6 +105,25 @@ export function SettingsPage({
           <option value="fr">Français</option>
           <option value="en">English</option>
         </select>
+      </section>
+
+      <section className="settings-section">
+        <h2>{t("settings.boardTemplate")}</h2>
+        <select
+          className="settings-select"
+          value={template}
+          onChange={(e) => onSave({ ...settings, backgroundDim: dim, boardTemplate: e.target.value })}
+        >
+          <option value="simple">{t("tpl.simple")}</option>
+          <option value="dev">{t("tpl.dev")}</option>
+          {boards.map((b) => (
+            <option key={b.id} value={`copy:${b.id}`}>
+              {t("tpl.copy", { name: b.name })}
+            </option>
+          ))}
+        </select>
+        <p className="hint">{t("settings.boardTemplateColumns", { columns: boardSetup(template, boards).columns.map((c) => c.name).join(" · ") })}</p>
+        <p className="hint">{t("settings.boardTemplateHint")}</p>
       </section>
 
       <section className="settings-section">

@@ -58,6 +58,10 @@
         }
       }
     },
+    "boardTemplate": {
+      "type": "string",
+      "description": "Template a new board starts from: \"simple\", \"dev\" (default) or \"copy:<board id>\"."
+    },
     "updatedAt": {
       "type": "string"
     }

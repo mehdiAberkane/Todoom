@@ -59,6 +59,16 @@ export function boardSetup(template: BoardTemplate, boards: Board[]): BoardSetup
   };
 }
 
+/** What a new board starts from when nothing is chosen: the development set-up (the Todoom board's columns). */
+export const DEFAULT_TEMPLATE: BoardTemplate = "dev";
+
+/** The template chosen in the settings for new boards, if it still exists (a copied board may be gone). */
+export function defaultTemplate(chosen: string | undefined, boards: Board[]): BoardTemplate {
+  if (chosen === "simple" || chosen === "dev") return chosen;
+  if (chosen?.startsWith("copy:") && boards.some((b) => b.id === chosen.slice(5))) return chosen;
+  return DEFAULT_TEMPLATE;
+}
+
 /** The new board's own fields from a set-up, every column, label and level with a fresh id. */
 export function fromSetup(setup: BoardSetup): Pick<Board, "columns" | "labels" | "priorities" | "description"> {
   return {
