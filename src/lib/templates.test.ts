@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { Board, Card } from "../types";
+import { setLang } from "./i18n";
 import { applyTemplate, boardSetup, fromSetup } from "./templates";
+
+// The templates follow the app's language, which defaults to the system's:
+// pin it so the test reads the same on a French PC and an English CI runner.
+beforeAll(() => setLang("fr"));
 
 const source: Board = {
   id: "src",
