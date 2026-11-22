@@ -198,6 +198,8 @@ export interface AppSettings {
   snapshotKeep?: number;
   /** Board the quick capture adds ideas to; absent means one named « Global », else the first. */
   captureBoard?: string;
+  /** Plain text summaries of the boards for the phone (« lecture » folder); absent means on. */
+  readingCopy?: boolean;
   updatedAt: string;
 }
 

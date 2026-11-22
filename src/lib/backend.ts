@@ -37,6 +37,10 @@ export interface Backend {
   setLanguage(lang: "fr" | "en"): Promise<void>;
   /** Saves an export (Markdown, CSV) where the user chooses; false when they cancel. */
   saveExport(fileName: string, content: string): Promise<boolean>;
+  /** The plain text summaries for the phone, in the data folder's « lecture » subfolder (see reading.ts). */
+  listReading(): Promise<string[]>;
+  writeReading(name: string, content: string): Promise<void>;
+  removeReading(name: string): Promise<void>;
   /** Snapshots of the data folder, kept on this computer (see snapshots.ts), newest first. */
   listSnapshots(): Promise<SnapshotInfo[]>;
   saveSnapshot(name: string, content: string): Promise<void>;
@@ -70,6 +74,9 @@ const tauriBackend: Backend = {
     await invoke("save_export", { path, content });
     return true;
   },
+  listReading: () => invoke<string[]>("list_reading"),
+  writeReading: (name, content) => invoke("write_reading", { name, content }),
+  removeReading: (name) => invoke("remove_reading", { name }),
   listSnapshots: () => invoke<SnapshotInfo[]>("list_snapshots"),
   saveSnapshot: (name, content) => invoke("save_snapshot", { name, content }),
   deleteSnapshot: (name) => invoke("delete_snapshot", { name }),
@@ -83,6 +90,16 @@ const ATTACH_KEY = "todoom-attachments";
 const readAttachments = (): Record<string, string> => {
   try {
     return JSON.parse(localStorage.getItem(ATTACH_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+};
+
+// The phone summaries, by name.
+const READING_KEY = "todoom-reading";
+const readReading = (): Record<string, string> => {
+  try {
+    return JSON.parse(localStorage.getItem(READING_KEY) ?? "{}");
   } catch {
     return {};
   }
@@ -167,6 +184,14 @@ const browserBackend: Backend = {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;
+  },
+  // Kept apart from the data files: they aren't JSON, a load would report them.
+  listReading: async () => Object.keys(readReading()),
+  writeReading: async (name, content) => localStorage.setItem(READING_KEY, JSON.stringify({ ...readReading(), [name]: content })),
+  removeReading: async (name) => {
+    const all = readReading();
+    delete all[name];
+    localStorage.setItem(READING_KEY, JSON.stringify(all));
   },
   listSnapshots: async () =>
     Object.entries(readSnapshots())

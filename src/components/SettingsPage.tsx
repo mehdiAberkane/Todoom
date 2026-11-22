@@ -260,6 +260,19 @@ export function SettingsPage({
         </div>
       </section>
 
+      <section className="settings-section">
+        <h2>{t("reading.title")}</h2>
+        <p className="muted">{t("reading.intro")}</p>
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={settings.readingCopy !== false}
+            onChange={(e) => onSave({ ...settings, backgroundDim: dim, readingCopy: e.target.checked })}
+          />
+          {t("reading.enabled")}
+        </label>
+      </section>
+
       <SnapshotsSection
         keep={settings.snapshotKeep}
         onKeep={(n) => onSave({ ...settings, backgroundDim: dim, snapshotKeep: n })}

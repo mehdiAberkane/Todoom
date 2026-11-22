@@ -24,6 +24,7 @@ import { Modal } from "./components/ui";
 import { CAPTURE_BOARDS, CAPTURE_HELLO, CAPTURE_SEND, captureBoard, captureTitle, topOrder, type CaptureTarget } from "./lib/capture";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { dailySnapshot } from "./lib/snapshotter";
+import { useReadingCopy } from "./lib/readingWriter";
 import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
 import { pendingRepeats, successorOf } from "./lib/recurring";
@@ -170,6 +171,9 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     ];
     return () => offs.forEach((off) => off.then((f) => f()));
   }, [incomplete]);
+  // Plain text summaries for the phone, in the « lecture » folder.
+  const workColumns = useMemo(() => myWorkColumns(data.settings), [data.settings]);
+  useReadingCopy(data.settings.readingCopy !== false, !incomplete && !error, data.boards, data.cards, workColumns, hourTick);
   // Today's snapshot of the data folder, once the folder is read in full; checked again every hour.
   const snapshotKeep = data.settings.snapshotKeep;
   useEffect(() => {

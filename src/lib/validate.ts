@@ -64,6 +64,7 @@ const SETTINGS: Check[] = [
   ["compact", optional(isBoolean)],
   ["snapshotKeep", optional(isNumber)],
   ["captureBoard", optional(isString)],
+  ["readingCopy", optional(isBoolean)],
   ["updatedAt", optional(isString)],
 ];
 

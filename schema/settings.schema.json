@@ -84,6 +84,10 @@
       "type": "string",
       "description": "Id of the board the quick capture adds ideas to. Default: a board named « Global », else the first board."
     },
+    "readingCopy": {
+      "type": "boolean",
+      "description": "Write plain text summaries of the boards into the data folder's « lecture » subfolder, to read them in the Google Drive app on a phone. Default true."
+    },
     "updatedAt": {
       "type": "string"
     }
