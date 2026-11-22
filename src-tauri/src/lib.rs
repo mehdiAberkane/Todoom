@@ -1273,6 +1273,216 @@ async fn remove_inbox(app: AppHandle, name: String) -> Result<(), String> {
     .await
 }
 
+// ---- Pull / merge requests ------------------------------------------------------
+// The open pull requests (GitHub) or merge requests (GitLab) of a board's
+// repository, read through the gh and glab tools already signed in on this
+// computer: Todoom stores no token. The repository comes from the board's file,
+// which anyone who can write the synced folder controls: host and path are
+// checked, the arguments are fixed and no shell is involved.
+
+const REVIEW_TIMEOUT: Duration = Duration::from_secs(25);
+
+/// A host name: letters, digits, dots and dashes.
+fn is_forge_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && !host.starts_with(['-', '.'])
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+}
+
+/// owner/repo on GitHub, group/…/project on GitLab: plain names, never an option or "..".
+fn is_forge_path(forge: &str, path: &str) -> bool {
+    let parts: Vec<&str> = path.split('/').collect();
+    let count_ok = match forge {
+        "github" => parts.len() == 2,
+        "gitlab" => (2..=20).contains(&parts.len()),
+        _ => false,
+    };
+    count_ok
+        && parts.iter().all(|p| {
+            !p.is_empty()
+                && p.len() <= 100
+                && !p.starts_with(['-', '.'])
+                && p.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+        })
+}
+
+const GITLAB_QUERY: &str = "query($path: ID!) { project(fullPath: $path) { mergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { iid title webUrl draft sourceBranch updatedAt author { username } headPipeline { status } } } } }";
+
+/// The command line for a forge, arguments as a list.
+fn review_args(forge: &str, host: &str, path: &str) -> Option<(&'static str, Vec<String>)> {
+    if !is_forge_host(host) || !is_forge_path(forge, path) {
+        return None;
+    }
+    match forge {
+        "github" => Some((
+            "gh",
+            [
+                "pr",
+                "list",
+                "--repo",
+                &format!("{host}/{path}"),
+                "--state",
+                "open",
+                "--limit",
+                "50",
+                "--json",
+                "number,title,url,isDraft,headRefName,author,statusCheckRollup,updatedAt",
+            ]
+            .map(String::from)
+            .to_vec(),
+        )),
+        "gitlab" => Some((
+            "glab",
+            [
+                "api",
+                "graphql",
+                "--hostname",
+                host,
+                "-f",
+                &format!("query={GITLAB_QUERY}"),
+                "-f",
+                &format!("path={path}"),
+            ]
+            .map(String::from)
+            .to_vec(),
+        )),
+        _ => None,
+    }
+}
+
+/// Where gh or glab is: on the PATH, else where their installers put them
+/// (an app opened from the Dock or the Start menu doesn't get the shell's PATH).
+fn find_tool(name: &str) -> Option<PathBuf> {
+    let exe = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    if cfg!(windows) {
+        for var in ["ProgramFiles", "LOCALAPPDATA"] {
+            if let Some(base) = std::env::var_os(var).map(PathBuf::from) {
+                dirs.push(base.join("GitHub CLI"));
+                dirs.push(base.join("Programs").join(name));
+                dirs.push(base.join("Programs").join("GitHub CLI"));
+            }
+        }
+    } else {
+        dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map(PathBuf::from));
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            dirs.push(home.join(".local/bin"));
+        }
+    }
+    dirs.into_iter().map(|d| d.join(&exe)).find(|p| p.is_file())
+}
+
+/// Runs the tool and returns its output, or an error code the interface explains:
+/// "missing:<tool>", "auth:<tool>", "notfound", or "failed:<message>".
+fn run_review_tool(tool: &str, args: &[String]) -> Result<String, String> {
+    let program = find_tool(tool).ok_or_else(|| format!("missing:{tool}"))?;
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        // No colors, no prompts, no pager: plain JSON.
+        .env("NO_COLOR", "1")
+        .env("GH_PROMPT_DISABLED", "1")
+        .env("GLAB_NO_PROMPT", "1")
+        .env("GH_PAGER", "")
+        .env("PAGER", "");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flashing
+    }
+    let mut child = cmd.spawn().map_err(|e| format!("failed:{e}"))?;
+    // Read both pipes on threads, so a full pipe never blocks the tool.
+    let mut out_pipe = child.stdout.take();
+    let mut err_pipe = child.stderr.take();
+    let out = thread::spawn(move || {
+        let mut s = String::new();
+        if let Some(p) = out_pipe.as_mut() {
+            let _ = std::io::Read::read_to_string(p, &mut s);
+        }
+        s
+    });
+    let err = thread::spawn(move || {
+        let mut s = String::new();
+        if let Some(p) = err_pipe.as_mut() {
+            let _ = std::io::Read::read_to_string(p, &mut s);
+        }
+        s
+    });
+    let started = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|e| format!("failed:{e}"))? {
+            break status;
+        }
+        if started.elapsed() > REVIEW_TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("failed:{tool} timeout"));
+        }
+        thread::sleep(Duration::from_millis(100));
+    };
+    let stdout = out.join().unwrap_or_default();
+    let stderr = err.join().unwrap_or_default();
+    if status.success() {
+        return Ok(stdout);
+    }
+    Err(review_error(tool, &stderr))
+}
+
+/// The error code for what the tool wrote on failure.
+fn review_error(tool: &str, stderr: &str) -> String {
+    let lower = stderr.to_lowercase();
+    const SIGNED_OUT: [&str; 6] = [
+        "auth login",
+        "not logged",
+        "401",
+        "unauthorized",
+        "invalid token",
+        "token is expired",
+    ];
+    if SIGNED_OUT.iter().any(|w| lower.contains(w)) {
+        format!("auth:{tool}")
+    } else if lower.contains("could not resolve")
+        || lower.contains("404")
+        || lower.contains("not found")
+    {
+        "notfound".to_string()
+    } else {
+        let line = stderr
+            .lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty())
+            .unwrap_or("?");
+        format!("failed:{}", line.chars().take(200).collect::<String>())
+    }
+}
+
+#[tauri::command]
+async fn list_reviews(
+    app: AppHandle,
+    forge: String,
+    host: String,
+    path: String,
+) -> Result<String, String> {
+    blocking(app, move |_| {
+        let (tool, args) =
+            review_args(&forge, &host, &path).ok_or_else(|| "badrepo".to_string())?;
+        run_review_tool(tool, &args)
+    })
+    .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1354,7 +1564,8 @@ pub fn run() {
             remove_reading,
             list_inbox,
             read_inbox,
-            remove_inbox
+            remove_inbox,
+            list_reviews
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1398,6 +1609,61 @@ mod tests {
             assert!(read_inbox_in(&dir, trap).is_err(), "{trap}");
         }
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn review_commands_take_only_plain_repositories() {
+        let (tool, args) = review_args("github", "github.com", "mehdiAberkane/Todoom").unwrap();
+        assert_eq!(tool, "gh");
+        assert!(args.contains(&"github.com/mehdiAberkane/Todoom".to_string()));
+        let (tool, args) = review_args("gitlab", "gitlab.example.com", "g/sub/project").unwrap();
+        assert_eq!(tool, "glab");
+        assert!(args.contains(&"path=g/sub/project".to_string()));
+        assert!(args.contains(&"gitlab.example.com".to_string()));
+        for (forge, host, path) in [
+            ("github", "github.com", "a/b/c"),
+            ("github", "github.com", "../b"),
+            ("github", "github.com", "-x/b"),
+            ("github", "github.com", "a/b;rm"),
+            ("github", "-h", "a/b"),
+            ("github", "evil.com/x", "a/b"),
+            ("gitlab", "gitlab.com", "single"),
+            ("gitlab", "gitlab.com", "g/.hidden"),
+            ("bitbucket", "bitbucket.org", "a/b"),
+            ("github", "github.com", "a b/c"),
+        ] {
+            assert!(
+                review_args(forge, host, path).is_none(),
+                "{forge} {host} {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn review_errors_say_what_to_do() {
+        assert_eq!(review_error("glab", "glab: Invalid token"), "auth:glab");
+        assert_eq!(
+            review_error(
+                "gh",
+                "To get started with GitHub CLI, please run:  gh auth login"
+            ),
+            "auth:gh"
+        );
+        assert_eq!(
+            review_error(
+                "glab",
+                "GET https://gitlab.com/api/v4/user: 401 {message: 401 Unauthorized}"
+            ),
+            "auth:glab"
+        );
+        assert_eq!(
+            review_error(
+                "gh",
+                "GraphQL: Could not resolve to a Repository with the name 'a/b'."
+            ),
+            "notfound"
+        );
+        assert_eq!(review_error("gh", "\nboom\nmore"), "failed:boom");
     }
 
     #[test]

@@ -29,6 +29,8 @@ export interface Board {
   labels: Label[];
   /** How the cards' git branches are named, e.g. "{type}/{ref}-{slug}"; absent means that one. */
   branchFormat?: string;
+  /** The board's repository (https://github.com/owner/repo, https://gitlab.com/group/project): its open pull/merge requests are shown beside the columns. */
+  repo?: string;
   /** Priority levels, highest first; absent means the defaults P1, P2, P3. */
   priorities?: Priority[];
   /** Fractional position in the sidebar; absent on boards created before reordering existed. */

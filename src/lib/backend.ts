@@ -46,6 +46,8 @@ export interface Backend {
   listInbox(): Promise<InboxFile[]>;
   readInbox(name: string): Promise<string>;
   removeInbox(name: string): Promise<void>;
+  /** The open pull/merge requests of a repository, as gh or glab print them (see reviews.ts). */
+  listReviews(forge: string, host: string, path: string): Promise<string>;
   /** Snapshots of the data folder, kept on this computer (see snapshots.ts), newest first. */
   listSnapshots(): Promise<SnapshotInfo[]>;
   saveSnapshot(name: string, content: string): Promise<void>;
@@ -85,6 +87,7 @@ const tauriBackend: Backend = {
   listInbox: () => invoke<InboxFile[]>("list_inbox"),
   readInbox: (name) => invoke<string>("read_inbox", { name }),
   removeInbox: (name) => invoke("remove_inbox", { name }),
+  listReviews: (forge, host, path) => invoke<string>("list_reviews", { forge, host, path }),
   listSnapshots: () => invoke<SnapshotInfo[]>("list_snapshots"),
   saveSnapshot: (name, content) => invoke("save_snapshot", { name, content }),
   deleteSnapshot: (name) => invoke("delete_snapshot", { name }),
@@ -221,6 +224,14 @@ const browserBackend: Backend = {
     const all = readInboxStore();
     delete all[name];
     localStorage.setItem(INBOX_KEY, JSON.stringify(all));
+  },
+  // No gh or glab in a browser: a test puts their output in localStorage, by "forge:host/path".
+  listReviews: async (forge, host, path) => {
+    const all = JSON.parse(localStorage.getItem("todoom-reviews") ?? "{}") as Record<string, string>;
+    const output = all[`${forge}:${host}/${path}`];
+    if (output === undefined) throw new Error("desktop");
+    if (output.startsWith("error:")) throw new Error(output.slice(6));
+    return output;
   },
   listSnapshots: async () =>
     Object.entries(readSnapshots())

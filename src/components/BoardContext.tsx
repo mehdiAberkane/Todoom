@@ -4,6 +4,7 @@ import { t } from "../lib/i18n";
 import { Modal } from "./ui";
 import { Markdown } from "./Markdown";
 import { branchName, DEFAULT_BRANCH_FORMAT } from "../lib/dev";
+import { parseRepo } from "../lib/reviews";
 
 /**
  * The board's context page: repository, working rules, vocabulary, what each
@@ -13,14 +14,16 @@ export function BoardContext({ board, onSave, onClose }: { board: Board; onSave:
   const [text, setText] = useState(board.description ?? "");
   const [preview, setPreview] = useState(false);
   const [format, setFormat] = useState(board.branchFormat ?? "");
+  const [repo, setRepo] = useState(board.repo ?? "");
 
   const close = () => {
     const value = text.trim() ? text.replace(/\s+$/, "") : "";
     // The default format is not written: the board keeps following it if it changes.
     const branchFormat = format.trim() && format.trim() !== DEFAULT_BRANCH_FORMAT ? format.trim() : undefined;
-    if (value !== (board.description ?? "") || branchFormat !== board.branchFormat) {
-      const { branchFormat: _old, ...rest } = board;
-      onSave({ ...rest, description: value, ...(branchFormat ? { branchFormat } : {}) });
+    const repoValue = repo.trim() || undefined;
+    if (value !== (board.description ?? "") || branchFormat !== board.branchFormat || repoValue !== board.repo) {
+      const { branchFormat: _old, repo: _oldRepo, ...rest } = board;
+      onSave({ ...rest, description: value, ...(branchFormat ? { branchFormat } : {}), ...(repoValue ? { repo: repoValue } : {}) });
     }
     onClose();
   };
@@ -54,6 +57,19 @@ export function BoardContext({ board, onSave, onClose }: { board: Board; onSave:
       ) : (
         <textarea className="context-text" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("context.placeholder")} autoFocus />
       )}
+      <div className="branch-format">
+        <label>
+          {t("context.repo")}
+          <input
+            value={repo}
+            placeholder="https://github.com/…/…"
+            spellCheck={false}
+            className={repo.trim() && !parseRepo(repo) ? "invalid" : ""}
+            onChange={(e) => setRepo(e.target.value)}
+          />
+        </label>
+        <p className="hint">{repo.trim() && !parseRepo(repo) ? t("context.repoInvalid") : t("context.repoHint")}</p>
+      </div>
       <div className="branch-format">
         <label>
           {t("context.branchFormat")}

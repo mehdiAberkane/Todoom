@@ -29,6 +29,10 @@
       "type": "string",
       "description": "How the cards' git branches are named: {type} (feat or fix), {ref} (TOD-51), {key}, {number}, {slug} (the title). Default \"{type}/{ref}-{slug}\"."
     },
+    "repo": {
+      "type": "string",
+      "description": "The board's repository, as its web or clone address (https://github.com/owner/repo, https://gitlab.com/group/project). Its open pull requests / merge requests and their CI are shown beside the columns, read through the gh or glab tool of the computer."
+    },
     "columns": {
       "type": "array",
       "description": "In display order.",

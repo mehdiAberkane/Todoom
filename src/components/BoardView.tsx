@@ -14,7 +14,7 @@ import {
 import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
-import { dueStatus, formatDue, reorder, uid } from "../lib/utils";
+import { dueStatus, formatDue, localGet, localSet, reorder, uid } from "../lib/utils";
 import { prioritiesOf } from "../lib/priority";
 import { checklistDone, openBlockers, type Located } from "../lib/links";
 import { mergedHistory } from "../lib/activity";
@@ -41,6 +41,7 @@ import { DUE_FILTERS, loadFilter, matchesDue, saveFilter, sortCards, type DueFil
 import { AgentStatusChips } from "./AgentStatus";
 import type { AgentStatus } from "../types";
 import { DangerButton, InlineEdit } from "./ui";
+import { ReviewsPanel } from "./ReviewsPanel";
 
 type Lists = Record<string, string[]>;
 
@@ -95,6 +96,13 @@ export function BoardView({
   const weekly = useMemo(() => finishedPerWeek(board, allCards, (id) => mergedHistory(history[id])), [board, allCards, history]);
   const [showArchive, setShowArchive] = useState(false);
   const [showContext, setShowContext] = useState(false);
+  // The pull/merge request panel: open or not is remembered on this computer.
+  const [showReviews, setShowReviews] = useState(() => localGet("todoom-reviews-open") === "1");
+  const toggleReviews = () =>
+    setShowReviews((open) => {
+      localSet("todoom-reviews-open", open ? "0" : "1");
+      return !open;
+    });
   // The filter bar comes back as it was left on this board (kept on this computer).
   const [saved] = useState(() => loadFilter(board.id));
   const [query, setQuery] = useState(saved.query);
@@ -539,6 +547,9 @@ export function BoardView({
           <button className="btn-ghost" onClick={() => setShowContext(true)} title={t("board.contextTitle")}>
             {t("board.context")}
           </button>
+          <button className={`btn-ghost ${showReviews ? "on" : ""}`} onClick={toggleReviews} title={t("reviews.buttonTitle")} aria-pressed={showReviews}>
+            {t("reviews.button")}
+          </button>
           <ExportMenu board={board} cards={cards} />
           <button className="btn-ghost" onClick={onOpenMetrics} title={t("metrics.boardTitle")}>
             {t("metrics.button")}
@@ -556,6 +567,7 @@ export function BoardView({
         </div>
       </header>
 
+      <div className="board-body">
       {laneMode ? (
         <LanesView
           board={board}
@@ -639,6 +651,16 @@ export function BoardView({
         </DragOverlay>
       </DndContext>
       )}
+      {showReviews && (
+        <ReviewsPanel
+          board={board}
+          cards={cards}
+          onOpenCard={openFromBoard}
+          onEditRepo={() => setShowContext(true)}
+          onClose={toggleReviews}
+        />
+      )}
+      </div>
 
       {openCard && (
         <CardModal
