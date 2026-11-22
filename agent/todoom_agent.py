@@ -654,6 +654,12 @@ def make_target(cfg, index):
     return t
 
 
+def remote_host(url):
+    """The host of a git remote: https://host/…, ssh://user@host/…, user@host:path."""
+    found = re.match(r"^(?:[a-z][a-z0-9+.-]*://)?(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+)", url.strip(), re.IGNORECASE)
+    return found.group(1).lower() if found else ""
+
+
 def use(t):
     """Makes `t` the board being handled."""
     global BOARD_DIR, REPO, PROJECT, CHECKS, BASE_BRANCH, REMOTE, TOOLS, FORGE
@@ -662,7 +668,7 @@ def use(t):
     if t["forge"] == "auto":
         # Guessed once from the remote's address.
         url = git("remote", "get-url", REMOTE, check=False) if REPO.is_dir() else ""
-        t["forge"] = "github" if "github.com" in url else "gitlab"
+        t["forge"] = "github" if remote_host(url) == "github.com" else "gitlab"
     FORGE = t["forge"]
 
 

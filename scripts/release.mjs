@@ -7,13 +7,14 @@
 //   npm run release major      -> 0.2.0 becomes 1.0.0
 //   npm run release 1.4.2      -> exact version
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const run = (cmd) => execSync(cmd, { stdio: "inherit" });
-const read = (cmd) => execSync(cmd, { encoding: "utf8" }).trim();
+// git with its arguments as a list: nothing goes through a shell.
+const git = (...args) => execFileSync("git", args, { stdio: "inherit" });
+const gitRead = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 
-if (read("git status --porcelain")) {
+if (gitRead("status", "--porcelain")) {
   console.error("Des modifications ne sont pas commitées : commite-les avant de publier une version.");
   process.exit(1);
 }
@@ -45,9 +46,9 @@ edit("src-tauri/Cargo.toml", /^version = "[^"]+"/m, `version = "${next}"`);
 edit("src-tauri/Cargo.lock", /(name = "todoom"\r?\nversion = )"[^"]+"/, `$1"${next}"`);
 
 console.log(`${conf.version} -> ${next}`);
-run("git add src-tauri/tauri.conf.json package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock");
-run(`git commit -q -m "Release v${next}"`);
-run(`git tag v${next}`);
-run(`git push origin HEAD v${next}`);
+git("add", "src-tauri/tauri.conf.json", "package.json", "package-lock.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock");
+git("commit", "-q", "-m", `Release v${next}`);
+git("tag", `v${next}`);
+git("push", "origin", "HEAD", `v${next}`);
 console.log(`\nv${next} est partie : GitHub compile Windows + Mac (~10 min), puis Todoom proposera la mise à jour.`);
 console.log("Suivi : https://github.com/mehdiAberkane/Todoom/actions");

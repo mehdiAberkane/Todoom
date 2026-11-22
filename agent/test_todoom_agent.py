@@ -135,6 +135,14 @@ class SyncedFolderTest(unittest.TestCase):
                 self.assertTrue(agent.git_setup_changed(before))
 
 
+class ForgeTest(unittest.TestCase):
+    def test_the_forge_is_read_from_the_remote_host_not_from_anywhere_in_its_address(self):
+        for url, host in [("git@github.com:me/r.git", "github.com"), ("https://github.com/me/r", "github.com"),
+                          ("https://gitlab.example.com/github.com/r", "gitlab.example.com"),
+                          ("https://oauth2:x@gitlab.com/g/p.git", "gitlab.com")]:
+            self.assertEqual(agent.remote_host(url), host, url)
+
+
 class VerdictTest(unittest.TestCase):
     def test_success_needs_commits_and_a_clean_tree(self):
         self.assertEqual(agent.verdict(True, "fait", "abc1234 Ajoute l'export", ""), (True, "fait"))
