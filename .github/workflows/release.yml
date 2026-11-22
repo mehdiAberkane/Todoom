@@ -6,8 +6,12 @@
 # an update every installed Todoom accepts. Hence:
 # - actions are pinned to a commit SHA (a tag can be moved), version in the
 #   comment; Dependabot (.github/dependabot.yml) proposes the updates;
-# - npm install scripts don't run, so no dependency executes code before the
-#   signing steps;
+# - npm install scripts don't run;
+# - the app is built (interface, then Rust) in a step without the key; the
+#   step that holds the key only bundles and signs what is already built:
+#   beforeBuildCommand is emptied there and cargo finds everything up to date,
+#   so no dependency code (vite, plugins, build.rs, macros) runs next to the key;
+# - no cache is restored in the build job (a CI run could have written it);
 # - only the two steps that sign receive the key;
 # - the checks of ci.yml (tests, Clippy, audits) must pass first.
 # Replacing a leaked key: docs/cle-de-signature.md.
@@ -22,7 +26,7 @@ permissions: {}
 jobs:
   # Same checks as on every push: nothing is built or signed unless they pass.
   checks:
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository]
     permissions:
       contents: read
 
@@ -35,8 +39,10 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
+            target: ""
             args: --bundles msi
           - platform: macos-latest
+            target: --target universal-apple-darwin
             args: --target universal-apple-darwin
 
     runs-on: ${{ matrix.platform }}
@@ -48,16 +54,14 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: npm
+          # No cache here (npm, Rust): a cache is restored next to the signing
+          # key, and CI runs can write it. The release builds from scratch.
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           # Both architectures so the macOS build runs on Intel and Apple Silicon Macs.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: src-tauri -> target
 
       - run: npm ci --ignore-scripts
 
@@ -79,6 +83,17 @@ jobs:
           fi
           echo "Clé et mot de passe de signature valides."
 
+      # Everything that runs dependency code, without the key: the interface,
+      # then the Rust build with the very config of the signing step (same
+      # config, so cargo has nothing left to compile there).
+      - name: Build without the signing key
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          npm run build
+          npx tauri build --no-bundle $TARGET --config src-tauri/tauri.sign.conf.json
+
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -90,4 +105,5 @@ jobs:
           releaseBody: Mise à jour installable depuis le bouton de Todoom.
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          # Already built: no beforeBuildCommand (src-tauri/tauri.sign.conf.json).
+          args: ${{ matrix.args }} --config src-tauri/tauri.sign.conf.json
