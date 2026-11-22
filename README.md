@@ -23,13 +23,20 @@ mémorisé par machine.
 
 ```
 Todoom/
-  boards/<idTableau>/board.json         colonnes, étiquettes, nom
+  boards/<idTableau>/board.json         nom, clé, colonnes, étiquettes, contexte, dépôt
   boards/<idTableau>/cards/<idCarte>.json
-  settings.json                         paramètres partagés (fond d'écran)
+  settings.json                         paramètres partagés (fond d'écran, notifications…)
   boards/<idTableau>/comments/<idCarte>/<id>.json      un fichier par commentaire
   boards/<idTableau>/history/<idCarte>/<auteur>.json   historique, un fichier par PC ou outil
+  boards/<idTableau>/attachments/<idCarte>/…           pièces jointes
+  boards/<idTableau>/agents/<nomDuPC>-agent.json       état de l'agent Python
   .presence/<nomDuPC>.json              « aussi ouvert sur… »
+  lecture/                              résumés texte des tableaux, pour le téléphone
+  boîte de réception/                   idées déposées depuis le téléphone, qui deviennent des cartes
 ```
+
+Pour un agent (Claude, script) qui utilise les tableaux ou modifie le code :
+[`AGENTS.md`](AGENTS.md).
 
 Le format de chaque fichier est décrit dans [`schema/`](schema/) (schémas JSON) pour les
 scripts et agents qui écrivent dans le dossier. Un fichier illisible ou d'un format
