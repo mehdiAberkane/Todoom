@@ -200,6 +200,8 @@ export interface AppSettings {
   captureBoard?: string;
   /** Plain text summaries of the boards for the phone (« lecture » folder); absent means on. */
   readingCopy?: boolean;
+  /** Ideas dropped from the phone into « boîte de réception » become cards; absent means on. */
+  inbox?: boolean;
   updatedAt: string;
 }
 

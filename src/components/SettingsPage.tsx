@@ -7,6 +7,7 @@ import { t } from "../lib/i18n";
 import { boardSetup, defaultTemplate } from "../lib/templates";
 import { THEMES, veilOf, type ThemeChoice } from "../lib/appearance";
 import { SnapshotsSection } from "./SnapshotsSection";
+import type { InboxIssue } from "../lib/inboxWatcher";
 import type { CheckState, UpdateState } from "../lib/updater";
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
   onRestored: () => void;
   /** The board the quick capture adds to now. */
   captureBoardId: string | null;
+  /** Inbox files that couldn't become cards. */
+  inboxIssues: InboxIssue[];
   dataDir: string;
   onChangeDataDir: () => void;
   version: string | null;
@@ -36,6 +39,7 @@ export function SettingsPage({
   boards,
   onRestored,
   captureBoardId,
+  inboxIssues,
   dataDir,
   onChangeDataDir,
   version,
@@ -271,6 +275,23 @@ export function SettingsPage({
           />
           {t("reading.enabled")}
         </label>
+        <p className="muted">{t("inbox.intro", { board: boards.find((b) => b.id === captureBoardId)?.name ?? "—" })}</p>
+        <label className="settings-check">
+          <input type="checkbox" checked={settings.inbox !== false} onChange={(e) => onSave({ ...settings, backgroundDim: dim, inbox: e.target.checked })} />
+          {t("inbox.enabled")}
+        </label>
+        {inboxIssues.length > 0 && (
+          <div className="check-failed">
+            {t("inbox.issues")}
+            <ul>
+              {inboxIssues.map((i) => (
+                <li key={i.name}>
+                  {i.name} : {t(`inbox.problem.${i.problem}`)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <SnapshotsSection

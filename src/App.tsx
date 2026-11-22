@@ -25,6 +25,7 @@ import { CAPTURE_BOARDS, CAPTURE_HELLO, CAPTURE_SEND, captureBoard, captureTitle
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { dailySnapshot } from "./lib/snapshotter";
 import { useReadingCopy } from "./lib/readingWriter";
+import { useInbox } from "./lib/inboxWatcher";
 import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
 import { pendingRepeats, successorOf } from "./lib/recurring";
@@ -174,6 +175,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   // Plain text summaries for the phone, in the « lecture » folder.
   const workColumns = useMemo(() => myWorkColumns(data.settings), [data.settings]);
   useReadingCopy(data.settings.readingCopy !== false, !incomplete && !error, data.boards, data.cards, workColumns, hourTick);
+  // Ideas dropped from the phone into the inbox become cards.
+  const inboxIssues = useInbox(data.settings.inbox !== false, !incomplete && !error, activeBoards, data.cards, unsavedIds, data.settings, actions);
   // Today's snapshot of the data folder, once the folder is read in full; checked again every hour.
   const snapshotKeep = data.settings.snapshotKeep;
   useEffect(() => {
@@ -345,6 +348,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             boards={activeBoards}
             onRestored={reload}
             captureBoardId={target?.id ?? null}
+            inboxIssues={inboxIssues}
             dataDir={dataDir}
             onChangeDataDir={onSettings}
             version={updater.version}

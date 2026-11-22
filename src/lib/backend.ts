@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { t } from "./i18n";
 import { restorePlan, type SnapshotInfo } from "./snapshots";
+import type { InboxFile } from "./inbox";
 
 export interface FileEntry {
   /** Relative to the data folder, always with "/" separators. */
@@ -41,6 +42,10 @@ export interface Backend {
   listReading(): Promise<string[]>;
   writeReading(name: string, content: string): Promise<void>;
   removeReading(name: string): Promise<void>;
+  /** Ideas dropped from the phone into the data folder's inbox (see inbox.ts). */
+  listInbox(): Promise<InboxFile[]>;
+  readInbox(name: string): Promise<string>;
+  removeInbox(name: string): Promise<void>;
   /** Snapshots of the data folder, kept on this computer (see snapshots.ts), newest first. */
   listSnapshots(): Promise<SnapshotInfo[]>;
   saveSnapshot(name: string, content: string): Promise<void>;
@@ -77,6 +82,9 @@ const tauriBackend: Backend = {
   listReading: () => invoke<string[]>("list_reading"),
   writeReading: (name, content) => invoke("write_reading", { name, content }),
   removeReading: (name) => invoke("remove_reading", { name }),
+  listInbox: () => invoke<InboxFile[]>("list_inbox"),
+  readInbox: (name) => invoke<string>("read_inbox", { name }),
+  removeInbox: (name) => invoke("remove_inbox", { name }),
   listSnapshots: () => invoke<SnapshotInfo[]>("list_snapshots"),
   saveSnapshot: (name, content) => invoke("save_snapshot", { name, content }),
   deleteSnapshot: (name) => invoke("delete_snapshot", { name }),
@@ -90,6 +98,16 @@ const ATTACH_KEY = "todoom-attachments";
 const readAttachments = (): Record<string, string> => {
   try {
     return JSON.parse(localStorage.getItem(ATTACH_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+};
+
+// The inbox, by file name: a test puts ideas there as the phone would.
+const INBOX_KEY = "todoom-inbox";
+const readInboxStore = (): Record<string, string> => {
+  try {
+    return JSON.parse(localStorage.getItem(INBOX_KEY) ?? "{}");
   } catch {
     return {};
   }
@@ -192,6 +210,17 @@ const browserBackend: Backend = {
     const all = readReading();
     delete all[name];
     localStorage.setItem(READING_KEY, JSON.stringify(all));
+  },
+  listInbox: async () => Object.entries(readInboxStore()).map(([name, content]) => ({ name, size: content.length })),
+  readInbox: async (name) => {
+    const content = readInboxStore()[name];
+    if (content === undefined) throw new Error(`${name} introuvable`);
+    return content;
+  },
+  removeInbox: async (name) => {
+    const all = readInboxStore();
+    delete all[name];
+    localStorage.setItem(INBOX_KEY, JSON.stringify(all));
   },
   listSnapshots: async () =>
     Object.entries(readSnapshots())
