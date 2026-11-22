@@ -305,6 +305,36 @@ textarea { resize: vertical; }
 .inline-edit-input { padding: 2px 6px; }
 .inline-edit-input.board-title { font-size: 20px; font-weight: 800; }
 
+.settings-sub { margin: 18px 0 4px; font-size: 14px; }
+
+/* The PR/MR popup window (bottom right of the screen): its own look, a tint per event */
+:root.prpopup-page, :root.prpopup-page body { background: #14161f; overflow: hidden; }
+.pr-popup { display: flex; flex-direction: column; gap: 1px; background: #2a2e3d; font-size: 13px; }
+.pr-notice {
+  --tint: #3b82f6;
+  position: relative;
+  padding: 10px 12px 10px 16px;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--tint) 26%, #14161f), #14161f 70%);
+  color: #f2f4fb;
+  cursor: pointer;
+}
+.pr-notice::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--tint); }
+.pr-notice:hover { background: linear-gradient(100deg, color-mix(in srgb, var(--tint) 36%, #14161f), #1b1e2a 70%); }
+.pr-opened { --tint: #3b82f6; }
+.pr-ciFailed { --tint: #ef4444; }
+.pr-merged { --tint: #a855f7; }
+.pr-more { --tint: #64748b; display: flex; align-items: center; gap: 8px; cursor: default; color: #c9cfdf; }
+.pr-more span { flex: 1; }
+.pr-notice-head { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.pr-kind { font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: color-mix(in srgb, var(--tint) 70%, #fff); }
+.pr-repo { flex: 1; color: #9aa3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-close { background: none; border: 0; color: #9aa3b8; cursor: pointer; font-size: 12px; padding: 0 2px; }
+.pr-close:hover { color: #fff; }
+.pr-notice-title { margin-top: 4px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pr-number { color: #9aa3b8; font-weight: 500; }
+.pr-notice-meta { margin-top: 3px; font-size: 11px; color: #9aa3b8; }
+.pr-card { color: color-mix(in srgb, var(--tint) 60%, #fff); }
+
 /* Columns, and the pull/merge request panel beside them */
 .board-body { flex: 1; display: flex; min-height: 0; }
 .reviews-panel {

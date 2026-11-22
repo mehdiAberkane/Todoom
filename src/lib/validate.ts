@@ -67,6 +67,7 @@ const SETTINGS: Check[] = [
   ["language", nullable((v) => v === "fr" || v === "en")],
   ["myWorkColumns", listOf(isString)],
   ["notifications", optional(shaped([["enabled", optional(isBoolean)], ["columns", listOf(isString)], ["due", optional(isBoolean)]]))],
+  ["reviewNotifications", optional(shaped([["enabled", optional(isBoolean)], ["opened", optional(isBoolean)], ["ciFailed", optional(isBoolean)], ["merged", optional(isBoolean)]]))],
   ["boardTemplate", optional(isString)],
   ["theme", optional((v) => v === "dark" || v === "light" || v === "system")],
   ["compact", optional(isBoolean)],

@@ -53,7 +53,7 @@ describe("what the tools return", () => {
       },
     ]);
     expect(githubReviews(out)).toEqual([
-      { number: 5, title: "Bump typescript", url: "https://github.com/o/r/pull/5", draft: false, branch: "dependabot/npm/typescript", author: "dependabot", ci: "failure", updatedAt: "2026-11-22T12:00:00Z" },
+      { number: 5, title: "Bump typescript", url: "https://github.com/o/r/pull/5", draft: false, branch: "dependabot/npm/typescript", author: "dependabot", bot: true, ci: "failure", updatedAt: "2026-11-22T12:00:00Z" },
     ]);
   });
 

@@ -26,6 +26,8 @@ export interface Review {
   updatedAt: string;
   /** When it was merged; absent while open. */
   mergedAt?: string;
+  /** Opened by a robot (GitHub says so; on GitLab, guessed from the name). */
+  bot?: boolean;
 }
 
 /** Merged ones are shown for a day. */
@@ -112,6 +114,7 @@ export function githubReviews(output: string): Review[] {
     draft: p.isDraft === true,
     branch: str(p.headRefName),
     author: str(p.author?.login).replace(/^app\//, ""),
+    ...(p.author?.is_bot === true ? { bot: true } : {}),
     ci: ciOfChecks(Array.isArray(p.statusCheckRollup) ? p.statusCheckRollup : []),
     updatedAt: str(p.updatedAt),
     ...(str(p.mergedAt) ? { mergedAt: str(p.mergedAt) } : {}),

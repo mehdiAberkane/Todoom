@@ -26,6 +26,7 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { dailySnapshot } from "./lib/snapshotter";
 import { useReadingCopy } from "./lib/readingWriter";
 import { useInbox } from "./lib/inboxWatcher";
+import { usePrWatch } from "./lib/prWatcher";
 import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
 import { pendingRepeats, successorOf } from "./lib/recurring";
@@ -177,6 +178,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   useReadingCopy(data.settings.readingCopy !== false, !incomplete && !error, data.boards, data.cards, workColumns, hourTick);
   // Ideas dropped from the phone into the inbox become cards.
   const inboxIssues = useInbox(data.settings.inbox !== false, !incomplete && !error, activeBoards, data.cards, unsavedIds, data.settings, actions);
+  // PR/MR of the boards' repositories: what changed goes to the popup.
+  usePrWatch(!incomplete && !error, activeBoards, data.cards, data.settings);
   // Today's snapshot of the data folder, once the folder is read in full; checked again every hour.
   const snapshotKeep = data.settings.snapshotKeep;
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { reviewNotifySettings } from "../lib/reviewWatch";
 import { useEffect, useRef, useState } from "react";
 import type { AppSettings, Board } from "../types";
 import { notifySettings, plain } from "../lib/notify";
@@ -72,6 +73,9 @@ export function SettingsPage({
   const watched = (name: string) => notify.columns.some((c) => plain(c) === plain(name));
   const saveNotify = (change: Partial<typeof notify>) =>
     onSave({ ...settings, backgroundDim: dim, notifications: { ...notify, ...change } });
+  const prNotify = reviewNotifySettings(settings);
+  const savePrNotify = (change: Partial<typeof prNotify>) =>
+    onSave({ ...settings, backgroundDim: dim, reviewNotifications: { ...prNotify, ...change } });
   const [denied, setDenied] = useState(false);
   useEffect(() => {
     notifyPermission().then((p) => setDenied(p === "denied")).catch(() => {});
@@ -195,6 +199,21 @@ export function SettingsPage({
             </button>
             {denied && <span className="check-failed">{t("settings.notifyDenied")}</span>}
           </div>
+        </div>
+
+        <h3 className="settings-sub">{t("settings.prNotify")}</h3>
+        <p className="hint">{t("settings.prNotifyHint")}</p>
+        <label className="settings-check">
+          <input type="checkbox" checked={prNotify.enabled} onChange={(e) => savePrNotify({ enabled: e.target.checked })} />
+          {t("settings.prNotifyEnabled")}
+        </label>
+        <div className={`notify-options ${prNotify.enabled ? "" : "off"}`}>
+          {(["opened", "ciFailed", "merged"] as const).map((kind) => (
+            <label key={kind} className="settings-check">
+              <input type="checkbox" checked={prNotify[kind]} disabled={!prNotify.enabled} onChange={(e) => savePrNotify({ [kind]: e.target.checked })} />
+              {t(`settings.prNotify.${kind}`)}
+            </label>
+          ))}
         </div>
       </section>
 
