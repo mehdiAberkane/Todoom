@@ -244,6 +244,7 @@ const browserBackend: Backend = {
   },
 };
 
-export const isTauri = "__TAURI_INTERNALS__" in window;
+// Outside a browser (the tests, the todoom command) there is no window: not Tauri.
+export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export const backend: Backend = isTauri ? tauriBackend : browserBackend;
