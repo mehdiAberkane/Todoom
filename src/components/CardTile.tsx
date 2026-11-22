@@ -1,9 +1,10 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Card, Label, Priority } from "../types";
+import type { Card, Label, MergeRequestState, Priority } from "../types";
 import { dueStatus, formatDue } from "../lib/utils";
 import { t } from "../lib/i18n";
-import { mrLabel } from "../lib/dev";
+import { mrLabel, webUrl } from "../lib/dev";
+import { openExternal } from "../lib/open";
 import { claimLabel } from "../lib/claim";
 import { formatDateTime } from "../lib/utils";
 
@@ -95,12 +96,7 @@ export function CardBody({
             </span>
           )}
           {card.mergeRequest ? (
-            <span
-              className={`badge badge-mr mr-${card.mergeRequest.state}`}
-              title={t("card.mrTitle", { label: mrLabel(card.mergeRequest.url), state: t(`mr.${card.mergeRequest.state}`) })}
-            >
-              ⑂ {mrLabel(card.mergeRequest.url)} {t(`mr.${card.mergeRequest.state}`)}
-            </span>
+            <MrBadge url={card.mergeRequest.url} state={card.mergeRequest.state} />
           ) : (
             card.branch && (
               <span className="badge" title={t("card.branchTitle", { name: card.branch })}>
@@ -131,6 +127,32 @@ export function CardBody({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * The card's merge request (pull request on GitHub): a click opens it in the
+ * browser, without opening the card or starting a drag.
+ */
+function MrBadge({ url, state }: { url: string; state: MergeRequestState }) {
+  const label = `⑂ ${mrLabel(url)} ${t(`mr.${state}`)}`;
+  const className = `badge badge-mr mr-${state}`;
+  if (!webUrl(url)) return <span className={className}>{label}</span>;
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  return (
+    <button
+      type="button"
+      className={`${className} badge-link`}
+      title={t("card.mrOpen", { label: mrLabel(url), state: t(`mr.${state}`) })}
+      onPointerDown={stop}
+      onKeyDown={stop}
+      onClick={(e) => {
+        e.stopPropagation();
+        openExternal(url);
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

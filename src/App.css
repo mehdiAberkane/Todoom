@@ -625,6 +625,10 @@ textarea { resize: vertical; }
 .mr-merged { color: var(--merged); }
 .mr-closed { color: var(--muted); }
 .badge-mr { font-weight: 600; }
+/* A badge that opens a link (the merge request): looks like a badge, acts like a link. */
+button.badge-link { border: 0; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+button.badge-link:hover { text-decoration: underline; background: rgb(var(--ink) / 0.1); }
+button.badge-link:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
 
 /* Who works on the card */
 .claim-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
