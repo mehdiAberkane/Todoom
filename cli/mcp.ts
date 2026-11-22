@@ -84,6 +84,23 @@ export function createServer(dir: string): McpServer {
   );
 
   server.registerTool(
+    "create_board",
+    {
+      title: "Create a board",
+      description:
+        "Creates a board (a project) the way the app does: template « dev » (columns À faire, En cours, A verifier, Terminé, Backlog, and labels Bug, Fonctionnalité, Sécurité, Qualité, Performance) unless told otherwise, a short key for its cards (TOD-12), last in the sidebar. Only when the user asks for a new board. Refused if a board of that name exists.",
+      inputSchema: {
+        name: z.string().min(1).describe("Board name"),
+        template: z.string().optional().describe("« dev » (default), « simple », or the name of an existing board to copy the set-up of (columns, labels, priorities, context; not the cards)"),
+        description: z.string().optional().describe("Context page (Markdown): repository, rules, vocabulary, meaning of the columns; replaces the template's"),
+        repo: z.string().optional().describe("Repository address, https://github.com/owner/repo or https://gitlab.com/group/project: its open PR/MR show in the app"),
+      },
+      annotations: writes,
+    },
+    ({ name, template, description, repo }) => run(() => store.createBoard(name, { template, description, repo })),
+  );
+
+  server.registerTool(
     "list_cards",
     {
       title: "List cards",

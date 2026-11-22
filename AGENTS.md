@@ -52,7 +52,7 @@ Installation, branchement dans Claude Code et liste complète des commandes :
 [docs/commande-todoom.md](docs/commande-todoom.md).
 
 **Outils MCP** :
-- `list_boards`, `get_board`, `update_board` ;
+- `list_boards`, `get_board`, `create_board` (seulement si l’utilisateur demande un nouveau tableau), `update_board` ;
 - `list_cards`, `get_card`, `create_card`, `update_card`, `move_card` ;
 - `claim_card`, `release_card` ;
 - `add_comment` ;

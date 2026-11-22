@@ -20,6 +20,9 @@ import { claimLabel, mayClaim, newClaim, sameClaimant } from "../src/lib/claim";
 import type { Claim } from "../src/types";
 import type { MergeRequest, MergeRequestState } from "../src/types";
 import { mapByName } from "../src/lib/transfer";
+import { boardSetup, fromSetup } from "../src/lib/templates";
+import { setLang } from "../src/lib/i18n";
+import { parseRepo } from "../src/lib/reviews";
 
 export class TodoomError extends Error {}
 
@@ -235,12 +238,64 @@ export class Store {
       key: b.key ?? null,
       trashed: !!b.archivedAt,
       description: b.description ?? "",
+      repo: b.repo ?? null,
       columns: b.columns.map((c) => c.name),
       labels: b.labels.map((l) => l.name),
       priorities: prioritiesOf(b).map((p) => p.name),
       // What the agents watching this board are doing (written by them; a stale heartbeat means stopped).
       agents: this.jsonFiles(join(this.boardDir(b.id), "agents")).filter((raw) => !agentProblem(raw)),
     };
+  }
+
+  /**
+   * A new board, as the app makes one: its set-up from a template (« dev »:
+   * À faire, En cours, A verifier, Terminé, Backlog and their labels; « simple »;
+   * or the set-up of an existing board, given by name), its key, last in the
+   * sidebar. Column names follow the interface language set in Todoom (French
+   * when none). A context page or a repository given replace the template's.
+   */
+  createBoard(name: string, opts: { template?: string; description?: string; repo?: string } = {}) {
+    const title = name.trim();
+    if (!title) throw new TodoomError("Nom de tableau vide");
+    const boards = this.boards(true);
+    if (boards.some((b) => !b.archivedAt && normalize(b.name) === normalize(title))) throw new TodoomError(`Un tableau « ${title} » existe déjà`);
+    const wanted = (opts.template ?? "dev").trim();
+    const template = wanted === "dev" || wanted === "simple" ? wanted : `copy:${this.board(wanted).id}`;
+    let repo: string | undefined;
+    if (opts.repo?.trim()) {
+      if (!parseRepo(opts.repo)) throw new TodoomError(`Adresse de dépôt non reconnue : ${opts.repo} (https://github.com/propriétaire/dépôt ou https://gitlab.com/groupe/projet)`);
+      repo = opts.repo.trim();
+    }
+    setLang(this.language());
+    const setup = fromSetup(boardSetup(template, boards));
+    const orders = boards.map((b) => b.order).filter((o): o is number => o !== undefined);
+    const at = new Date().toISOString();
+    const board: Board = {
+      id: uid(),
+      name: title,
+      key: deriveKey(title, boards.map((b) => b.key).filter((k): k is string => !!k)),
+      ...setup,
+      ...(opts.description?.trim() ? { description: opts.description.replace(/\s+$/, "") } : {}),
+      ...(repo ? { repo } : {}),
+      ...(orders.length ? { order: Math.max(...orders) + 1 } : {}),
+      createdAt: at,
+      updatedAt: at,
+    };
+    const problem = boardProblem(board);
+    if (problem) throw new TodoomError(`Tableau refusé (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
+    mkdirSync(join(this.boardDir(board.id), "cards"), { recursive: true });
+    writeAtomic(join(this.boardDir(board.id), "board.json"), board);
+    return this.boardDetail(board.id);
+  }
+
+  /** The interface language set in Todoom (shared settings), French when none. */
+  private language(): "fr" | "en" {
+    try {
+      const raw = readJson(join(this.dir, "settings.json")) as { language?: unknown };
+      return raw.language === "en" ? "en" : "fr";
+    } catch {
+      return "fr";
+    }
   }
 
   /** Rewrites the board's context page, keeping every other field of board.json. */

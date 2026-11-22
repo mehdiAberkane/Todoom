@@ -41,6 +41,7 @@ noms possibles quand un nom n'est pas reconnu.
 |---|---|
 | `todoom boards [--all]` | tableaux, colonnes, étiquettes et niveaux de priorité (`--all` : corbeille comprise) |
 | `todoom board <tableau> [--description <texte>]` | un tableau et sa page de contexte (dépôt, règles, vocabulaire, sens des colonnes), à lire avant de prendre un ticket ; `--description` la remplace |
+| `todoom new-board <nom> [--template dev|simple|<tableau>] [--description <texte>] [--repo <adresse>]` | nouveau tableau, comme dans l’application : modèle « dev » par défaut (À faire, En cours, A verifier, Terminé, Backlog et leurs étiquettes), « simple », ou la configuration d’un tableau existant ; clé des cartes donnée tout de suite ; refusé si le nom existe déjà |
 | `todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]` | cartes, colonne par colonne, sans description |
 | `todoom show <carte>` | une carte entière, avec ses commentaires, son historique et ses liens (titre, tableau, colonne, terminée ou non) |
 | `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
@@ -71,7 +72,7 @@ ou la variable `TODOOM_AGENT` (le serveur MCP signe « Claude » par défaut), e
 
 ## Serveur MCP pour Claude
 
-`todoom mcp` expose les mêmes opérations comme outils : `list_boards`, `get_board`, `update_board`, `list_cards`,
+`todoom mcp` expose les mêmes opérations comme outils : `list_boards`, `get_board`, `create_board`, `update_board`, `list_cards`,
 `get_card`, `create_card`, `update_card`, `move_card`, `claim_card`, `release_card`, `link_cards`, `unlink_cards`, `add_comment`,
 `archive_card`, `restore_card`.
 

@@ -264,6 +264,30 @@ describe("files written by someone else in the synced folder", () => {
   });
 });
 
+describe("a new board", () => {
+  it("is made like in the app: template, key, last in the sidebar, context and repository", () => {
+    const made = store.createBoard("Ongaku", { repo: "https://github.com/me/ongaku", description: "## Dépôt\nongaku" });
+    expect(made).toMatchObject({ name: "Ongaku", key: "ONG", repo: "https://github.com/me/ongaku", description: "## Dépôt\nongaku" });
+    expect(made.columns).toEqual(["À faire", "En cours", "A verifier", "Terminé", "Backlog"]);
+    expect(made.labels).toContain("Bug");
+    expect(readdirSync(join(dir, "boards", made.id))).toEqual(["board.json", "cards"]);
+    // Its cards get the key at once.
+    expect(store.create("Ongaku", "Premier ticket").ref).toBe("ONG-1");
+  });
+
+  it("copies the set-up of a board, or takes the simple one", () => {
+    expect(store.createBoard("Copie", { template: "todoom" }).columns).toEqual(["À faire", "En cours", "A verifier"]);
+    expect(store.createBoard("Courses", { template: "simple" }).columns).toEqual(["À faire", "En cours", "Terminé"]);
+  });
+
+  it("refuses an existing name, an empty one, or an address that isn't a repository", () => {
+    expect(() => store.createBoard(" todoom ")).toThrow(/existe déjà/);
+    expect(() => store.createBoard("  ")).toThrow(TodoomError);
+    expect(() => store.createBoard("X", { repo: "file:///etc" })).toThrow(/dépôt/);
+    expect(store.boards().map((b) => b.name)).toEqual(["Todoom"]);
+  });
+});
+
 describe("data folder", () => {
   it("takes TODOOM_DIR and refuses a folder without boards", () => {
     const saved = process.env.TODOOM_DIR;

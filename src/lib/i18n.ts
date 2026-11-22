@@ -1374,13 +1374,16 @@ function remembered(): Lang | null {
   }
 }
 
+// The page, when there is one: the todoom command (Node) shares this file.
+const page = (globalThis as { document?: { documentElement: { lang: string } } }).document;
+
 let current: Lang = remembered() ?? systemLang();
-if (typeof document !== "undefined") document.documentElement.lang = current;
+if (page) page.documentElement.lang = current;
 
 export function setLang(lang: Lang) {
   if (lang === current) return;
   current = lang;
-  if (typeof document !== "undefined") document.documentElement.lang = lang;
+  if (page) page.documentElement.lang = lang;
   try {
     localStorage.setItem(STORAGE_KEY, lang);
   } catch {

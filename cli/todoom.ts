@@ -17,6 +17,8 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
   todoom board <tableau> [--description <texte>]
                                               un tableau et sa page de contexte (à lire avant
                                               de prendre un ticket) ; --description la remplace
+  todoom new-board <nom> [--template dev|simple|<tableau>] [--description <texte>] [--repo <adresse>]
+                                              nouveau tableau (modèle « dev » par défaut)
   todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]
   todoom show <carte>
   todoom create <tableau> <titre> [--column <nom>] [--description <texte>]
@@ -90,6 +92,8 @@ export async function main(argv: string[]): Promise<number> {
       "no-due": { type: "boolean" },
       top: { type: "boolean" },
       save: { type: "boolean" },
+      template: { type: "string" },
+      repo: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -127,6 +131,11 @@ export async function main(argv: string[]): Promise<number> {
     case "board":
       need(1, "board <tableau> [--description <texte>]");
       out(o.description !== undefined ? store().setBoardDescription(rest[0], text(o.description) ?? "") : store().boardDetail(rest[0]));
+      return 0;
+
+    case "new-board":
+      need(1, "new-board <nom> [--template dev|simple|<tableau>] [--description <texte>] [--repo <adresse>]");
+      out(store().createBoard(rest[0], { template: o.template, description: text(o.description), repo: o.repo }));
       return 0;
 
     case "cards": {
