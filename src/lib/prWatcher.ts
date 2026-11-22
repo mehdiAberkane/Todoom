@@ -1,12 +1,12 @@
 // Watches the repositories of the boards every 2 minutes while Todoom runs
 // (even minimized) and sends what changed to the PR/MR popup window.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import type { AppSettings, Board, Card } from "../types";
 import { backend, isTauri } from "./backend";
 import { openExternal } from "./open";
-import { parseReviews, recentlyMerged } from "./reviews";
+import { parseReviews, recentlyMerged, type Review } from "./reviews";
 import { allowed, noticesOf, reviewEvents, reviewNotifySettings, watchedRepos, type PrNotice, type Seen } from "./reviewWatch";
 
 export const PR_WATCH_MS = 2 * 60_000;
@@ -45,6 +45,8 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
   latest.current = { boards, cards, settings };
   // Sent to the popup until it says it received them (it may still be loading).
   const pending = useRef<PrNotice[]>([]);
+  // The open PR/MR of each repository at the last look, by "forge:host/path", for « Mon travail ».
+  const [openReviews, setOpenReviews] = useState<Record<string, Review[]>>({});
   const repoKeys = watchedRepos(boards)
     .map((w) => w.key)
     .join(" ");
@@ -71,13 +73,16 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
         const { boards, cards, settings } = latest.current;
         const seen = readSeen();
         const events: Parameters<typeof noticesOf>[0] = [];
+        const read: Record<string, Review[]> = {};
         for (const w of watchedRepos(boards)) {
           try {
             const [open, merged] = await Promise.all([
               backend.listReviews(w.repo.forge, w.repo.host, w.repo.path),
               backend.listReviews(w.repo.forge, w.repo.host, w.repo.path, true),
             ]);
-            const result = reviewEvents(seen[w.key], parseReviews(w.repo.forge, open), recentlyMerged(parseReviews(w.repo.forge, merged)));
+            const openList = parseReviews(w.repo.forge, open);
+            read[w.key] = openList;
+            const result = reviewEvents(seen[w.key], openList, recentlyMerged(parseReviews(w.repo.forge, merged)));
             seen[w.key] = result.next;
             const boardCards = boards.flatMap((b) => cards[b.id] ?? []);
             for (const e of allowed(result.events, reviewNotifySettings(settings))) events.push({ ...e, repo: w.repo, board: w.board, cards: boardCards });
@@ -86,6 +91,7 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
           }
         }
         writeSeen(seen);
+        if (Object.keys(read).length) setOpenReviews((current) => ({ ...current, ...read }));
         if (!events.length) return;
         pending.current = [...pending.current, ...noticesOf(events, Date.now().toString(36))];
         await invoke("open_pr_popup").catch(() => {});
@@ -98,4 +104,5 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
     const id = window.setInterval(look, PR_WATCH_MS);
     return () => window.clearInterval(id);
   }, [ready, repoKeys]);
+  return openReviews;
 }

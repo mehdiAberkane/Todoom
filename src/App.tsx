@@ -179,7 +179,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   // Ideas dropped from the phone into the inbox become cards.
   const inboxIssues = useInbox(data.settings.inbox !== false, !incomplete && !error, activeBoards, data.cards, unsavedIds, data.settings, actions);
   // PR/MR of the boards' repositories: what changed goes to the popup.
-  usePrWatch(!incomplete && !error, activeBoards, data.cards, data.settings);
+  const openReviews = usePrWatch(!incomplete && !error, activeBoards, data.cards, data.settings);
   // Today's snapshot of the data folder, once the folder is read in full; checked again every hour.
   const snapshotKeep = data.settings.snapshotKeep;
   useEffect(() => {
@@ -344,6 +344,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
             onSaveSettings={actions.saveSettings}
             index={cardIndex}
             comments={data.comments}
+            reviews={openReviews}
             onOpen={openElsewhere}
           />
         ) : showSettings ? (

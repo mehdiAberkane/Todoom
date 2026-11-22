@@ -725,6 +725,31 @@ button.badge-link:focus-visible { outline: 2px solid var(--accent-2); outline-of
 .my-work-head h1 { margin: 0; font-size: 22px; }
 .my-work-columns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 20px; }
 .my-work-board { margin-bottom: 26px; }
+/* « Mon travail »: one tile per project, then the followed columns with every board mixed */
+.projects { margin: 16px 0 6px; }
+.projects-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.projects-head h2 { margin: 0; font-size: 15px; }
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.project-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px; text-align: left;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); border-left: 4px solid var(--muted);
+  background: var(--column); color: inherit; font: inherit; cursor: pointer;
+}
+.project-tile:hover { background: color-mix(in srgb, var(--column) 85%, rgb(var(--ink))); }
+.project-tile.state-attention { border-left-color: var(--accent); }
+.project-tile.state-active { border-left-color: var(--ok); }
+.project-tile.state-paused { opacity: 0.7; }
+.project-tile.picked { outline: 2px solid var(--accent-2); outline-offset: 1px; }
+.project-tile.dimmed { opacity: 0.45; }
+.project-name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.project-state { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.project-state.attention { color: var(--accent); }
+.project-state.active { color: var(--ok); }
+.project-stats { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+.project-stats .wait { color: var(--accent); font-weight: 600; }
+.project-prs { font-size: 12px; color: var(--muted); }
+.project-prs .ci { width: auto; font-weight: 700; }
+.my-work-origin { margin-top: 6px; font-size: 11px; color: var(--muted); }
 .my-work-board h2 { display: flex; align-items: center; gap: 10px; font-size: 16px; margin: 0 0 10px; }
 .my-work-row { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; }
 .my-work-col { flex: none; }
