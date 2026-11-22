@@ -4,7 +4,7 @@ import { backend } from "../lib/backend";
 import { t } from "../lib/i18n";
 import { refOf } from "../lib/shortid";
 import { openExternal } from "../lib/open";
-import { cardOfReview, parseRepo, parseReviews, repoUrl, reviewError, type Review, type ReviewError } from "../lib/reviews";
+import { cardOfReview, parseRepo, parseReviews, recentlyMerged, repoUrl, reviewError, type Repo, type Review, type ReviewError } from "../lib/reviews";
 import { formatDateTime } from "../lib/utils";
 
 const REFRESH_MS = 60_000;
@@ -24,6 +24,7 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
 }) {
   const repo = parseRepo(board.repo);
   const [reviews, setReviews] = useState<Review[] | null>(null);
+  const [merged, setMerged] = useState<Review[]>([]);
   const [error, setError] = useState<ReviewError | null>(null);
   const [loading, setLoading] = useState(false);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
@@ -34,8 +35,13 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
     if (!r) return;
     setLoading(true);
     try {
-      const output = await backend.listReviews(r.forge, r.host, r.path);
-      setReviews(parseReviews(r.forge, output));
+      // The open ones, and those merged in the last 24 hours (their absence isn't an error).
+      const [open, done] = await Promise.all([
+        backend.listReviews(r.forge, r.host, r.path),
+        backend.listReviews(r.forge, r.host, r.path, true).catch(() => null),
+      ]);
+      setReviews(parseReviews(r.forge, open));
+      setMerged(done ? recentlyMerged(parseReviews(r.forge, done)) : []);
       setError(null);
     } catch (e) {
       setError(reviewError(e));
@@ -49,6 +55,7 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
 
   useEffect(() => {
     setReviews(null);
+    setMerged([]);
     setError(null);
     if (!key) return;
     refresh();
@@ -88,33 +95,20 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
           {reviews && reviews.length === 0 && !error && <p className="muted reviews-empty">{t("reviews.none")}</p>}
           {reviews && reviews.length > 0 && (
             <ul className="reviews-list">
-              {reviews.map((r) => {
-                const card = cardOfReview(r, cards);
-                const cardRef = card ? refOf(board, card) : null;
-                return (
-                  <li key={r.url || r.number} className="review">
-                    <span className={`ci ci-${r.ci}`} title={t(`reviews.ci.${r.ci}`)}>
-                      {CI_ICON[r.ci]}
-                    </span>
-                    <div className="review-main">
-                      <button className="review-title link-btn" onClick={() => openExternal(r.url)} title={t("reviews.open")}>
-                        <span className="review-number">{repo.forge === "gitlab" ? `!${r.number}` : `#${r.number}`}</span> {r.title}
-                      </button>
-                      <div className="review-meta">
-                        {r.draft && <span className="review-draft">{t("reviews.draft")}</span>}
-                        <span className="review-ci-text">{t(`reviews.ci.${r.ci}`)}</span>
-                        {r.author && <span>· {r.author}</span>}
-                        {card && (
-                          <button className="link-btn review-card" onClick={() => onOpenCard(card.id)} title={card.title}>
-                            · {cardRef ?? card.title}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
+              {reviews.map((r) => (
+                <ReviewItem key={r.url || r.number} review={r} repo={repo} board={board} cards={cards} onOpenCard={onOpenCard} />
+              ))}
             </ul>
+          )}
+          {merged.length > 0 && (
+            <>
+              <h4 className="reviews-sub">{t("reviews.merged")}</h4>
+              <ul className="reviews-list merged">
+                {merged.map((r) => (
+                  <ReviewItem key={r.url || r.number} review={r} repo={repo} board={board} cards={cards} onOpenCard={onOpenCard} />
+                ))}
+              </ul>
+            </>
           )}
           {checkedAt && <p className="hint reviews-checked">{t("reviews.checkedAt", { date: formatDateTime(checkedAt) })}</p>}
         </>
@@ -124,6 +118,40 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
 }
 
 const CI_ICON = { running: "◌", success: "✓", failure: "✕", none: "·" } as const;
+
+/** One pull/merge request: CI, number and title (opens it), draft, author, its card. Merged: when instead of the CI. */
+function ReviewItem({ review: r, repo, board, cards, onOpenCard }: { review: Review; repo: Repo; board: Board; cards: Card[]; onOpenCard: (id: string) => void }) {
+  const card = cardOfReview(r, cards);
+  const cardRef = card ? refOf(board, card) : null;
+  return (
+    <li className="review">
+      {r.mergedAt ? (
+        <span className="ci ci-merged" title={t("reviews.mergedAt", { date: formatDateTime(r.mergedAt) })}>
+          ⑂
+        </span>
+      ) : (
+        <span className={`ci ci-${r.ci}`} title={t(`reviews.ci.${r.ci}`)}>
+          {CI_ICON[r.ci]}
+        </span>
+      )}
+      <div className="review-main">
+        <button className="review-title link-btn" onClick={() => openExternal(r.url)} title={t("reviews.open")}>
+          <span className="review-number">{repo.forge === "gitlab" ? `!${r.number}` : `#${r.number}`}</span> {r.title}
+        </button>
+        <div className="review-meta">
+          {r.draft && <span className="review-draft">{t("reviews.draft")}</span>}
+          <span className="review-ci-text">{r.mergedAt ? t("reviews.mergedAt", { date: formatDateTime(r.mergedAt) }) : t(`reviews.ci.${r.ci}`)}</span>
+          {r.author && <span>· {r.author}</span>}
+          {card && (
+            <button className="link-btn review-card" onClick={() => onOpenCard(card.id)} title={card.title}>
+              · {cardRef ?? card.title}
+            </button>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
 
 function ReviewErrorText({ error }: { error: ReviewError }) {
   const text =

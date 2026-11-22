@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "../types";
-import { cardOfReview, ciOfChecks, ciOfPipeline, githubReviews, gitlabReviews, parseRepo, parseReviews, reviewError } from "./reviews";
+import { cardOfReview, ciOfChecks, ciOfPipeline, githubReviews, gitlabReviews, parseRepo, parseReviews, recentlyMerged, reviewError } from "./reviews";
 
 describe("the repository of a board", () => {
   it("is read from the address one copies, web or clone", () => {
@@ -75,6 +75,19 @@ describe("what the tools return", () => {
       [12, true, "running"],
     ]);
     expect(() => gitlabReviews(JSON.stringify({ data: { project: null } }))).toThrow("notfound");
+  });
+});
+
+describe("merged ones", () => {
+  it("keeps those merged in the last 24 hours, latest first", () => {
+    const out = JSON.stringify([
+      { number: 31, title: "a", url: "u31", headRefName: "x", mergedAt: "2026-11-22T12:59:45Z", updatedAt: "2026-11-22T12:59:45Z" },
+      { number: 30, title: "b", url: "u30", headRefName: "y", mergedAt: "2026-11-22T12:40:15Z", updatedAt: "2026-11-22T12:40:15Z" },
+      { number: 20, title: "c", url: "u20", headRefName: "z", mergedAt: "2026-11-20T10:00:00Z", updatedAt: "2026-11-20T10:00:00Z" },
+    ]);
+    const now = Date.parse("2026-11-22T14:00:00Z");
+    expect(recentlyMerged(githubReviews(out), now).map((r) => r.number)).toEqual([31, 30]);
+    expect(githubReviews(JSON.stringify([{ number: 1, title: "o" }]))[0].mergedAt).toBeUndefined();
   });
 });
 

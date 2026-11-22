@@ -1310,13 +1310,34 @@ fn is_forge_path(forge: &str, path: &str) -> bool {
         })
 }
 
-const GITLAB_QUERY: &str = "query($path: ID!) { project(fullPath: $path) { mergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { iid title webUrl draft sourceBranch updatedAt author { username } headPipeline { status } } } } }";
+/// Open merge requests, or the latest merged ones (the interface keeps the last 24 hours).
+fn gitlab_query(merged: bool) -> String {
+    let (state, sort, limit) = if merged {
+        ("merged", "MERGED_AT_DESC", 20)
+    } else {
+        ("opened", "UPDATED_DESC", 50)
+    };
+    format!(
+        "query($path: ID!) {{ project(fullPath: $path) {{ mergeRequests(state: {state}, first: {limit}, sort: {sort}) {{ nodes {{ iid title webUrl draft sourceBranch updatedAt mergedAt author {{ username }} headPipeline {{ status }} }} }} }} }}"
+    )
+}
 
-/// The command line for a forge, arguments as a list.
-fn review_args(forge: &str, host: &str, path: &str) -> Option<(&'static str, Vec<String>)> {
+/// The command line for a forge, arguments as a list: the open pull/merge
+/// requests, or with `merged` the latest merged ones.
+fn review_args(
+    forge: &str,
+    host: &str,
+    path: &str,
+    merged: bool,
+) -> Option<(&'static str, Vec<String>)> {
     if !is_forge_host(host) || !is_forge_path(forge, path) {
         return None;
     }
+    let (state, limit) = if merged {
+        ("merged", "20")
+    } else {
+        ("open", "50")
+    };
     match forge {
         "github" => Some((
             "gh",
@@ -1326,11 +1347,11 @@ fn review_args(forge: &str, host: &str, path: &str) -> Option<(&'static str, Vec
                 "--repo",
                 &format!("{host}/{path}"),
                 "--state",
-                "open",
+                state,
                 "--limit",
-                "50",
+                limit,
                 "--json",
-                "number,title,url,isDraft,headRefName,author,statusCheckRollup,updatedAt",
+                "number,title,url,isDraft,headRefName,author,statusCheckRollup,updatedAt,mergedAt",
             ]
             .map(String::from)
             .to_vec(),
@@ -1343,7 +1364,7 @@ fn review_args(forge: &str, host: &str, path: &str) -> Option<(&'static str, Vec
                 "--hostname",
                 host,
                 "-f",
-                &format!("query={GITLAB_QUERY}"),
+                &format!("query={}", gitlab_query(merged)),
                 "-f",
                 &format!("path={path}"),
             ]
@@ -1474,10 +1495,11 @@ async fn list_reviews(
     forge: String,
     host: String,
     path: String,
+    merged: Option<bool>,
 ) -> Result<String, String> {
     blocking(app, move |_| {
-        let (tool, args) =
-            review_args(&forge, &host, &path).ok_or_else(|| "badrepo".to_string())?;
+        let (tool, args) = review_args(&forge, &host, &path, merged.unwrap_or(false))
+            .ok_or_else(|| "badrepo".to_string())?;
         run_review_tool(tool, &args)
     })
     .await
@@ -1613,12 +1635,22 @@ mod tests {
 
     #[test]
     fn review_commands_take_only_plain_repositories() {
-        let (tool, args) = review_args("github", "github.com", "mehdiAberkane/Todoom").unwrap();
+        let (tool, args) =
+            review_args("github", "github.com", "mehdiAberkane/Todoom", false).unwrap();
         assert_eq!(tool, "gh");
         assert!(args.contains(&"github.com/mehdiAberkane/Todoom".to_string()));
-        let (tool, args) = review_args("gitlab", "gitlab.example.com", "g/sub/project").unwrap();
+        let (tool, args) =
+            review_args("gitlab", "gitlab.example.com", "g/sub/project", false).unwrap();
         assert_eq!(tool, "glab");
         assert!(args.contains(&"path=g/sub/project".to_string()));
+        let (_, merged) = review_args("gitlab", "gitlab.com", "g/p", true).unwrap();
+        assert!(merged.iter().any(|a| a.contains("state: merged")));
+        let (_, merged) = review_args("github", "github.com", "o/r", true).unwrap();
+        assert!(
+            merged
+                .windows(2)
+                .any(|w| w[0] == "--state" && w[1] == "merged")
+        );
         assert!(args.contains(&"gitlab.example.com".to_string()));
         for (forge, host, path) in [
             ("github", "github.com", "a/b/c"),
@@ -1633,7 +1665,7 @@ mod tests {
             ("github", "github.com", "a b/c"),
         ] {
             assert!(
-                review_args(forge, host, path).is_none(),
+                review_args(forge, host, path, false).is_none(),
                 "{forge} {host} {path}"
             );
         }

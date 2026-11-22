@@ -24,7 +24,12 @@ export interface Review {
   author: string;
   ci: CiState;
   updatedAt: string;
+  /** When it was merged; absent while open. */
+  mergedAt?: string;
 }
+
+/** Merged ones are shown for a day. */
+export const MERGED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const HOST = /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/;
 const SEGMENT = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$/;
@@ -109,6 +114,7 @@ export function githubReviews(output: string): Review[] {
     author: str(p.author?.login).replace(/^app\//, ""),
     ci: ciOfChecks(Array.isArray(p.statusCheckRollup) ? p.statusCheckRollup : []),
     updatedAt: str(p.updatedAt),
+    ...(str(p.mergedAt) ? { mergedAt: str(p.mergedAt) } : {}),
   }));
 }
 
@@ -129,6 +135,7 @@ export function gitlabReviews(output: string): Review[] {
     author: str(m.author?.username),
     ci: ciOfPipeline(m.headPipeline?.status),
     updatedAt: str(m.updatedAt),
+    ...(str(m.mergedAt) ? { mergedAt: str(m.mergedAt) } : {}),
   }));
 }
 
@@ -136,6 +143,13 @@ export function gitlabReviews(output: string): Review[] {
 export function parseReviews(forge: Forge, output: string): Review[] {
   const list = forge === "github" ? githubReviews(output) : gitlabReviews(output);
   return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** The merged ones of the last 24 hours, latest first. */
+export function recentlyMerged(list: Review[], now = Date.now()): Review[] {
+  return list
+    .filter((r) => r.mergedAt && now - Date.parse(r.mergedAt) <= MERGED_WINDOW_MS)
+    .sort((a, b) => b.mergedAt!.localeCompare(a.mergedAt!));
 }
 
 const sameUrl = (a: string, b: string) => a.replace(/\/+$/, "").toLowerCase() === b.replace(/\/+$/, "").toLowerCase();
