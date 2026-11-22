@@ -12,9 +12,8 @@ use std::{
 };
 
 use notify_debouncer_mini::{
-    new_debouncer,
+    DebounceEventResult, Debouncer, new_debouncer,
     notify::{RecommendedWatcher, RecursiveMode},
-    DebounceEventResult, Debouncer,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -25,7 +24,11 @@ const CHANGED_EVENT: &str = "todoom://changed";
 static ENGLISH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn tr(fr: String, en: String) -> String {
-    if ENGLISH.load(std::sync::atomic::Ordering::Relaxed) { en } else { fr }
+    if ENGLISH.load(std::sync::atomic::Ordering::Relaxed) {
+        en
+    } else {
+        fr
+    }
 }
 
 #[tauri::command]
@@ -100,14 +103,26 @@ fn data_root(state: &AppState) -> Result<PathBuf, String> {
         .data_dir
         .clone()
         .map(PathBuf::from)
-        .ok_or_else(|| tr("Aucun dossier de données configuré".into(), "No data folder configured".into()))
+        .ok_or_else(|| {
+            tr(
+                "Aucun dossier de données configuré".into(),
+                "No data folder configured".into(),
+            )
+        })
 }
 
 /// Joins a relative path to the data root, refusing anything that could escape it.
 fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
     let rel_path = Path::new(rel);
-    if rel.is_empty() || rel_path.components().any(|c| !matches!(c, Component::Normal(_))) {
-        return Err(tr(format!("Chemin invalide : {rel}"), format!("Invalid path: {rel}")));
+    if rel.is_empty()
+        || rel_path
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_)))
+    {
+        return Err(tr(
+            format!("Chemin invalide : {rel}"),
+            format!("Invalid path: {rel}"),
+        ));
     }
     Ok(root.join(rel_path))
 }
@@ -122,18 +137,23 @@ enum Access {
 /// files Todoom itself produces. Anything else is refused, so the commands can't
 /// be turned into "write or delete any file" even from injected script.
 fn is_id(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    !s.is_empty()
+        && s.len() <= 128
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Name of an attached file, as the UI makes it: `<id>-<cleaned name>`. Never a
 /// JSON file (those are loaded as data), never hidden, no path in it.
 fn is_attachment_name(s: &str) -> bool {
     s.len() <= 160
-        && s.split_once('-').is_some_and(|(id, rest)| is_id(id) && !rest.is_empty())
+        && s.split_once('-')
+            .is_some_and(|(id, rest)| is_id(id) && !rest.is_empty())
         && !s.starts_with('.')
         && !s.contains("..")
         && !s.to_ascii_lowercase().ends_with(".json")
-        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// An attached file: boards/<board>/attachments/<card>/<id>-<name>.
@@ -157,14 +177,26 @@ fn allowed(rel: &str, access: Access) -> bool {
         // One file per comment; a comment can be deleted.
         (_, ["boards", board, "comments", card, file]) => id(board) && id(card) && json_id(file),
         // History: one file per card and per computer (or tool), only ever rewritten by it.
-        (Access::Write, ["boards", board, "history", card, file]) => id(board) && id(card) && json_id(file),
+        (Access::Write, ["boards", board, "history", card, file]) => {
+            id(board) && id(card) && json_id(file)
+        }
         // An attachment's description; the attached file itself goes through write_attachment.
-        (Access::Write, ["boards", board, "attachments", card, file]) => id(board) && id(card) && json_id(file),
+        (Access::Write, ["boards", board, "attachments", card, file]) => {
+            id(board) && id(card) && json_id(file)
+        }
         (Access::Remove, ["boards", board, "attachments", card, file]) => {
             id(board) && id(card) && (json_id(file) || is_attachment_name(file))
         }
         // A card deleted for good takes its comments, history and attachments with it.
-        (Access::Remove, ["boards", board, "comments" | "history" | "attachments", card]) => id(board) && id(card),
+        (
+            Access::Remove,
+            [
+                "boards",
+                board,
+                "comments" | "history" | "attachments",
+                card,
+            ],
+        ) => id(board) && id(card),
         (Access::Remove, ["boards", board]) => id(board),
         _ => false,
     }
@@ -175,15 +207,27 @@ fn allowed(rel: &str, access: Access) -> bool {
 fn check_data_dir(path: &Path) -> Result<(), String> {
     let shown = path.display();
     if !path.is_absolute() {
-        return Err(tr(format!("{shown} n'est pas un chemin complet."), format!("{shown} is not a full path.")));
+        return Err(tr(
+            format!("{shown} n'est pas un chemin complet."),
+            format!("{shown} is not a full path."),
+        ));
     }
     if path.parent().is_none() {
         return Err(tr(
-            format!("{shown} est la racine d'un disque : choisis un dossier dédié, par exemple …\\Mon Drive\\Todoom."),
-            format!("{shown} is the root of a drive: pick a dedicated folder, for example …\\My Drive\\Todoom."),
+            format!(
+                "{shown} est la racine d'un disque : choisis un dossier dédié, par exemple …\\Mon Drive\\Todoom."
+            ),
+            format!(
+                "{shown} is the root of a drive: pick a dedicated folder, for example …\\My Drive\\Todoom."
+            ),
         ));
     }
-    let lower = |p: &Path| p.to_string_lossy().to_lowercase().trim_end_matches(['\\', '/']).to_string();
+    let lower = |p: &Path| {
+        p.to_string_lossy()
+            .to_lowercase()
+            .trim_end_matches(['\\', '/'])
+            .to_string()
+    };
     let target = lower(path);
     if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
         && target == lower(Path::new(&home))
@@ -193,19 +237,46 @@ fn check_data_dir(path: &Path) -> Result<(), String> {
             format!("{shown} is your home folder: pick a dedicated subfolder."),
         ));
     }
-    let mut system: Vec<PathBuf> = ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"]
-        .iter()
-        .filter_map(|v| std::env::var_os(v).map(PathBuf::from))
-        .collect();
+    let mut system: Vec<PathBuf> = [
+        "SystemRoot",
+        "windir",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramW6432",
+        "ProgramData",
+    ]
+    .iter()
+    .filter_map(|v| std::env::var_os(v).map(PathBuf::from))
+    .collect();
     if cfg!(unix) {
-        system.extend(["/System", "/Library", "/Applications", "/bin", "/sbin", "/usr", "/etc", "/var", "/private"].map(PathBuf::from));
+        system.extend(
+            [
+                "/System",
+                "/Library",
+                "/Applications",
+                "/bin",
+                "/sbin",
+                "/usr",
+                "/etc",
+                "/var",
+                "/private",
+            ]
+            .map(PathBuf::from),
+        );
     }
     for dir in system {
         let dir = lower(&dir);
-        if target == dir || target.starts_with(&format!("{dir}\\")) || target.starts_with(&format!("{dir}/")) {
+        if target == dir
+            || target.starts_with(&format!("{dir}\\"))
+            || target.starts_with(&format!("{dir}/"))
+        {
             return Err(tr(
-                format!("{shown} est un dossier système : choisis un dossier à toi, par exemple dans ton Google Drive."),
-                format!("{shown} is a system folder: pick a folder of your own, for example in your Google Drive."),
+                format!(
+                    "{shown} est un dossier système : choisis un dossier à toi, par exemple dans ton Google Drive."
+                ),
+                format!(
+                    "{shown} is a system folder: pick a folder of your own, for example in your Google Drive."
+                ),
             ));
         }
     }
@@ -242,22 +313,28 @@ fn start_watcher(app: &AppHandle, state: &AppState) {
     // The phone summaries are written from the data, never read back: not a change to reload for.
     let reading = root.join(READING_DIR);
 
-    let debouncer = new_debouncer(Duration::from_millis(500), move |res: DebounceEventResult| {
-        let Ok(events) = res else { return };
-        let mut recent = recent.lock().unwrap();
-        recent.retain(|_, (t, _)| t.elapsed() < SELF_WRITE_GRACE);
-        let ours = |p: &Path| {
-            recent
-                .iter()
-                .any(|(k, (_, prefix))| p == k || (*prefix && p.starts_with(k)))
-        };
-        let external = events
-            .iter()
-            .any(|e| !is_temp(&e.path) && !e.path.starts_with(&presence) && !e.path.starts_with(&reading) && !ours(&e.path));
-        if external {
-            let _ = handle.emit(CHANGED_EVENT, ());
-        }
-    });
+    let debouncer = new_debouncer(
+        Duration::from_millis(500),
+        move |res: DebounceEventResult| {
+            let Ok(events) = res else { return };
+            let mut recent = recent.lock().unwrap();
+            recent.retain(|_, (t, _)| t.elapsed() < SELF_WRITE_GRACE);
+            let ours = |p: &Path| {
+                recent
+                    .iter()
+                    .any(|(k, (_, prefix))| p == k || (*prefix && p.starts_with(k)))
+            };
+            let external = events.iter().any(|e| {
+                !is_temp(&e.path)
+                    && !e.path.starts_with(&presence)
+                    && !e.path.starts_with(&reading)
+                    && !ours(&e.path)
+            });
+            if external {
+                let _ = handle.emit(CHANGED_EVENT, ());
+            }
+        },
+    );
 
     match debouncer {
         Ok(mut d) => match d.watcher().watch(&root, RecursiveMode::Recursive) {
@@ -278,7 +355,12 @@ async fn set_data_dir(app: AppHandle, path: String) -> Result<(), String> {
     blocking(app, move |app| {
         let state = app.state::<AppState>();
         check_data_dir(Path::new(&path))?;
-        fs::create_dir_all(&path).map_err(|e| tr(format!("Impossible de créer {path} : {e}"), format!("Cannot create {path}: {e}")))?;
+        fs::create_dir_all(&path).map_err(|e| {
+            tr(
+                format!("Impossible de créer {path} : {e}"),
+                format!("Cannot create {path}: {e}"),
+            )
+        })?;
         {
             let mut cfg = state.config.lock().unwrap();
             cfg.data_dir = Some(path);
@@ -313,7 +395,11 @@ fn find_drive_folder() -> Option<String> {
     if let Some(home) = std::env::var_os("HOME") {
         if let Ok(entries) = fs::read_dir(PathBuf::from(home).join("Library/CloudStorage")) {
             for entry in entries.flatten() {
-                if entry.file_name().to_string_lossy().starts_with("GoogleDrive") {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("GoogleDrive")
+                {
                     for name in names {
                         candidates.push(entry.path().join(name));
                     }
@@ -361,7 +447,9 @@ const READERS: usize = 8;
 /// The JSON files under `dir`, from their metadata only: listing is fast even
 /// when Google Drive hasn't downloaded the files yet.
 fn list(root: &Path, dir: &Path, out: &mut Vec<Listed>) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         let Ok(meta) = entry.metadata() else { continue };
@@ -372,15 +460,24 @@ fn list(root: &Path, dir: &Path, out: &mut Vec<Listed>) {
         if !path.extension().is_some_and(|e| e == "json") {
             continue;
         }
-        let Ok(rel) = path.strip_prefix(root) else { continue };
+        let Ok(rel) = path.strip_prefix(root) else {
+            continue;
+        };
         let rel = rel.to_string_lossy().replace('\\', "/");
         let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        out.push(Listed { path, rel, modified, len: meta.len() });
+        out.push(Listed {
+            path,
+            rel,
+            modified,
+            len: meta.len(),
+        });
     }
 }
 
 fn is_fresh(l: &Listed, cache: &HashMap<PathBuf, CachedFile>) -> bool {
-    cache.get(&l.path).is_some_and(|c| c.modified == l.modified && c.len == l.len)
+    cache
+        .get(&l.path)
+        .is_some_and(|c| c.modified == l.modified && c.len == l.len)
 }
 
 /// Lists the data files and reads those that changed since the last load (the
@@ -405,26 +502,44 @@ fn load_files(
     }
     let todo: Vec<Listed> = {
         let cached = cache.lock().unwrap();
-        listed.iter().filter(|l| !is_fresh(l, &cached)).cloned().collect()
+        listed
+            .iter()
+            .filter(|l| !is_fresh(l, &cached))
+            .cloned()
+            .collect()
     };
     // Files an earlier load is still reading aren't read twice: their reader will fill the cache.
     let queue: Vec<Listed> = {
         let mut busy = reading.lock().unwrap();
-        todo.iter().filter(|l| busy.insert(l.path.clone())).cloned().collect()
+        todo.iter()
+            .filter(|l| busy.insert(l.path.clone()))
+            .cloned()
+            .collect()
     };
     let workers = READERS.min(queue.len());
     let queue = Arc::new(Mutex::new(queue));
     for _ in 0..workers {
         let (queue, cache, reading) = (queue.clone(), cache.clone(), reading.clone());
-        thread::spawn(move || loop {
-            let Some(l) = queue.lock().unwrap().pop() else { break };
-            match read(&l.path) {
-                Ok(content) => {
-                    cache.lock().unwrap().insert(l.path.clone(), CachedFile { modified: l.modified, len: l.len, content });
+        thread::spawn(move || {
+            loop {
+                let Some(l) = queue.lock().unwrap().pop() else {
+                    break;
+                };
+                match read(&l.path) {
+                    Ok(content) => {
+                        cache.lock().unwrap().insert(
+                            l.path.clone(),
+                            CachedFile {
+                                modified: l.modified,
+                                len: l.len,
+                                content,
+                            },
+                        );
+                    }
+                    Err(e) => log::warn!("lecture impossible de {} : {e}", l.rel),
                 }
-                Err(e) => log::warn!("lecture impossible de {} : {e}", l.rel),
+                reading.lock().unwrap().remove(&l.path);
             }
-            reading.lock().unwrap().remove(&l.path);
         });
     }
     // Waits for the files to read, until the deadline, or until no reader works on them any more.
@@ -447,13 +562,19 @@ fn load_files(
     let (mut files, mut pending) = (Vec::new(), Vec::new());
     for l in &listed {
         match cached.get(&l.path) {
-            Some(c) if is_fresh(l, &cached) => files.push(FileEntry { path: l.rel.clone(), content: c.content.clone() }),
+            Some(c) if is_fresh(l, &cached) => files.push(FileEntry {
+                path: l.rel.clone(),
+                content: c.content.clone(),
+            }),
             _ => pending.push(l.rel.clone()),
         }
     }
     let ms = started.elapsed().as_millis();
     if todo.is_empty() {
-        log::debug!("chargement : {} fichiers, tous depuis le cache, en {ms} ms", files.len());
+        log::debug!(
+            "chargement : {} fichiers, tous depuis le cache, en {ms} ms",
+            files.len()
+        );
     } else {
         log::info!(
             "chargement : {} fichiers en {ms} ms ({} lus, {} depuis le cache, {} en attente)",
@@ -465,10 +586,14 @@ fn load_files(
         if !pending.is_empty() {
             let mut by_board: HashMap<&str, usize> = HashMap::new();
             for rel in &pending {
-                *by_board.entry(rel.split('/').take(2).last().unwrap_or(rel)).or_default() += 1;
+                *by_board
+                    .entry(rel.split('/').take(2).last().unwrap_or(rel))
+                    .or_default() += 1;
             }
             for (board, n) in by_board {
-                log::info!("  en attente : {n} fichier(s) dans {board} (Google Drive les télécharge peut-être)");
+                log::info!(
+                    "  en attente : {n} fichier(s) dans {board} (Google Drive les télécharge peut-être)"
+                );
             }
         }
     }
@@ -484,7 +609,13 @@ async fn load_all(app: AppHandle) -> Result<Loaded, String> {
     blocking(app, |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
-        Ok(load_files(&root, &state.files, &state.reading, LOAD_DEADLINE, read_file))
+        Ok(load_files(
+            &root,
+            &state.files,
+            &state.reading,
+            LOAD_DEADLINE,
+            read_file,
+        ))
     })
     .await
 }
@@ -494,8 +625,12 @@ async fn load_all(app: AppHandle) -> Result<Loaded, String> {
 fn refuse_unreadable(target: &Path, rel: &str) -> Result<(), String> {
     match fs::read_to_string(target) {
         Ok(existing) if serde_json::from_str::<serde_json::Value>(&existing).is_err() => Err(tr(
-            format!("{rel} est illisible (JSON invalide) : il n'est pas écrasé. Répare-le ou supprime-le à la main."),
-            format!("{rel} is unreadable (invalid JSON): it is not overwritten. Fix or delete it by hand."),
+            format!(
+                "{rel} est illisible (JSON invalide) : il n'est pas écrasé. Répare-le ou supprime-le à la main."
+            ),
+            format!(
+                "{rel} is unreadable (invalid JSON): it is not overwritten. Fix or delete it by hand."
+            ),
         )),
         _ => Ok(()),
     }
@@ -589,7 +724,10 @@ fn refuse_attachment(rel: &str) -> Result<(), String> {
     if is_attachment(rel) {
         Ok(())
     } else {
-        Err(tr(format!("Pièce jointe refusée : {rel}"), format!("Attachment refused: {rel}")))
+        Err(tr(
+            format!("Pièce jointe refusée : {rel}"),
+            format!("Attachment refused: {rel}"),
+        ))
     }
 }
 
@@ -598,13 +736,22 @@ fn store_attachment(root: &Path, rel: &str, bytes: &[u8]) -> Result<PathBuf, Str
     refuse_attachment(rel)?;
     if bytes.len() > MAX_ATTACHMENT_BYTES {
         return Err(tr(
-            format!("Fichier trop gros ({} Mo, 10 Mo au plus)", bytes.len() / (1024 * 1024)),
-            format!("File too big ({} MB, 10 MB at most)", bytes.len() / (1024 * 1024)),
+            format!(
+                "Fichier trop gros ({} Mo, 10 Mo au plus)",
+                bytes.len() / (1024 * 1024)
+            ),
+            format!(
+                "File too big ({} MB, 10 MB at most)",
+                bytes.len() / (1024 * 1024)
+            ),
         ));
     }
     let target = resolve(root, rel)?;
     if target.exists() {
-        return Err(tr(format!("{rel} existe déjà"), format!("{rel} already exists")));
+        return Err(tr(
+            format!("{rel} existe déjà"),
+            format!("{rel} already exists"),
+        ));
     }
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -620,7 +767,10 @@ fn load_attachment(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
     let target = resolve(root, rel)?;
     let len = fs::metadata(&target).map_err(|e| e.to_string())?.len();
     if len as usize > MAX_ATTACHMENT_BYTES {
-        return Err(tr(format!("{rel} est trop gros pour être affiché"), format!("{rel} is too big to show")));
+        return Err(tr(
+            format!("{rel} est trop gros pour être affiché"),
+            format!("{rel} is too big to show"),
+        ));
     }
     fs::read(&target).map_err(|e| e.to_string())
 }
@@ -632,7 +782,9 @@ async fn write_attachment(app: AppHandle, path: String, data: String) -> Result<
     let result = blocking(app, move |app| {
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
-        let bytes = base64::engine::general_purpose::STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data.as_bytes())
+            .map_err(|e| e.to_string())?;
         let target = store_attachment(&root, &path, &bytes)?;
         remember(&state, &root, &target, false);
         Ok(())
@@ -659,7 +811,9 @@ async fn reveal_attachment(app: AppHandle, path: String) -> Result<(), String> {
     blocking(app, move |app| {
         refuse_attachment(&path)?;
         let target = resolve(&data_root(&app.state::<AppState>())?, &path)?;
-        app.opener().reveal_item_in_dir(target).map_err(|e| e.to_string())
+        app.opener()
+            .reveal_item_in_dir(target)
+            .map_err(|e| e.to_string())
     })
     .await
 }
@@ -671,7 +825,11 @@ async fn reveal_attachment(app: AppHandle, path: String) -> Result<(), String> {
 // Attached files themselves aren't in it (only their descriptions): too big.
 
 fn snapshots_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("snapshots");
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("snapshots");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }
@@ -681,12 +839,17 @@ fn is_snapshot_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 80
         && !name.starts_with('.')
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 fn snapshot_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     if !is_snapshot_name(name) {
-        return Err(tr(format!("Nom d'instantané invalide : {name}"), format!("Invalid snapshot name: {name}")));
+        return Err(tr(
+            format!("Nom d'instantané invalide : {name}"),
+            format!("Invalid snapshot name: {name}"),
+        ));
     }
     Ok(snapshots_dir(app)?.join(format!("{name}.json")))
 }
@@ -701,14 +864,26 @@ struct SnapshotInfo {
 async fn list_snapshots(app: AppHandle) -> Result<Vec<SnapshotInfo>, String> {
     blocking(app, |app| {
         let mut out = Vec::new();
-        for entry in fs::read_dir(snapshots_dir(app)?).map_err(|e| e.to_string())?.flatten() {
+        for entry in fs::read_dir(snapshots_dir(app)?)
+            .map_err(|e| e.to_string())?
+            .flatten()
+        {
             let path = entry.path();
-            let Some(name) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".json")) else { continue };
+            let Some(name) = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".json"))
+            else {
+                continue;
+            };
             if !is_snapshot_name(name) {
                 continue;
             }
             let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            out.push(SnapshotInfo { name: name.to_string(), size });
+            out.push(SnapshotInfo {
+                name: name.to_string(),
+                size,
+            });
         }
         out.sort_by(|a, b| b.name.cmp(&a.name));
         Ok(out)
@@ -747,15 +922,26 @@ struct Restored {
 fn restore_into(root: &Path, snapshot: &SnapshotFile) -> Result<Restored, String> {
     for (rel, content) in &snapshot.files {
         if !allowed(rel, Access::Write) || rel.starts_with(".presence/") {
-            return Err(tr(format!("Instantané refusé : {rel} n'est pas un fichier de données Todoom."), format!("Snapshot refused: {rel} is not a Todoom data file.")));
+            return Err(tr(
+                format!("Instantané refusé : {rel} n'est pas un fichier de données Todoom."),
+                format!("Snapshot refused: {rel} is not a Todoom data file."),
+            ));
         }
-        serde_json::from_str::<serde_json::Value>(content).map_err(|_| tr(format!("Instantané abîmé : {rel}"), format!("Damaged snapshot: {rel}")))?;
+        serde_json::from_str::<serde_json::Value>(content).map_err(|_| {
+            tr(
+                format!("Instantané abîmé : {rel}"),
+                format!("Damaged snapshot: {rel}"),
+            )
+        })?;
     }
     let mut listed = Vec::new();
     list(root, root, &mut listed);
     let mut removed = 0;
     for l in &listed {
-        if l.rel.starts_with(".presence/") || !allowed(&l.rel, Access::Write) || snapshot.files.contains_key(&l.rel) {
+        if l.rel.starts_with(".presence/")
+            || !allowed(&l.rel, Access::Write)
+            || snapshot.files.contains_key(&l.rel)
+        {
             continue;
         }
         fs::remove_file(&l.path).map_err(|e| e.to_string())?;
@@ -768,7 +954,10 @@ fn restore_into(root: &Path, snapshot: &SnapshotFile) -> Result<Restored, String
         }
         write_atomic(&target, content)?;
     }
-    Ok(Restored { written: snapshot.files.len(), removed })
+    Ok(Restored {
+        written: snapshot.files.len(),
+        removed,
+    })
 }
 
 #[tauri::command]
@@ -783,7 +972,11 @@ async fn restore_snapshot(app: AppHandle, name: String) -> Result<Restored, Stri
         remember(&state, &root, &root, true);
         let restored = restore_into(&root, &snapshot)?;
         state.files.lock().unwrap().clear();
-        log::info!("instantané {name} restauré : {} fichiers écrits, {} supprimés", restored.written, restored.removed);
+        log::info!(
+            "instantané {name} restauré : {} fichiers écrits, {} supprimés",
+            restored.written,
+            restored.removed
+        );
         Ok(restored)
     })
     .await;
@@ -794,16 +987,25 @@ async fn restore_snapshot(app: AppHandle, name: String) -> Result<Restored, Stri
 /// (Markdown, CSV), never a program or a data file of the folder.
 fn export_target(path: &str) -> Result<PathBuf, String> {
     let target = PathBuf::from(path);
-    let ext = target.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase());
+    let ext = target
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
     if !target.is_absolute() || !matches!(ext.as_deref(), Some("md" | "csv" | "txt")) {
-        return Err(tr(format!("Export refusé : {path}"), format!("Export refused: {path}")));
+        return Err(tr(
+            format!("Export refusé : {path}"),
+            format!("Export refused: {path}"),
+        ));
     }
     Ok(target)
 }
 
 #[tauri::command]
 async fn save_export(app: AppHandle, path: String, content: String) -> Result<(), String> {
-    blocking(app, move |_| fs::write(export_target(&path)?, content).map_err(|e| e.to_string())).await
+    blocking(app, move |_| {
+        fs::write(export_target(&path)?, content).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 // ---- Quick capture ---------------------------------------------------------
@@ -821,7 +1023,10 @@ fn open_capture(app: &AppHandle) {
         return;
     }
     let built = tauri::WebviewWindowBuilder::new(app, "capture", tauri::WebviewUrl::default())
-        .title(tr("Todoom · capture rapide".into(), "Todoom · quick capture".into()))
+        .title(tr(
+            "Todoom · capture rapide".into(),
+            "Todoom · quick capture".into(),
+        ))
         .inner_size(480.0, 190.0)
         .resizable(false)
         .always_on_top(true)
@@ -846,9 +1051,27 @@ fn show_main(app: &AppHandle) {
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-    let capture = MenuItem::with_id(app, "capture", tr("Capture rapide".into(), "Quick capture".into()), true, Some(CAPTURE_SHORTCUT))?;
-    let show = MenuItem::with_id(app, "show", tr("Afficher Todoom".into(), "Show Todoom".into()), true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", tr("Quitter".into(), "Quit".into()), true, None::<&str>)?;
+    let capture = MenuItem::with_id(
+        app,
+        "capture",
+        tr("Capture rapide".into(), "Quick capture".into()),
+        true,
+        Some(CAPTURE_SHORTCUT),
+    )?;
+    let show = MenuItem::with_id(
+        app,
+        "show",
+        tr("Afficher Todoom".into(), "Show Todoom".into()),
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        tr("Quitter".into(), "Quit".into()),
+        true,
+        None::<&str>,
+    )?;
     let menu = Menu::with_items(app, &[&capture, &show, &quit])?;
     let mut tray = TrayIconBuilder::with_id("todoom")
         .tooltip("Todoom")
@@ -866,7 +1089,12 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 show_main(tray.app_handle());
             }
         });
@@ -891,12 +1119,17 @@ fn is_reading_name(name: &str) -> bool {
         && name.len() > 3
         && !name.starts_with('.')
         && !name.starts_with(' ')
-        && !name.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        && !name.chars().any(|c| {
+            c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+        })
 }
 
 fn reading_path(app: &AppHandle, name: &str) -> Result<(PathBuf, PathBuf), String> {
     if !is_reading_name(name) {
-        return Err(tr(format!("Nom de résumé refusé : {name}"), format!("Summary name refused: {name}")));
+        return Err(tr(
+            format!("Nom de résumé refusé : {name}"),
+            format!("Summary name refused: {name}"),
+        ));
     }
     let root = data_root(&app.state::<AppState>())?;
     let dir = root.join(READING_DIR);
@@ -907,7 +1140,9 @@ fn reading_path(app: &AppHandle, name: &str) -> Result<(PathBuf, PathBuf), Strin
 async fn list_reading(app: AppHandle) -> Result<Vec<String>, String> {
     blocking(app, |app| {
         let dir = data_root(&app.state::<AppState>())?.join(READING_DIR);
-        let Ok(entries) = fs::read_dir(&dir) else { return Ok(Vec::new()) };
+        let Ok(entries) = fs::read_dir(&dir) else {
+            return Ok(Vec::new());
+        };
         Ok(entries
             .flatten()
             .filter_map(|e| e.file_name().to_str().map(str::to_string))
@@ -954,7 +1189,9 @@ fn is_inbox_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 255
         && !name.starts_with('.')
-        && !name.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':'))
+        && !name
+            .chars()
+            .any(|c| c.is_control() || matches!(c, '/' | '\\' | ':'))
 }
 
 fn inbox_dir(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
@@ -966,7 +1203,10 @@ fn inbox_dir(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
 
 fn inbox_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
     if !is_inbox_name(name) {
-        return Err(tr(format!("Fichier refusé : {name}"), format!("File refused: {name}")));
+        return Err(tr(
+            format!("Fichier refusé : {name}"),
+            format!("File refused: {name}"),
+        ));
     }
     Ok(dir.join(name))
 }
@@ -979,13 +1219,18 @@ struct InboxFile {
 
 /// The files waiting in the inbox (the folder is made if missing, so the phone can pick it).
 fn list_inbox_in(dir: &Path) -> Vec<InboxFile> {
-    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
     entries
         .flatten()
         .filter_map(|e| {
             let meta = e.metadata().ok()?;
             let name = e.file_name().to_str()?.to_string();
-            (meta.is_file() && is_inbox_name(&name)).then_some(InboxFile { name, size: meta.len() })
+            (meta.is_file() && is_inbox_name(&name)).then_some(InboxFile {
+                name,
+                size: meta.len(),
+            })
         })
         .collect()
 }
@@ -995,7 +1240,10 @@ fn read_inbox_in(dir: &Path, name: &str) -> Result<String, String> {
     let path = inbox_file(dir, name)?;
     let len = fs::metadata(&path).map_err(|e| e.to_string())?.len();
     if len > INBOX_MAX_BYTES {
-        return Err(tr(format!("{name} est trop gros"), format!("{name} is too big")));
+        return Err(tr(
+            format!("{name} est trop gros"),
+            format!("{name} is too big"),
+        ));
     }
     let bytes = fs::read(&path).map_err(|e| e.to_string())?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
@@ -1033,10 +1281,14 @@ pub fn run() {
         .plugin(
             tauri_plugin_log::Builder::new()
                 .clear_targets()
-                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                    file_name: Some("todoom".into()),
-                }))
-                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("todoom".into()),
+                    },
+                ))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stderr,
+                ))
                 .level(log::LevelFilter::Info)
                 .max_file_size(1_000_000)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
@@ -1117,16 +1369,31 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("todoom-inbox-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("sub")).unwrap();
-        fs::write(dir.join("singha - Brave Search"), "https://search.brave.com/search?q=singha").unwrap();
+        fs::write(
+            dir.join("singha - Brave Search"),
+            "https://search.brave.com/search?q=singha",
+        )
+        .unwrap();
         fs::write(dir.join(".hidden"), "x").unwrap();
-        fs::write(dir.join("big.txt"), vec![b'a'; (INBOX_MAX_BYTES + 1) as usize]).unwrap();
+        fs::write(
+            dir.join("big.txt"),
+            vec![b'a'; (INBOX_MAX_BYTES + 1) as usize],
+        )
+        .unwrap();
         fs::write(dir.join("image.png"), [0x89, b'P', b'N', b'G', 0xff, 0xfe]).unwrap();
         let mut names: Vec<_> = list_inbox_in(&dir).into_iter().map(|f| f.name).collect();
         names.sort();
         assert_eq!(names, ["big.txt", "image.png", "singha - Brave Search"]);
-        assert_eq!(read_inbox_in(&dir, "singha - Brave Search").unwrap(), "https://search.brave.com/search?q=singha");
+        assert_eq!(
+            read_inbox_in(&dir, "singha - Brave Search").unwrap(),
+            "https://search.brave.com/search?q=singha"
+        );
         assert!(read_inbox_in(&dir, "big.txt").is_err());
-        assert!(read_inbox_in(&dir, "image.png").unwrap().contains('\u{FFFD}'));
+        assert!(
+            read_inbox_in(&dir, "image.png")
+                .unwrap()
+                .contains('\u{FFFD}')
+        );
         for trap in ["../settings.json", "sub/x", "..\\x", ".hidden", "C:x", ""] {
             assert!(read_inbox_in(&dir, trap).is_err(), "{trap}");
         }
@@ -1135,10 +1402,28 @@ mod tests {
 
     #[test]
     fn summary_names_hold_no_path() {
-        for ok in ["Todoom.md", "0 - Aujourd'hui.md", "Projet- Été - 2026.md", "Todoom (TOD2).md"] {
+        for ok in [
+            "Todoom.md",
+            "0 - Aujourd'hui.md",
+            "Projet- Été - 2026.md",
+            "Todoom (TOD2).md",
+        ] {
             assert!(is_reading_name(ok), "{ok}");
         }
-        for bad in ["", ".md", "x.json", "x.txt", "../x.md", "a/b.md", "a\\b.md", ".cache.md", " x.md", "C:x.md", "x?.md", "x\n.md"] {
+        for bad in [
+            "",
+            ".md",
+            "x.json",
+            "x.txt",
+            "../x.md",
+            "a/b.md",
+            "a\\b.md",
+            ".cache.md",
+            " x.md",
+            "C:x.md",
+            "x?.md",
+            "x\n.md",
+        ] {
             assert!(!is_reading_name(bad), "{bad}");
         }
     }
@@ -1149,14 +1434,21 @@ mod tests {
         assert!(export_target(base.join("todoom.md").to_str().unwrap()).is_ok());
         assert!(export_target(base.join("todoom.CSV").to_str().unwrap()).is_ok());
         for bad in ["x.exe", "x.json", "x.md.bat", "x"] {
-            assert!(export_target(base.join(bad).to_str().unwrap()).is_err(), "{bad}");
+            assert!(
+                export_target(base.join(bad).to_str().unwrap()).is_err(),
+                "{bad}"
+            );
         }
         assert!(export_target("relative.md").is_err());
     }
 
     #[test]
     fn snapshot_names_hold_no_path() {
-        for ok in ["2026-11-22", "2026-11-22_09-30-00_manual", "2026-11-22_09-30-00_before-restore"] {
+        for ok in [
+            "2026-11-22",
+            "2026-11-22_09-30-00_manual",
+            "2026-11-22_09-30-00_before-restore",
+        ] {
             assert!(is_snapshot_name(ok), "{ok}");
         }
         for bad in ["", "..", "../x", "a/b", "a\\b", ".hidden", "C:", "x.json"] {
@@ -1176,36 +1468,71 @@ mod tests {
         fs::write(root.join("notes.json"), "{}").unwrap();
         let snapshot = SnapshotFile {
             files: HashMap::from([
-                ("boards/b1/board.json".to_string(), r#"{"id":"b1"}"#.to_string()),
-                ("boards/b1/cards/old.json".to_string(), r#"{"id":"old"}"#.to_string()),
+                (
+                    "boards/b1/board.json".to_string(),
+                    r#"{"id":"b1"}"#.to_string(),
+                ),
+                (
+                    "boards/b1/cards/old.json".to_string(),
+                    r#"{"id":"old"}"#.to_string(),
+                ),
             ]),
         };
-        assert_eq!(restore_into(&root, &snapshot).unwrap(), Restored { written: 2, removed: 1 });
-        assert_eq!(fs::read_to_string(root.join("boards/b1/board.json")).unwrap(), r#"{"id":"b1"}"#);
+        assert_eq!(
+            restore_into(&root, &snapshot).unwrap(),
+            Restored {
+                written: 2,
+                removed: 1
+            }
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("boards/b1/board.json")).unwrap(),
+            r#"{"id":"b1"}"#
+        );
         assert!(root.join("boards/b1/cards/old.json").exists());
         assert!(!root.join("boards/b1/cards/new.json").exists());
         // Not ours to remove: presence, and a file that isn't Todoom data.
         assert!(root.join(".presence/PC.json").exists());
         assert!(root.join("notes.json").exists());
 
-        let evil = SnapshotFile { files: HashMap::from([("../outside.json".to_string(), "{}".to_string())]) };
+        let evil = SnapshotFile {
+            files: HashMap::from([("../outside.json".to_string(), "{}".to_string())]),
+        };
         assert!(restore_into(&root, &evil).is_err());
-        let damaged = SnapshotFile { files: HashMap::from([("settings.json".to_string(), "{ nope".to_string())]) };
+        let damaged = SnapshotFile {
+            files: HashMap::from([("settings.json".to_string(), "{ nope".to_string())]),
+        };
         assert!(restore_into(&root, &damaged).is_err());
-        assert!(root.join("boards/b1/cards/old.json").exists(), "a refused snapshot changes nothing");
+        assert!(
+            root.join("boards/b1/cards/old.json").exists(),
+            "a refused snapshot changes nothing"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
     fn load(root: &Path, cache: &FileCache) -> Vec<(String, String)> {
-        let loaded = load_files(root, cache, &Default::default(), Duration::from_secs(10), read_file);
+        let loaded = load_files(
+            root,
+            cache,
+            &Default::default(),
+            Duration::from_secs(10),
+            read_file,
+        );
         assert!(loaded.pending.is_empty(), "{:?}", loaded.pending);
-        let mut files: Vec<_> = loaded.files.into_iter().map(|f| (f.path, f.content)).collect();
+        let mut files: Vec<_> = loaded
+            .files
+            .into_iter()
+            .map(|f| (f.path, f.content))
+            .collect();
         files.sort();
         files
     }
 
     fn slow_read(path: &Path) -> std::io::Result<String> {
-        if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("slow")) {
+        if path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("slow"))
+        {
             thread::sleep(Duration::from_millis(600));
         }
         read_file(path)
@@ -1226,16 +1553,34 @@ mod tests {
 
         // The slow files take 600 ms each; the load answers after 150 ms with everything else.
         let started = Instant::now();
-        let first = load_files(&root, &cache, &reading, Duration::from_millis(150), slow_read);
-        assert!(started.elapsed() < Duration::from_millis(500), "the load waited for the slow files");
+        let first = load_files(
+            &root,
+            &cache,
+            &reading,
+            Duration::from_millis(150),
+            slow_read,
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "the load waited for the slow files"
+        );
         assert_eq!(first.files.len(), 21);
         let mut pending = first.pending.clone();
         pending.sort();
-        assert_eq!(pending, ["boards/b1/cards/slow1.json", "boards/b1/cards/slow2.json"]);
+        assert_eq!(
+            pending,
+            ["boards/b1/cards/slow1.json", "boards/b1/cards/slow2.json"]
+        );
 
         // Read in parallel in the background: both are ready well before 2 × 600 ms.
         thread::sleep(Duration::from_millis(800));
-        let second = load_files(&root, &cache, &reading, Duration::from_millis(150), slow_read);
+        let second = load_files(
+            &root,
+            &cache,
+            &reading,
+            Duration::from_millis(150),
+            slow_read,
+        );
         assert!(second.pending.is_empty(), "{:?}", second.pending);
         assert_eq!(second.files.len(), 23);
         fs::remove_dir_all(&root).unwrap();
@@ -1244,7 +1589,10 @@ mod tests {
     #[test]
     fn an_unreadable_file_is_pending_and_the_load_does_not_wait_for_it() {
         fn failing_read(path: &Path) -> std::io::Result<String> {
-            if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("broken")) {
+            if path
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("broken"))
+            {
                 return Err(std::io::Error::other("Drive a refusé"));
             }
             read_file(path)
@@ -1254,7 +1602,13 @@ mod tests {
         fs::write(root.join("boards/b1/board.json"), "board").unwrap();
         fs::write(root.join("boards/b1/cards/broken.json"), "x").unwrap();
         let started = Instant::now();
-        let loaded = load_files(&root, &Default::default(), &Default::default(), Duration::from_secs(10), failing_read);
+        let loaded = load_files(
+            &root,
+            &Default::default(),
+            &Default::default(),
+            Duration::from_secs(10),
+            failing_read,
+        );
         assert!(started.elapsed() < Duration::from_secs(2));
         assert_eq!(loaded.pending, ["boards/b1/cards/broken.json"]);
         assert_eq!(loaded.files.len(), 1);
@@ -1304,7 +1658,10 @@ mod tests {
         ];
         for trap in traps {
             assert!(!allowed(trap, Access::Write), "écriture acceptée : {trap}");
-            assert!(!allowed(trap, Access::Remove), "suppression acceptée : {trap}");
+            assert!(
+                !allowed(trap, Access::Remove),
+                "suppression acceptée : {trap}"
+            );
         }
         // Whole folders other than one board, and settings/presence, can't be removed.
         for no in [
@@ -1322,7 +1679,10 @@ mod tests {
 
     #[test]
     fn attachments_are_named_files_in_their_card_folder_only() {
-        for ok in ["boards/b1/attachments/c1/mw1-capture.png", "boards/b1/attachments/c1/mw1-rapport_final.v2.pdf"] {
+        for ok in [
+            "boards/b1/attachments/c1/mw1-capture.png",
+            "boards/b1/attachments/c1/mw1-rapport_final.v2.pdf",
+        ] {
             assert!(is_attachment(ok), "{ok}");
             assert!(allowed(ok, Access::Remove), "{ok}");
         }
@@ -1340,7 +1700,10 @@ mod tests {
         ] {
             assert!(!is_attachment(no), "{no}");
         }
-        assert!(!allowed("boards/b1/attachments/c1/mw1-capture.png", Access::Write), "binary files go through write_attachment");
+        assert!(
+            !allowed("boards/b1/attachments/c1/mw1-capture.png", Access::Write),
+            "binary files go through write_attachment"
+        );
     }
 
     #[test]
@@ -1350,7 +1713,10 @@ mod tests {
         let bytes = [0x89u8, b'P', b'N', b'G', 0, 1, 2, 255];
         store_attachment(&root, rel, &bytes).unwrap();
         assert_eq!(load_attachment(&root, rel).unwrap(), bytes);
-        assert!(store_attachment(&root, rel, &bytes).is_err(), "never overwritten");
+        assert!(
+            store_attachment(&root, rel, &bytes).is_err(),
+            "never overwritten"
+        );
         let big = vec![0u8; MAX_ATTACHMENT_BYTES + 1];
         assert!(store_attachment(&root, "boards/b1/attachments/c1/mw2-big.bin", &big).is_err());
         assert!(store_attachment(&root, "boards/b1/cards/mw3-x.png", &bytes).is_err());
@@ -1383,12 +1749,17 @@ mod tests {
             assert!(check_data_dir(Path::new(&std::env::var("ProgramFiles").unwrap())).is_err());
             assert!(check_data_dir(Path::new(&std::env::var("USERPROFILE").unwrap())).is_err());
             assert!(check_data_dir(Path::new("G:\\Mon Drive\\Todoom")).is_ok());
-            assert!(check_data_dir(&Path::new(&std::env::var("USERPROFILE").unwrap()).join("Todoom")).is_ok());
+            assert!(
+                check_data_dir(&Path::new(&std::env::var("USERPROFILE").unwrap()).join("Todoom"))
+                    .is_ok()
+            );
         } else {
             assert!(check_data_dir(Path::new("/")).is_err());
             assert!(check_data_dir(Path::new("/etc/todoom")).is_err());
             assert!(check_data_dir(Path::new(&std::env::var("HOME").unwrap())).is_err());
-            assert!(check_data_dir(&Path::new(&std::env::var("HOME").unwrap()).join("Todoom")).is_ok());
+            assert!(
+                check_data_dir(&Path::new(&std::env::var("HOME").unwrap()).join("Todoom")).is_ok()
+            );
         }
     }
 
@@ -1397,7 +1768,9 @@ mod tests {
         let root = std::env::temp_dir().join(format!("todoom-io-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        let write = |rel: &str, content: &str| prepare_write(&root, rel).and_then(|t| write_atomic(&t, content));
+        let write = |rel: &str, content: &str| {
+            prepare_write(&root, rel).and_then(|t| write_atomic(&t, content))
+        };
         let remove = |rel: &str| prepare_remove(&root, rel).and_then(|t| remove_target(&t));
 
         // Creates the folders, then overwrites in place, leaving no temp file behind.
@@ -1405,7 +1778,10 @@ mod tests {
         write("boards/b1/cards/c1.json", r#"{"id":"c1","title":"v2"}"#).unwrap();
         write("boards/b1/board.json", r#"{"id":"b1"}"#).unwrap();
         let card = root.join("boards/b1/cards/c1.json");
-        assert_eq!(fs::read_to_string(&card).unwrap(), r#"{"id":"c1","title":"v2"}"#);
+        assert_eq!(
+            fs::read_to_string(&card).unwrap(),
+            r#"{"id":"c1","title":"v2"}"#
+        );
         assert!(!root.join("boards/b1/cards/c1.json.tmp").exists());
 
         // Refused before touching the disk.
@@ -1413,7 +1789,10 @@ mod tests {
         assert!(!root.parent().unwrap().join("outside.json").exists());
         fs::write(root.join("boards/b1/cards/broken.json"), "{coupé").unwrap();
         assert!(write("boards/b1/cards/broken.json", "{}").is_err());
-        assert_eq!(fs::read_to_string(root.join("boards/b1/cards/broken.json")).unwrap(), "{coupé");
+        assert_eq!(
+            fs::read_to_string(root.join("boards/b1/cards/broken.json")).unwrap(),
+            "{coupé"
+        );
         assert!(remove("boards").is_err());
         assert!(remove("boards/b1/board.json").is_err());
 
@@ -1431,11 +1810,19 @@ mod tests {
     fn unreadable_files_are_not_overwritten() {
         let dir = std::env::temp_dir().join(format!("todoom-refuse-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        let (broken, valid, missing) = (dir.join("broken.json"), dir.join("valid.json"), dir.join("missing.json"));
+        let (broken, valid, missing) = (
+            dir.join("broken.json"),
+            dir.join("valid.json"),
+            dir.join("missing.json"),
+        );
         fs::write(&broken, r#"{"id":"c1","title":"coupé par Dri"#).unwrap();
         fs::write(&valid, r#"{"id":"c2"}"#).unwrap();
 
-        assert!(refuse_unreadable(&broken, "broken.json").unwrap_err().contains("illisible"));
+        assert!(
+            refuse_unreadable(&broken, "broken.json")
+                .unwrap_err()
+                .contains("illisible")
+        );
         assert!(refuse_unreadable(&valid, "valid.json").is_ok());
         assert!(refuse_unreadable(&missing, "missing.json").is_ok());
 
@@ -1454,7 +1841,10 @@ mod tests {
 
         assert_eq!(
             load(&root, &cache),
-            [("boards/b1/board.json".into(), "board".into()), ("boards/b1/cards/c1.json".into(), "v1".into())]
+            [
+                ("boards/b1/board.json".into(), "board".into()),
+                ("boards/b1/cards/c1.json".into(), "v1".into())
+            ]
         );
 
         fs::write(cards.join("c1.json"), "version 2").unwrap();
@@ -1462,7 +1852,10 @@ mod tests {
         fs::remove_file(root.join("boards/b1/board.json")).unwrap();
         assert_eq!(
             load(&root, &cache),
-            [("boards/b1/cards/c1.json".into(), "version 2".into()), ("boards/b1/cards/c2.json".into(), "new".into())]
+            [
+                ("boards/b1/cards/c1.json".into(), "version 2".into()),
+                ("boards/b1/cards/c2.json".into(), "new".into())
+            ]
         );
         assert_eq!(cache.lock().unwrap().len(), 2);
 

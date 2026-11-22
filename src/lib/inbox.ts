@@ -33,7 +33,7 @@ const baseName = (name: string) => name.replace(/\.(txt|md|markdown|text)$/i, ""
  * title, the rest the description. Nothing written: the file's name.
  */
 export function inboxCard(name: string, content: string): { title: string; description: string } {
-  const text = content.replace(/^﻿/, "").replace(/\r\n?/g, "\n").trim();
+  const text = content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").trim();
   const fallback = baseName(name) || name;
   if (!text) return { title: fallback, description: "" };
   if (URL_ONLY.test(text)) return { title: fallback, description: text };
@@ -64,6 +64,8 @@ export function inboxCardId(name: string, content: string): string {
 /** Why a file can't become a card: too big, or not text. */
 export function inboxProblem(file: InboxFile, content?: string): "tooBig" | "notText" | null {
   if (file.size > INBOX_MAX_BYTES) return "tooBig";
-  if (content !== undefined && /\u0000|�/.test(content)) return "notText";
+  // A NUL or a replacement mark (bytes that weren't UTF-8): not text.
+  // eslint-disable-next-line no-control-regex
+  if (content !== undefined && /\u0000|\uFFFD/.test(content)) return "notText";
   return null;
 }

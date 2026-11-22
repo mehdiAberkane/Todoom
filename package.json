@@ -12,7 +12,9 @@
     "release": "node scripts/release.mjs",
     "test": "vitest run",
     "build:cli": "tsc -p cli && vite build --config vite.cli.config.ts",
-    "cli:install": "npm run build:cli && npm link"
+    "cli:install": "npm run build:cli && npm link",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -28,13 +30,19 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@tauri-apps/cli": "^2",
     "@types/node": "^24.19.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^5.1.1",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0",
     "vite": "^8.0.16",
     "vitest": "^5.1.1",
     "zod": "^4.6.7"

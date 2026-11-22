@@ -28,7 +28,18 @@ Seule la dernière version publiée reçoit des correctifs. Les installations se
   les mises à jour signées par la clé du projet ([docs/cle-de-signature.md](docs/cle-de-signature.md)).
 - **Dossier de données** : quiconque peut écrire dans le dossier Todoom (par exemple
   le dossier Google Drive partagé) peut modifier les tableaux. Les fichiers au format
-  inattendu sont signalés et ne sont jamais écrasés ([schema/](schema/)).
+  inattendu sont signalés et ne sont jamais écrasés ([schema/](schema/)). L'application,
+  la commande `todoom` (et son serveur MCP) et l'agent n'acceptent que des identifiants
+  de la forme `[A-Za-z0-9_-]`, égaux au nom de leur fichier : le contenu du dossier ne
+  mène jamais à un fichier hors de lui.
+- **Texte des cartes et IA** : ce que renvoie le serveur MCP (descriptions, commentaires,
+  contexte du tableau) est écrit par quiconque peut écrire le dossier ; un modèle peut
+  le prendre pour des instructions. Ses actions restent limitées au dossier Todoom.
+- **Contrôles automatiques** : chaque push passe la CI (tests avec seuil de couverture,
+  ESLint, Clippy, rustfmt, `npm audit`, `cargo audit`, audit des workflows par zizmor),
+  CodeQL (TypeScript, Rust, Python, workflows) et, pour les pull requests, la revue
+  des nouvelles dépendances. Dependabot propose chaque semaine les mises à jour des
+  actions, des paquets npm et des crates Rust.
 - **Agent** : l'agent fait exécuter du code choisi par le texte des tickets ; voir la
   section Sécurité de [agent/README.md](agent/README.md) avant de l'utiliser.
 - **Installeurs non signés** : la première installation déclenche une alerte de

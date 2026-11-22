@@ -17,6 +17,7 @@ const TODAY_FILE = "0 - Aujourd'hui.md";
 /** A file name from a board's name: what Windows, macOS and Drive all accept. */
 export function readingName(name: string): string {
   const base = name
+    // eslint-disable-next-line no-control-regex -- control characters are refused in file names
     .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-")
     .replace(/\s+/g, " ")
     .replace(/^[\s.-]+|[\s.]+$/g, "")

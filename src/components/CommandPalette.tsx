@@ -73,8 +73,13 @@ export function CommandPalette({
           setSelected(0);
         }}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") (e.preventDefault(), setSelected((s) => Math.min(s + 1, items.length - 1)));
-          else if (e.key === "ArrowUp") (e.preventDefault(), setSelected((s) => Math.max(s - 1, 0)));
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setSelected((s) => Math.min(s + 1, items.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setSelected((s) => Math.max(s - 1, 0));
+          }
           else if (e.key === "Enter") run(selected);
         }}
       />

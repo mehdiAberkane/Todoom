@@ -1,6 +1,14 @@
-# Opens a pull request when a pinned GitHub Action has a new release, updating
-# the commit SHA and the version comment together. Review what changed in the
-# action before merging: the release workflow holds the update signing key.
+# Dependabot keeps three things up to date, each week:
+# - the GitHub Actions, pinned to a commit SHA (SHA and version comment updated
+#   together). Review what changed in an action before merging: the release
+#   workflow holds the update signing key.
+# - the npm packages (interface, todoom command) and the Rust crates (the app):
+#   minor and patch updates grouped in one pull request per ecosystem, major
+#   versions one by one, since they can break the build.
+# Security updates (a pull request as soon as an advisory concerns a dependency)
+# come on top of this schedule, once enabled in the repository settings
+# (Settings › Code security › Dependabot alerts and security updates).
+# The CI of each pull request (tests, Clippy, npm audit, cargo audit) decides.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -10,3 +18,21 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor:
+        update-types: [minor, patch]

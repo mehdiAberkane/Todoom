@@ -228,6 +228,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
 
   useEffect(() => {
     if (board) localSet("todoom-board", board.id);
+    // Only when the board changes, not on each edit of it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board?.id]);
 
   const cardIndex = useMemo(() => indexCards(data.boards, data.cards), [data.boards, data.cards]);
