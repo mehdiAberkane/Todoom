@@ -8,6 +8,8 @@
 # Security updates (a pull request as soon as an advisory concerns a dependency)
 # come on top of this schedule, once enabled in the repository settings
 # (Settings › Code security › Dependabot alerts and security updates).
+# A version must be 7 days old before it is proposed (cooldown): most
+# hijacked releases are found and pulled within days.
 # The CI of each pull request (tests, Clippy, npm audit, cargo audit) decides.
 version: 2
 updates:
@@ -15,6 +17,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -23,6 +27,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       npm-minor:
@@ -32,6 +38,8 @@ updates:
     directory: /src-tauri
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       cargo-minor:

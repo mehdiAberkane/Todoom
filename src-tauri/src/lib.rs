@@ -392,17 +392,17 @@ fn find_drive_folder() -> Option<String> {
     }
 
     #[cfg(target_os = "macos")]
-    if let Some(home) = std::env::var_os("HOME") {
-        if let Ok(entries) = fs::read_dir(PathBuf::from(home).join("Library/CloudStorage")) {
-            for entry in entries.flatten() {
-                if entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("GoogleDrive")
-                {
-                    for name in names {
-                        candidates.push(entry.path().join(name));
-                    }
+    if let Some(home) = std::env::var_os("HOME")
+        && let Ok(entries) = fs::read_dir(PathBuf::from(home).join("Library/CloudStorage"))
+    {
+        for entry in entries.flatten() {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("GoogleDrive")
+            {
+                for name in names {
+                    candidates.push(entry.path().join(name));
                 }
             }
         }
