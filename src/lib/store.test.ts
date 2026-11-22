@@ -102,6 +102,27 @@ describe("loading the data folder", () => {
     }
   });
 
+  it("refuses an id that isn't one (« ../x »): it would be a path out of the data folder", () => {
+    const data = parse(files({ "boards/b1/cards/c1.json": card({ id: "../../outside/x" }) }));
+    expect(data.cards.b1).toEqual([]);
+    expect(data.issues[0].reason).toEqual({ code: "bad_field", field: "id" });
+  });
+
+  it("takes « __proto__ » or « constructor » in a file as a plain key, without breaking the load", () => {
+    const comment = (cardId: string) => JSON.stringify({ id: "m" + cardId.length, cardId, author: { host: "h" }, text: "t", createdAt: "1" });
+    const data = parse(
+      files({
+        "boards/b1/cards/c1.json": card(),
+        "boards/b1/comments/constructor/m.json": comment("constructor"),
+        "boards/b1/history/__proto__/w.json": JSON.stringify({ cardId: "__proto__", writer: "polluted", events: [] }),
+        "boards/__proto__/agents/a.json": JSON.stringify({ host: "h", agent: "a", state: "idle", card: null, since: "1", heartbeat: "1" }),
+      }),
+    );
+    expect(data.cards.b1.map((c) => c.id)).toEqual(["c1"]);
+    expect(data.comments.constructor).toHaveLength(1);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
   it("reports an unreadable settings file and keeps the defaults", () => {
     const data = parse(files({ "settings.json": JSON.stringify({ backgroundDim: "fort" }) }));
     expect(data.settings.background).toBeNull();

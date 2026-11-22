@@ -134,8 +134,10 @@ export function parse(files: FileEntry[], pending: string[] = []): Data {
   const issues: FileIssue[] = [];
   let settings = DEFAULT_SETTINGS;
   const comments = new Map<string, CardComment>();
-  const history: Data["history"] = {};
-  const agents: Data["agents"] = {};
+  // Indexed by ids read from the files: no prototype, so an id such as
+  // « __proto__ » or « constructor » is a key like any other.
+  const history: Data["history"] = Object.create(null);
+  const agents: Data["agents"] = Object.create(null);
   const attachments = new Map<string, Attachment>();
 
   for (const file of files) {
@@ -193,7 +195,7 @@ export function parse(files: FileEntry[], pending: string[] = []): Data {
     if (kind === "history") {
       const file = raw as { cardId: string; writer: string; events?: HistoryEvent[] };
       const events = file.events ?? [];
-      const forCard = (history[file.cardId] ??= {});
+      const forCard = (history[file.cardId] ??= Object.create(null) as Record<string, HistoryEvent[]>);
       // A conflict copy of a writer's file: keep the longer one, history only grows.
       if ((forCard[file.writer]?.length ?? -1) < events.length) forCard[file.writer] = events;
       continue;
@@ -240,13 +242,13 @@ export function parse(files: FileEntry[], pending: string[] = []): Data {
 }
 
 function groupAttachments(list: Attachment[]): Record<string, Attachment[]> {
-  const out: Record<string, Attachment[]> = {};
+  const out: Record<string, Attachment[]> = Object.create(null);
   for (const a of list.sort((x, y) => x.createdAt.localeCompare(y.createdAt))) (out[a.cardId] ??= []).push(a);
   return out;
 }
 
 function groupComments(list: CardComment[]): Record<string, CardComment[]> {
-  const out: Record<string, CardComment[]> = {};
+  const out: Record<string, CardComment[]> = Object.create(null);
   for (const c of list.sort((a, b) => a.createdAt.localeCompare(b.createdAt))) (out[c.cardId] ??= []).push(c);
   return out;
 }
@@ -926,7 +928,7 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
       /** A card not written yet, for the editor to fill in before the first save. */
       draftCard: blankCard,
     };
-  }, [writeJson, removePath]);
+  }, [writeJson, removePath, backend]);
 
   // Ids of the cards and boards with a change the disk hasn't confirmed yet.
   const unsavedIds = useMemo(() => new Set(unsaved.map(idOfPath).filter((id): id is string => !!id)), [unsaved]);

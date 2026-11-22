@@ -88,6 +88,53 @@ class ResumeTest(unittest.TestCase):
             self.assertEqual(agent.branch_for(card), "feature/export-csv-def123")
 
 
+class SyncedFolderTest(unittest.TestCase):
+    """Anyone who can write the synced folder can write a card or a comment: they don't lead the agent elsewhere."""
+
+    def test_a_card_whose_id_is_not_its_file_name_is_left_alone(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            board = Path(tmp) / "board"
+            (board / "cards").mkdir(parents=True)
+            agent.write_json(board / "board.json", {"columns": [{"id": "c1", "name": "En cours"}]})
+            agent.write_json(board / "cards" / "x.json", {"id": "../../outside", "title": "T", "columnId": "c1"})
+            agent.write_json(board / "cards" / "y.json", {"id": "other", "title": "T", "columnId": "c1"})
+            with mock.patch.object(agent, "BOARD_DIR", board), \
+                 mock.patch.object(agent, "ensure_columns", return_value={"En cours": "c1"}), \
+                 mock.patch.object(agent, "process") as process:
+                agent.tick()
+            process.assert_not_called()
+            self.assertFalse((Path(tmp) / "outside").exists())
+
+    def test_a_comment_cannot_send_the_agent_to_another_branch(self):
+        card = {"id": "mw0abcdef123", "title": "Ajouter un export CSV", "description": ""}
+        for named in ["develop", "main", "release/1.0", "-f", "../x"]:
+            comments = [{"text": f"Branche : {named}", "createdAt": "1"}]
+            with mock.patch.object(agent, "comments_of", return_value=comments), \
+                 mock.patch.object(agent, "suggest_branch", return_value="feature/export-csv"), \
+                 mock.patch.object(agent, "branch_exists", return_value=False), \
+                 mock.patch.object(agent, "git", side_effect=lambda *a, **k: "x"):
+                self.assertEqual(agent.branch_for(card), "feature/export-csv", named)
+        self.assertTrue(agent.own_branch_name("feature/export-csv-def123", card))
+
+    def test_a_git_setup_changed_from_the_sandbox_is_seen_without_running_git(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            git_dir = Path(tmp) / ".git"
+            (git_dir / "hooks").mkdir(parents=True)
+            (git_dir / "config").write_text("[core]\n")
+            (git_dir / "hooks" / "pre-commit.sample").write_text("x")
+            with mock.patch.object(agent, "git", return_value=str(git_dir)):
+                before = agent.git_setup()
+            self.assertFalse(agent.git_setup_changed(before))
+            (git_dir / "hooks" / "pre-push").write_text("#!/bin/sh\ntouch planted\n")
+            self.assertTrue(agent.git_setup_changed(before))
+            (git_dir / "hooks" / "pre-push").unlink()
+            (git_dir / "config").write_text("[core]\n\tfsmonitor = touch planted\n")
+            with mock.patch.object(agent, "git", side_effect=AssertionError("git must not run")):
+                self.assertTrue(agent.git_setup_changed(before))
+
+
 class VerdictTest(unittest.TestCase):
     def test_success_needs_commits_and_a_clean_tree(self):
         self.assertEqual(agent.verdict(True, "fait", "abc1234 Ajoute l'export", ""), (True, "fait"))
@@ -259,6 +306,7 @@ class ClaimTest(unittest.TestCase):
         class FakePath:
             def __init__(self, name):
                 self.name = name
+                self.stem = name.removesuffix(".json")
 
             def __truediv__(self, other):
                 return FakePath(other)

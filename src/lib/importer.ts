@@ -61,7 +61,7 @@ export function fromTrello(raw: unknown): ImportedBoard {
   const labels = (b.labels ?? []).map((l, i) => ({
     id: l.id,
     name: str(l.name).trim() || str(l.color) || `label ${i + 1}`,
-    color: TRELLO_COLORS[str(l.color)] ?? LABEL_COLORS[i % LABEL_COLORS.length],
+    color: (Object.prototype.hasOwnProperty.call(TRELLO_COLORS, str(l.color)) ? TRELLO_COLORS[str(l.color)] : undefined) ?? LABEL_COLORS[i % LABEL_COLORS.length],
   }));
   const labelName = new Map(labels.map((l) => [l.id, l.name]));
   const columns = lists.map((l) => l.name);
@@ -92,7 +92,7 @@ export function fromTrello(raw: unknown): ImportedBoard {
 
 /** Splits CSV text into rows: quoted cells may hold separators, quotes ("") and line breaks. */
 export function parseCsv(text: string): string[][] {
-  const src = text.replace(/^﻿/, "");
+  const src = text.replace(/^\uFEFF/, "");
   const firstLine = src.split(/\r?\n/, 1)[0] ?? "";
   const sep = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ";" : ",";
   const rows: string[][] = [];
@@ -102,11 +102,17 @@ export function parseCsv(text: string): string[][] {
   for (let i = 0; i < src.length; i++) {
     const ch = src[i];
     if (quoted) {
-      if (ch === '"' && src[i + 1] === '"') (cell += '"'), i++;
+      if (ch === '"' && src[i + 1] === '"') {
+        cell += '"';
+        i++;
+      }
       else if (ch === '"') quoted = false;
       else cell += ch;
     } else if (ch === '"') quoted = true;
-    else if (ch === sep) row.push(cell), (cell = "");
+    else if (ch === sep) {
+      row.push(cell);
+      cell = "";
+    }
     else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && src[i + 1] === "\n") i++;
       row.push(cell);
@@ -115,7 +121,10 @@ export function parseCsv(text: string): string[][] {
       cell = "";
     } else cell += ch;
   }
-  if (cell || row.length) row.push(cell), rows.push(row);
+  if (cell || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
   return rows.filter((r) => r.some((c) => c.trim()));
 }
 

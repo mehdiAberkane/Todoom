@@ -104,13 +104,18 @@ Ticket : {title}
 
 # Ticket text is untrusted input, and Claude may run `go run` / `go test`, which
 # execute any code. Whatever runs under it doesn't inherit tokens, passwords or
-# the SSH agent; Claude's own login (ANTHROPIC_*, CLAUDE_*) is kept. Files the
-# user can read (~/.ssh, …) stay readable: only SANDBOX removes that.
+# the SSH agent's socket variable; Claude's own login (ANTHROPIC_*, CLAUDE_*) is
+# kept. Files the user can read (~/.ssh, …) stay readable, and on Windows the
+# SSH agent and git's credential manager answer without any variable: only
+# SANDBOX removes that.
 SECRET_ENV = re.compile(r"TOKEN|SECRET|PASSW|API_?KEY|PRIVATE_KEY|CREDENTIAL|ASKPASS|SSH_AUTH_SOCK|SSH_AGENT"
                         r"|^AWS_|^AZURE_|^GOOGLE_APPLICATION", re.IGNORECASE)
 KEEP_ENV = re.compile(r"^(ANTHROPIC_|CLAUDE_)", re.IGNORECASE)
 
 BRANCH_RE = re.compile(r"(feature|hotfix|bugfix|security|quality)/[a-z0-9]+(-[a-z0-9]+)*")
+# A card id as the app makes them, and the only form joined into a path: a
+# card file of the synced folder holding « ../x » must not lead out of it.
+ID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")
 BRANCH_KEYWORDS = [
     ("security", r"\b(securite|security|vuln\w*|cve)\b"),
     ("hotfix", r"\b(hotfix|urgent)\b"),
@@ -306,14 +311,22 @@ def branch_exists(name):
     return bool(git("branch", "--list", name) or git("ls-remote", "--heads", REMOTE, name))
 
 
+def own_branch_name(name, card):
+    """A name the agent could have given this card: type/words, or with the card's suffix."""
+    suffix = re.escape(card["id"][-6:])
+    return name != BASE_BRANCH and bool(BRANCH_RE.fullmatch(name) or re.fullmatch(f"{BRANCH_RE.pattern}-{suffix}", name))
+
+
 def branch_for(card):
     """Reuses the branch of an earlier attempt, named in its report, or picks a new one.
 
     Reports are comments now; older ones were appended to the description.
+    Anyone who can write the board folder can write a comment: only a name of
+    the agent's own form is reused, never develop, a release branch or the base.
     """
     reports = "\n".join([card["description"], *(c["text"] for c in comments_of(card))])
     earlier = re.findall(r"^Branche : (\S+)", reports, re.MULTILINE)
-    if earlier and git("branch", "--list", earlier[-1]):
+    if earlier and own_branch_name(earlier[-1], card) and git("branch", "--list", earlier[-1]):
         return earlier[-1]
     name = suggest_branch(card)
     return f"{name}-{card['id'][-6:]}" if branch_exists(name) else name
@@ -374,6 +387,28 @@ def claude_cmd(*args):
     return [claude_path(), *args]
 
 
+def git_setup():
+    """What of the repository's git setup runs commands: its config, hooks and info files.
+
+    With SANDBOX, ticket code can write the repository, .git included when it is
+    mounted. A hook or a config entry (core.fsmonitor, core.sshCommand…) planted
+    there would run on this computer at the agent's next git command, outside the
+    sandbox: process() compares this before and after Claude, and stops if it changed.
+    """
+    git_dir = Path(git("rev-parse", "--absolute-git-dir"))
+    return {"dir": git_dir, "files": read_setup(git_dir)}
+
+
+def read_setup(git_dir):
+    """The files themselves, read without running git (git would run a planted fsmonitor)."""
+    files = [git_dir / "config", *(git_dir / "hooks").glob("*"), *(git_dir / "info").glob("*")]
+    return {str(p): p.read_bytes() for p in files if p.is_file()}
+
+
+def git_setup_changed(before):
+    return read_setup(before["dir"]) != before["files"]
+
+
 def claude_env():
     return {k: v for k, v in os.environ.items() if KEEP_ENV.match(k) or not SECRET_ENV.search(k)}
 
@@ -428,6 +463,16 @@ def verdict(ok, summary, commits, dirty):
     return ok and not dirty, summary
 
 
+def stop_on_changed_setup(card_path, card, cols):
+    """The git setup changed from the sandbox: no git command may run any more, the agent stops."""
+    add_comment(card, "--- Agent (ARRÊT) ---\nLa configuration git du dépôt (.git/config, hooks) a changé pendant "
+                      "le ticket, depuis le bac à sable. Rien n'a été poussé. Vérifiez .git/config et .git/hooks "
+                      "avant de relancer l'agent.")
+    move(card_path, read_json(card_path), COL_FAILED, cols)
+    write_status("stopped", None, force=True)
+    sys.exit("configuration git du dépôt modifiée pendant le ticket : agent arrêté (voir le commentaire de la carte)")
+
+
 def process(card_path, card, cols):
     title = card["title"]
     if git("status", "--porcelain", "--untracked-files=no"):
@@ -442,12 +487,14 @@ def process(card_path, card, cols):
     log.info("=== NOUVEAU TICKET : « %s »", title)
 
     branch, commits, dirty, mr_url = "", "", "", None
+    setup = None
     try:
         update_base()
         branch = branch_for(card)
         log.info("ticket « %s » -> branche %s", title, branch)
         # A failed ticket sent back to En cours resumes on its existing branch.
         git("switch", *([branch] if git("branch", "--list", branch) else ["-c", branch]))
+        setup = git_setup() if SANDBOX else None
         ok, summary = run_claude(card, branch)
     except subprocess.TimeoutExpired:
         ok, summary = False, f"Arrêté après {TICKET_TIMEOUT // 60} minutes."
@@ -455,6 +502,8 @@ def process(card_path, card, cols):
         ok, summary = False, f"Erreur git : {(e.stderr or str(e)).strip()}"
     except OSError as e:
         ok, summary = False, f"Impossible de lancer Claude : {e}"
+    if setup is not None and git_setup_changed(setup):
+        stop_on_changed_setup(card_path, card, cols)
     if branch and git("branch", "--list", branch):
         commits = git("log", "--oneline", f"{BASE_BRANCH}..{branch}", check=False)
     dirty = git("status", "--porcelain", "--untracked-files=no", check=False)
@@ -552,6 +601,13 @@ def tick(dry_run=False):
             card = read_json(path)
         except (OSError, json.JSONDecodeError):
             continue
+        # The id is joined into paths (comments, history): it must be one, and the file's name.
+        if not (isinstance(card, dict) and isinstance(card.get("id"), str)
+                and ID_RE.fullmatch(card["id"]) and card["id"] == path.stem):
+            if path.name not in tick.bad_logged:
+                log.warning("%s ignoré : son id n'est pas le nom du fichier", path.name)
+                tick.bad_logged.add(path.name)
+            continue
         # Archived cards keep their column in Todoom but are off the board.
         if card.get("columnId") == cols[COL_TRIGGER] and not card.get("archivedAt"):
             # Taken by a conversation or another computer: it's being worked on elsewhere.
@@ -570,6 +626,7 @@ def tick(dry_run=False):
 
 tick.trash_logged = set()
 tick.held_logged = set()
+tick.bad_logged = set()
 
 
 PER_BOARD = ("project", "checks", "base_branch", "remote", "tools", "forge")

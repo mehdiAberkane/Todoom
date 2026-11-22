@@ -10,6 +10,13 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 const isString = (v: unknown) => typeof v === "string";
 const isNumber = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 const isBoolean = (v: unknown) => typeof v === "boolean";
+/**
+ * An id as the app makes them, and the only form used in file paths: the same
+ * rule as is_id on the Rust side. An id read from a synced file that isn't one
+ * (« ../x ») would lead the CLI or the agent out of the data folder.
+ */
+export const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+export const isId = (v: unknown): v is string => typeof v === "string" && ID_PATTERN.test(v);
 const optional = (ok: (v: unknown) => boolean) => (v: unknown) => v === undefined || ok(v);
 const nullable = (ok: (v: unknown) => boolean) => (v: unknown) => v === undefined || v === null || ok(v);
 const listOf = (ok: (v: unknown) => boolean) => (v: unknown) => v === undefined || (Array.isArray(v) && v.every(ok));
@@ -76,14 +83,14 @@ const AUTHOR = shaped([
 ]);
 
 const COMMENT: Check[] = [
-  ["cardId", isString],
+  ["cardId", isId],
   ["createdAt", isString],
   ["text", isString],
   ["author", AUTHOR],
 ];
 
 const ATTACHMENT: Check[] = [
-  ["cardId", isString],
+  ["cardId", isId],
   ["name", isString],
   ["type", isString],
   ["size", isNumber],
@@ -93,7 +100,7 @@ const ATTACHMENT: Check[] = [
 ];
 
 const HISTORY: Check[] = [
-  ["cardId", isString],
+  ["cardId", isId],
   ["writer", isString],
   ["events", listOf(shaped([["at", isString], ["field", isString], ["by", AUTHOR], ["from", nullable(isString)], ["to", nullable(isString)]]))],
 ];
@@ -117,6 +124,7 @@ export interface IssueReason {
 function problem(raw: unknown, checks: Check[], needsId: boolean): IssueReason | null {
   if (!isObject(raw)) return { code: "not_object" };
   if (needsId && (!isString(raw.id) || !raw.id)) return { code: "missing_id" };
+  if (needsId && !isId(raw.id)) return { code: "bad_field", field: "id" };
   const bad = checks.find(([f, ok]) => !ok(raw[f]));
   return bad ? { code: "bad_field", field: bad[0] } : null;
 }

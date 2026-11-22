@@ -59,6 +59,10 @@ Du plus simple au plus solide :
    ```
    où `todoom-agent` est une image contenant Go et Claude Code. Cet exemple est à adapter, il n'a pas été testé tel quel. Un compte Windows dédié est l'autre option, mais il ne voit pas ton Google Drive : seul l'appel à Claude doit y tourner, pas l'agent qui lit le tableau.
 
+   Le conteneur voit aussi `.git` : un hook ou une ligne de `.git/config` (`core.fsmonitor`, `core.sshCommand`…) écrits depuis le bac à sable s'exécuteraient sur ton ordinateur au git suivant de l'agent. Avec `sandbox`, l'agent relit donc `.git/config`, `.git/hooks` et `.git/info` après Claude, sans lancer git : s'ils ont changé, il ne pousse rien, l'écrit sur la carte et s'arrête, le temps que tu vérifies.
+
+Quoi qu'il arrive, l'agent ne suit que des identifiants de carte de la forme de ceux de Todoom, égaux au nom de leur fichier (un `../` mènerait hors du dossier), et ne reprend une branche citée dans un commentaire (« Branche : … ») que si elle a la forme des siennes (`feature/…`, `bugfix/…`) : jamais `develop`, une branche de release ou la branche de base. Sous Windows, l'agent SSH et le gestionnaire d'identifiants git restent joignables sans variable d'environnement : seul `sandbox` ou un jeton limité (point 2) les met hors de portée.
+
 ### Relire la merge request comme du code tiers
 
 Ce que l'agent pousse a été écrit sous la dictée d'un texte que tu n'as peut-être pas écrit toi-même. Relis toute la merge request avant de fusionner, et méfie-toi des changements hors du sujet du ticket : CI, scripts de build, dépendances, fichiers de configuration.

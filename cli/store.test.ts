@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cardProblem } from "../src/lib/validate";
 import { findDataDir, normalize, Store, TodoomError } from "./store";
@@ -237,6 +237,30 @@ describe("writes", () => {
     writeFileSync(join(cardsDir(), "broken.json"), "{ not json");
     writeFileSync(join(cardsDir(), "wrong.json"), JSON.stringify({ id: "wrong", title: 42 }));
     expect(store.cards(store.board("Todoom")).map((c) => c.title)).toEqual(["Un"]);
+  });
+});
+
+describe("files written by someone else in the synced folder", () => {
+  it("never follows a card or board id out of the data folder", () => {
+    const outside = `${dir}-outside`;
+    mkdirSync(outside, { recursive: true });
+    try {
+      // From boards/b1/cards: four levels up is the data folder's parent.
+      const sneaky = `../../../../${basename(outside)}/pwned`;
+      writeFileSync(join(cardsDir(), "x.json"), JSON.stringify({ id: sneaky, number: 7, columnId: "todo", title: "t", updatedAt: "1" }));
+      // An id that differs from its file name is skipped, whatever it holds.
+      writeFileSync(join(cardsDir(), "other.json"), JSON.stringify({ id: "c2", number: 8, columnId: "todo", title: "t", updatedAt: "1" }));
+      expect(store.cards(store.board("Todoom"))).toEqual([]);
+      expect(() => store.card(`${store.board("Todoom").key ?? "TOD"}-7`)).toThrow(TodoomError);
+      expect(() => store.card("other")).toThrow(TodoomError);
+      expect(readdirSync(outside)).toEqual([]);
+      // A board whose content id isn't its folder name is skipped too.
+      mkdirSync(join(dir, "boards", "b2"));
+      writeFileSync(join(dir, "boards", "b2", "board.json"), JSON.stringify({ id: "../b1", name: "Piège", columns: [], updatedAt: "1" }));
+      expect(store.boards().map((b) => b.id)).toEqual(["b1"]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 

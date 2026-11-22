@@ -165,7 +165,8 @@ export class Store {
     for (const id of this.boardIds()) {
       try {
         const raw = readJson(join(this.boardDir(id), "board.json"));
-        if (boardProblem(raw)) continue;
+        // The id is also the folder name: one that differs (« ../x ») would lead out of the data folder.
+        if (boardProblem(raw) || (raw as Board).id !== id) continue;
         const b = raw as Board;
         if (includeTrashed || !b.archivedAt) boards.push({ ...b, columns: b.columns ?? [], labels: b.labels ?? [] });
       } catch {
@@ -187,7 +188,8 @@ export class Store {
       if (!f.endsWith(".json")) continue;
       try {
         const raw = readJson(join(dir, f));
-        if (cardProblem(raw)) continue;
+        // Same for a card and its file name.
+        if (cardProblem(raw) || `${(raw as Card).id}.json` !== f) continue;
         cards.push(withDefaults(raw as Card, board));
       } catch {
         /* unreadable: reported by the app */
@@ -219,7 +221,7 @@ export class Store {
 
   private readCard(board: Board, id: string): Card {
     const raw = readJson(join(this.boardDir(board.id), "cards", `${id}.json`));
-    const problem = cardProblem(raw);
+    const problem = cardProblem(raw) ?? ((raw as Card).id !== id ? { code: "bad_field", field: "id" } : null);
     if (problem) throw new TodoomError(`Fichier de la carte ${id} invalide (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
     return withDefaults(raw as Card, board);
   }
