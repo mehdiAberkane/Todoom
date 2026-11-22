@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../lib/i18n";
 
 const stop = (e: React.PointerEvent) => e.stopPropagation();
@@ -111,11 +112,16 @@ export function Modal({ onClose, children, className = "" }: { onClose: () => vo
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  return (
+  // Rendered at the end of the page, not where it is opened: under a background
+  // image the sidebar, columns and board header blur what is behind them
+  // (backdrop-filter), which would keep a window opened there (the trash of
+  // boards) inside them instead of the whole screen.
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={self} className={`modal ${className}`} role="dialog">
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
