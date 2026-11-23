@@ -3,7 +3,7 @@
 // same files, same checks, atomic writes, updatedAt that always moves forward.
 // The app watches the folder and picks the changes up by itself.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import type { Board, Card, Column } from "../src/types";
@@ -80,9 +80,15 @@ function byName<T extends { id: string; name: string }>(items: T[], wanted: stri
 
 /** A data file, unless it is over MAX_DATA_FILE_BYTES: then not read at all (the callers skip it, as the app does). */
 function readJson(path: string): unknown {
-  const size = statSync(path).size;
-  if (size > MAX_DATA_FILE_BYTES) throw new TodoomError(`${path} est trop gros (${(size / 1024 / 1024).toFixed(1)} Mo, au plus 5 Mo) : ignoré.`);
-  return JSON.parse(readFileSync(path, "utf8"));
+  // Opened once: the size checked is the size of the file read, even if it is replaced meanwhile.
+  const fd = openSync(path, "r");
+  try {
+    const size = fstatSync(fd).size;
+    if (size > MAX_DATA_FILE_BYTES) throw new TodoomError(`${path} est trop gros (${(size / 1024 / 1024).toFixed(1)} Mo, au plus 5 Mo) : ignoré.`);
+    return JSON.parse(readFileSync(fd, "utf8"));
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** Writes through a temporary file, so the app and Drive never see half a file; never past MAX_DATA_FILE_BYTES. */
