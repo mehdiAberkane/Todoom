@@ -149,9 +149,7 @@ export async function main(argv: string[]): Promise<number> {
         .filter((c) => !!c.archivedAt === !!o.archived)
         .filter((c) => !columnId || c.columnId === columnId)
         .filter((c) => !q || normalize(`${c.title}\n${c.description}`).includes(q));
-      // Board order: column by column, then position in the column.
-      const rank = new Map(board.columns.map((c, i) => [c.id, i]));
-      cards.sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order);
+      // Already in the board's order: column by column, each as the app shows it.
       out(cards.map((c) => {
         const v = s.view(c, board);
         return {

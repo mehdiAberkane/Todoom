@@ -51,6 +51,28 @@ describe("names", () => {
   });
 });
 
+describe("order", () => {
+  it("lists each column as the app shows it: « À faire » by priority, a late card first, « A verifier » by hand", () => {
+    const low = store.create("Todoom", "Basse", { priority: "P3" });
+    const high = store.create("Todoom", "Haute", { priority: "P1" });
+    const late = store.create("Todoom", "En retard", { priority: "P3", due: "2020-01-01" });
+    const none = store.create("Todoom", "Sans priorité");
+    const first = store.create("Todoom", "Arrivée d'abord", { priority: "P3", column: "A verifier" });
+    const second = store.create("Todoom", "Arrivée ensuite", { priority: "P1", column: "A verifier" });
+    const board = store.board("Todoom");
+    expect(store.cards(board).map((c) => c.id)).toEqual([late.id, high.id, low.id, none.id, first.id, second.id]);
+  });
+
+  it("keeps a column by hand once that is chosen", () => {
+    const raw = JSON.parse(readFileSync(join(dir, "boards", "b1", "board.json"), "utf8"));
+    raw.columns[0].sort = "manual";
+    writeFileSync(join(dir, "boards", "b1", "board.json"), JSON.stringify(raw));
+    const low = store.create("Todoom", "Basse", { priority: "P3" });
+    const high = store.create("Todoom", "Haute", { priority: "P1" });
+    expect(store.cards(store.board("Todoom")).map((c) => c.id)).toEqual([low.id, high.id]);
+  });
+});
+
 describe("writes", () => {
   it("creates a valid card at the bottom of the first column", () => {
     const a = store.create("Todoom", "Un");

@@ -785,6 +785,10 @@ button.badge-link:focus-visible { outline: 2px solid var(--accent-2); outline-of
 .sort-options { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; min-width: 190px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
 .sort-options button { background: none; border: none; text-align: left; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .sort-options button:hover { background: var(--card-hover); }
+/* The column sort in its header: quiet until hovered. */
+.sort-badge { background: none; border: 1px solid transparent; color: var(--muted); font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
+.sort-badge:hover, .sort-badge[aria-expanded="true"] { border-color: var(--border); color: var(--text); background: none; }
+.sort-options button[aria-checked="true"] { color: var(--accent-2); }
 .due-filter.on { border-color: var(--accent-2); color: var(--accent-2); }
 
 /* Collapsed columns, card limit */

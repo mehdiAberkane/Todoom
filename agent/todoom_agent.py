@@ -290,6 +290,69 @@ def move(card_path, card, column, cols):
         record_history(card, [{"at": card["updatedAt"], "by": AUTHOR, "field": "column", "from": before, "to": column}])
 
 
+# How a column orders its cards, as the app shows them (columnSort / orderColumn in
+# src/lib/sorting.ts): the agent takes them in that order.
+DONE_NAMES = {"termine", "terminee", "fini", "fait", "done", "finished", "closed", "clos", "cloture"}
+REVIEW_NAMES = {"a verifier", "a valider", "to review", "review", "in review"}
+SORTS = ("manual", "priority", "due", "created", "updated")
+DEFAULT_PRIORITIES = ["p1", "p2", "p3"]
+
+
+def plain_name(text):
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower().strip()
+
+
+def column_sort(column):
+    """The column's own sort, else one fitting its name, as in the app."""
+    if column.get("sort") in SORTS:
+        return column["sort"]
+    name = plain_name(str(column.get("name", "")))
+    if name in DONE_NAMES:
+        return "updated"
+    if name in REVIEW_NAMES:
+        return "manual"
+    return "priority"
+
+
+def ordered(cards, column, board, today=None):
+    """A column's cards in the order the app shows them: its sort, then their order."""
+    sort = column_sort(column)
+    cards = sorted(cards, key=lambda c: c.get("order", 0) if isinstance(c.get("order", 0), (int, float)) else 0)
+    if sort == "manual":
+        return cards
+    today = today or datetime.now().strftime("%Y-%m-%d")
+    levels = [p.get("id") for p in board.get("priorities") or [] if isinstance(p, dict)] or DEFAULT_PRIORITIES
+
+    def text(card, field, default=""):
+        value = card.get(field)
+        return value if isinstance(value, str) else default
+
+    def rank(card):
+        return levels.index(card.get("priority")) if card.get("priority") in levels else len(levels)
+
+    def due(card):
+        return text(card, "due", "9999")
+
+    done = plain_name(str(column.get("name", ""))) in DONE_NAMES
+
+    def late(card):
+        return 0 if not done and text(card, "due") and text(card, "due") < today else 1
+
+    # Stable sorts, the last key first: the result is ordered by late, then the sort's keys.
+    if sort == "priority":
+        cards.sort(key=due)
+        cards.sort(key=rank)
+    elif sort == "due":
+        cards.sort(key=rank)
+        cards.sort(key=due)
+    elif sort == "created":
+        cards.sort(key=lambda c: text(c, "createdAt"))
+    else:
+        cards.sort(key=lambda c: text(c, "updatedAt"), reverse=True)
+    cards.sort(key=late)
+    return cards
+
+
 def plain_words(text):
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
     return re.findall(r"[a-z0-9]+", ascii_text)
@@ -602,6 +665,7 @@ def tick(dry_run=False):
         cols = {c["name"]: c["id"] for c in read_json(board_path)["columns"]}
     else:
         cols = ensure_columns(board_path)
+    board = read_json(board_path)
     pending = []
     for path in (BOARD_DIR / "cards").glob("*.json"):
         try:
@@ -623,8 +687,12 @@ def tick(dry_run=False):
                     log.info("« %s » est pris par %s : laissé", card.get("title"), claim_label(card["claimedBy"]))
                     tick.held_logged.add(card["id"])
                 continue
-            pending.append((card.get("order", 0), path, card))
-    for _, path, card in sorted(pending, key=lambda p: p[0]):
+            pending.append((path, card))
+    # In the order the app shows the column (its sort: priority…, or by hand).
+    trigger = next((c for c in board.get("columns", []) if c.get("id") == cols[COL_TRIGGER]), {"name": COL_TRIGGER})
+    paths = {id(card): path for path, card in pending}
+    for card in ordered([card for _, card in pending], trigger, board):
+        path = paths[id(card)]
         if dry_run:
             log.info("[dry-run] prendrait « %s »", card["title"])
         else:

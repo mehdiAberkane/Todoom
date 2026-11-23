@@ -16,6 +16,12 @@ export interface Column {
   limit?: number;
   /** Cards that stayed this many days in the column are archived (« Terminé » after 14 days). */
   archiveAfter?: number;
+  /**
+   * How the column orders its cards: "manual" (their order), or kept sorted by
+   * "priority", "due", "created", "updated". Absent: chosen from the column's
+   * name (see columnSort in sorting.ts). Agents take the cards in this order.
+   */
+  sort?: string;
 }
 
 export interface Board {

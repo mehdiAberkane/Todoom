@@ -104,7 +104,7 @@ export function createServer(dir: string): McpServer {
     "list_cards",
     {
       title: "List cards",
-      description: `Cards of a board, column by column, without their descriptions (use get_card). ${NAMES}`,
+      description: `Cards of a board, column by column, each column in the order the app shows it (its sort: priority, due date… or by hand), without their descriptions (use get_card). The first card of « À faire » is the one to take. ${NAMES}`,
       inputSchema: {
         board: z.string().describe("Board name"),
         column: z.string().optional().describe("Only this column"),
@@ -118,13 +118,12 @@ export function createServer(dir: string): McpServer {
         const board = store.board(boardName);
         const columnId = column ? store.column(board, column).id : undefined;
         const q = search ? normalize(search) : "";
-        const rank = new Map(board.columns.map((c, i) => [c.id, i]));
+        // In the board's order: column by column, each as the app shows it (store.cards).
         return store
           .cards(board)
           .filter((c) => !!c.archivedAt === !!archived)
           .filter((c) => !columnId || c.columnId === columnId)
           .filter((c) => !q || normalize(`${c.title}\n${c.description}`).includes(q))
-          .sort((a, b) => (rank.get(a.columnId) ?? 99) - (rank.get(b.columnId) ?? 99) || a.order - b.order)
           .map((c) => {
             const v = store.view(c, board);
             return {

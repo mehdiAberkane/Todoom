@@ -300,6 +300,31 @@ class DevFieldsTest(unittest.TestCase):
             self.assertEqual(history["events"][-1]["to"], f"merged {url}")
 
 
+class OrderTest(unittest.TestCase):
+    def card(self, cid, **kw):
+        return {"id": cid, "order": kw.pop("order", 0), "createdAt": "", "updatedAt": "", **kw}
+
+    def test_a_column_is_taken_in_the_order_the_app_shows_it(self):
+        cards = [
+            self.card("low", order=0, priority="p3"),
+            self.card("none", order=1),
+            self.card("high", order=2, priority="p1"),
+            self.card("late", order=3, priority="p3", due="2026-11-01"),
+            self.card("high-soon", order=4, priority="p1", due="2026-12-01"),
+        ]
+        ids = lambda col, board={}: [c["id"] for c in agent.ordered(cards, col, board, today="2026-11-23")]
+        self.assertEqual(ids({"name": "En cours"}), ["late", "high-soon", "high", "low", "none"])
+        self.assertEqual(ids({"name": "En cours", "sort": "manual"}), ["low", "none", "high", "late", "high-soon"])
+        self.assertEqual(ids({"name": "A vérifier"}), ["low", "none", "high", "late", "high-soon"])
+        # The board's own levels, highest first.
+        board = {"priorities": [{"id": "p3"}, {"id": "p1"}]}
+        self.assertEqual(ids({"name": "En cours"}, board)[:3], ["late", "low", "high-soon"])
+
+    def test_a_sort_the_agent_does_not_know_falls_back_to_the_default(self):
+        self.assertEqual(agent.column_sort({"name": "En cours", "sort": "magic"}), "priority")
+        self.assertEqual(agent.column_sort({"name": "Terminé"}), "updated")
+
+
 class ClaimTest(unittest.TestCase):
     """A card taken by someone else is left alone; the agent takes and releases the ones it works on."""
 

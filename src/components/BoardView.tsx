@@ -37,7 +37,7 @@ import { loadLaneMode, saveLaneMode, type LaneMode } from "../lib/lanes";
 import type { Attachment, Column } from "../types";
 import { focusCard, focusedCardId, isTyping, modalOpen, nextCard } from "../lib/keys";
 import { blockOrders, dropTogether, movedTogether, toggled, withRange } from "../lib/selection";
-import { DUE_FILTERS, loadFilter, matchesDue, saveFilter, sortCards, type DueFilter, type SortKey } from "../lib/sorting";
+import { columnSort, DUE_FILTERS, loadFilter, matchesDue, orderColumn, saveFilter, tiedWith, type ColumnSort, type DueFilter } from "../lib/sorting";
 import { AgentStatusChips } from "./AgentStatus";
 import type { AgentStatus } from "../types";
 import { DangerButton, InlineEdit } from "./ui";
@@ -165,8 +165,13 @@ export function BoardView({
       const col = lists[c.columnId] ? c.columnId : fallback;
       if (col) lists[col].push(c.id);
     }
+    // Each column in its own order: kept sorted (priority…), or by hand.
+    const byId = new Map(cards.map((c) => [c.id, c]));
+    for (const column of board.columns) {
+      lists[column.id] = orderColumn(lists[column.id].map((id) => byId.get(id)!), column, board).map((c) => c.id);
+    }
     return lists;
-  }, [cards, board.columns, board.key, query, labelFilter, priorityFilter, dueFilter]);
+  }, [cards, board, query, labelFilter, priorityFilter, dueFilter]);
 
   const lists = dragLists ?? computed;
   const listsRef = useRef(lists);
@@ -277,7 +282,13 @@ export function BoardView({
 
     const unchanged = card.columnId === col && list.join() === (computed[col] ?? []).join();
     if (!unchanged) {
-      const updates = new Map(reorder(list, cardId, (id) => cardById.get(id)?.order));
+      // In a kept-sorted column, the drop only places the card among those its sort ties it with.
+      const column = board.columns.find((c) => c.id === col);
+      const cardOf = (id: string) => (id === cardId ? card : cardById.get(id));
+      const among = column ? tiedWith(list, cardId, cardOf, column, board) : list;
+      // Dropped elsewhere in its own column, but its sort puts it back where it was: nothing to write.
+      if (column && card.columnId === col && among.join() === tiedWith(computed[col] ?? [], cardId, cardOf, column, board).join()) return endDrag();
+      const updates = new Map(reorder(among, cardId, (id) => cardById.get(id)?.order));
       // A card dropped in another column changes even if its position number doesn't.
       if (!updates.has(cardId)) updates.set(cardId, card.order);
       for (const [id, order] of updates) {
@@ -337,13 +348,14 @@ export function BoardView({
   const renameColumn = (columnId: string, name: string) =>
     actions.saveBoard({ ...board, columns: board.columns.map((c) => (c.id === columnId ? { ...c, name } : c)) });
 
-  // Rewrites the positions of the column's cards: highest priority first, then the current order.
-  // Rewrites the positions of the column's cards in the chosen order.
-  const sortColumn = (columnId: string, key: SortKey) => {
-    const sorted = sortCards(cards.filter((c) => c.columnId === columnId), key, board);
-    sorted.forEach((c, i) => {
-      if (c.order !== i) actions.saveCard({ ...c, order: i });
-    });
+  // A column's sort. Back to « by hand »: the cards keep the place they had, their order rewritten to it.
+  const setColumnSort = (column: (typeof board.columns)[number], sort: ColumnSort) => {
+    if (sort === "manual" && columnSort(column) !== "manual") {
+      orderColumn(cards.filter((c) => c.columnId === column.id), column, board).forEach((c, i) => {
+        if (c.order !== i) actions.saveCard({ ...c, order: i });
+      });
+    }
+    updateColumn(column.id, { sort });
   };
 
   const togglePriority = (id: string) =>
@@ -611,7 +623,7 @@ export function BoardView({
                 onAdd={(title) => addCard(col.id, title)}
                 onRename={(name) => renameColumn(col.id, name)}
                 onDelete={() => actions.deleteColumn(board, col.id, cards)}
-                onSort={(key) => sortColumn(col.id, key)}
+                onSort={(sort) => setColumnSort(col, sort)}
                 total={cards.filter((c) => c.columnId === col.id).length}
                 onUpdate={(patch) => updateColumn(col.id, patch)}
               />

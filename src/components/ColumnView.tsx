@@ -6,7 +6,7 @@ import { CardTile } from "./CardTile";
 import { DangerButton, InlineEdit } from "./ui";
 import { emptyColumnLine } from "../lib/utils";
 import { refOf } from "../lib/shortid";
-import { SORT_KEYS, type SortKey } from "../lib/sorting";
+import { COLUMN_SORTS, columnSort, type ColumnSort } from "../lib/sorting";
 import { t, tn } from "../lib/i18n";
 
 interface Props {
@@ -27,7 +27,8 @@ interface Props {
   onAdd: (title: string) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
-  onSort: (key: SortKey) => void;
+  /** Changes how the column orders its cards. */
+  onSort: (sort: ColumnSort) => void;
   /** Cards in the column, filters aside: what the limit counts. */
   total: number;
   onUpdate: (patch: Partial<Column>) => void;
@@ -69,12 +70,13 @@ export function ColumnView({ column, cards, labels, priorities, blockers, checkl
         <span className="count" title={over ? t("column.overLimit", { n: total, limit: column.limit! }) : undefined}>
           {column.limit !== undefined ? `${total}/${column.limit}` : cards.length}
         </span>
+        <ColumnSortBadge column={column} onSort={onSort} />
         {column.archiveAfter && (
           <span className="auto-archive" title={tn("column.autoArchiveTitle", column.archiveAfter)}>
             🗄 {t("dur.d", { d: column.archiveAfter })}
           </span>
         )}
-        <ColumnMenu column={column} canSort={cards.length > 1} onSort={onSort} onUpdate={onUpdate} />
+        <ColumnMenu column={column} onSort={onSort} onUpdate={onUpdate} />
         <DangerButton
           className="icon-btn"
           onConfirm={onDelete}
@@ -169,16 +171,47 @@ function QuickAdd({ onAdd }: { onAdd: (title: string) => void }) {
   );
 }
 
-/** ⋯ on a column: sort it, collapse it, set its card limit and its automatic archiving. */
+/** The column's sort in its header (↓ Priorité); a click opens the choices. */
+function ColumnSortBadge({ column, onSort }: { column: Column; onSort: (sort: ColumnSort) => void }) {
+  const [open, setOpen] = useState(false);
+  const current = columnSort(column);
+  return (
+    <span className="sort-menu column-sort" onPointerDown={(e) => e.stopPropagation()} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setOpen(false)}>
+      <button className="sort-badge" onClick={() => setOpen((o) => !o)} title={t(column.sort ? "column.sortTitleChosen" : "column.sortTitleDefault")} aria-expanded={open}>
+        {current === "manual" ? "↕" : "↓"} {t(`sort.short.${current}`)}
+      </button>
+      {open && (
+        <div className="sort-options" role="menu">
+          <SortChoices current={current} onSort={(sort) => (onSort(sort), setOpen(false))} />
+        </div>
+      )}
+    </span>
+  );
+}
+
+/** The sorts a column can have, the current one ticked. */
+function SortChoices({ current, onSort }: { current: ColumnSort; onSort: (sort: ColumnSort) => void }) {
+  return (
+    <>
+      <div className="menu-title">{t("column.sortTitle")}</div>
+      {COLUMN_SORTS.map((sort) => (
+        <button key={sort} role="menuitemradio" aria-checked={sort === current} onClick={() => onSort(sort)}>
+          {sort === current ? "✓ " : ""}
+          {t(`sort.${sort}`)}
+        </button>
+      ))}
+    </>
+  );
+}
+
+/** ⋯ on a column: its sort, collapse it, set its card limit and its automatic archiving. */
 function ColumnMenu({
   column,
-  canSort,
   onSort,
   onUpdate,
 }: {
   column: Column;
-  canSort: boolean;
-  onSort: (key: SortKey) => void;
+  onSort: (sort: ColumnSort) => void;
   onUpdate: (patch: Partial<Column>) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -206,20 +239,13 @@ function ColumnMenu({
       </button>
       {open && (
         <div className="sort-options" role="menu">
-          {canSort && <div className="menu-title">{t("column.sortTitle")}</div>}
-          {canSort &&
-            SORT_KEYS.map((key) => (
-              <button
-                key={key}
-                role="menuitem"
-                onClick={() => {
-                  onSort(key);
-                  setOpen(false);
-                }}
-              >
-                {t(`sort.${key}`)}
-              </button>
-            ))}
+          <SortChoices
+            current={columnSort(column)}
+            onSort={(sort) => {
+              onSort(sort);
+              setOpen(false);
+            }}
+          />
           <button
             role="menuitem"
             onClick={() => {

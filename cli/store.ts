@@ -23,6 +23,7 @@ import { mapByName } from "../src/lib/transfer";
 import { boardSetup, fromSetup } from "../src/lib/templates";
 import { setLang } from "../src/lib/i18n";
 import { parseRepo } from "../src/lib/reviews";
+import { orderColumn } from "../src/lib/sorting";
 import { acquireLock, type LockOptions } from "./lock";
 
 export class TodoomError extends Error {}
@@ -98,6 +99,20 @@ function writeAtomic(path: string, data: unknown) {
   const tmp = `${path}.${process.pid}.tmp`;
   writeFileSync(tmp, text, "utf8");
   renameSync(tmp, path);
+}
+
+/**
+ * The cards column by column, each column in the order the app shows it (its
+ * sort: priority…, or by hand): the first card of « À faire » is the one at the top
+ * on screen. Cards of a column that no longer exists come last.
+ */
+function inBoardOrder(cards: Card[], board: Board): Card[] {
+  const byOrder = [...cards].sort((a, b) => a.order - b.order);
+  const known = new Set(board.columns.map((c) => c.id));
+  return [
+    ...board.columns.flatMap((column) => orderColumn(byOrder.filter((c) => c.columnId === column.id), column, board)),
+    ...byOrder.filter((c) => !known.has(c.columnId)),
+  ];
 }
 
 /** Why a card or board is refused, in a sentence. */
@@ -250,7 +265,7 @@ export class Store {
         /* unreadable: reported by the app */
       }
     }
-    return cards.sort((a, b) => a.order - b.order);
+    return inBoardOrder(cards, board);
   }
 
   /** A card by its short id (SOL-42), its id, or a unique start of its id, on any board. */

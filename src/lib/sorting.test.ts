@@ -1,22 +1,74 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "../types";
-import { loadFilter, matchesDue, NO_FILTER, saveFilter, sortCards } from "./sorting";
+import { columnSort, loadFilter, matchesDue, NO_FILTER, orderColumn, saveFilter, tiedWith } from "./sorting";
 
 const card = (id: string, patch: Partial<Card>) => ({ id, order: 0, priority: null, due: null, createdAt: "", updatedAt: "", ...patch }) as Card;
 
-describe("sorting a column", () => {
+describe("the order of a column", () => {
+  const today = "2026-11-23";
   const cards = [
     card("a", { order: 0, priority: "p3", due: "2026-12-10", createdAt: "2026-11-03", updatedAt: "2026-11-20" }),
     card("b", { order: 1, priority: "p1", due: null, createdAt: "2026-11-01", updatedAt: "2026-11-18" }),
     card("c", { order: 2, priority: null, due: "2026-11-25", createdAt: "2026-11-02", updatedAt: "2026-11-21" }),
   ];
-  const ids = (key: Parameters<typeof sortCards>[1]) => sortCards(cards, key, {}).map((c) => c.id);
+  const ids = (sort: string, list = cards, name = "Colonne") => orderColumn(list, { name, sort }, {}, today).map((c) => c.id);
 
-  it("sorts by priority, due date, creation and last change", () => {
+  it("sorts by priority, due date, creation and last change, or keeps the order by hand", () => {
     expect(ids("priority")).toEqual(["b", "a", "c"]);
     expect(ids("due")).toEqual(["c", "a", "b"]);
     expect(ids("created")).toEqual(["b", "c", "a"]);
     expect(ids("updated")).toEqual(["c", "a", "b"]);
+    expect(ids("manual", [cards[2], cards[0], cards[1]])).toEqual(["a", "b", "c"]);
+  });
+
+  it("settles a tie on the priority with the due date, then the order by hand", () => {
+    const list = [
+      card("x", { order: 0, priority: "p1", due: null }),
+      card("y", { order: 1, priority: "p1", due: "2026-12-01" }),
+      card("z", { order: 2, priority: "p1", due: "2026-12-01" }),
+      card("w", { order: 3, priority: "p1", due: "2026-11-30" }),
+    ];
+    expect(ids("priority", list)).toEqual(["w", "y", "z", "x"]);
+  });
+
+  it("puts a late card first when kept sorted, not by hand nor in a done column", () => {
+    const late = card("late", { order: 5, priority: "p3", due: "2026-11-20", updatedAt: "2026-11-01" });
+    expect(ids("priority", [...cards, late])[0]).toBe("late");
+    expect(ids("created", [...cards, late])[0]).toBe("late");
+    expect(ids("manual", [...cards, late]).pop()).toBe("late");
+    expect(ids("updated", [...cards, late], "Terminé").pop()).toBe("late");
+  });
+
+  it("follows the board's own priority levels", () => {
+    const board = { priorities: [{ id: "low", name: "Basse", color: "" }, { id: "high", name: "Haute", color: "" }] };
+    const list = [card("h", { order: 0, priority: "high" }), card("l", { order: 1, priority: "low" })];
+    expect(orderColumn(list, { name: "À faire" }, board, today).map((c) => c.id)).toEqual(["l", "h"]);
+  });
+
+  it("chooses a sort from the column's name until one is chosen", () => {
+    expect(columnSort({ name: "À faire" })).toBe("priority");
+    expect(columnSort({ name: "En cours" })).toBe("priority");
+    expect(columnSort({ name: "Backlog" })).toBe("priority");
+    expect(columnSort({ name: "A vérifier" })).toBe("manual");
+    expect(columnSort({ name: "Terminé" })).toBe("updated");
+    expect(columnSort({ name: "Done" })).toBe("updated");
+    expect(columnSort({ name: "À faire", sort: "due" })).toBe("due");
+    expect(columnSort({ name: "Terminé", sort: "manual" })).toBe("manual");
+    // A sort a newer version would know: the default, not an error.
+    expect(columnSort({ name: "À faire", sort: "magic" })).toBe("priority");
+  });
+
+  it("lets a drag reorder only the cards tied with the one moved", () => {
+    const list = [
+      card("p1a", { order: 0, priority: "p1" }),
+      card("p1b", { order: 1, priority: "p1" }),
+      card("p2", { order: 2, priority: "p2" }),
+      card("p1late", { order: 3, priority: "p1", due: "2026-11-01" }),
+    ];
+    const byId = new Map(list.map((c) => [c.id, c]));
+    const after = ["p2", "p1b", "p1a", "p1late"];
+    expect(tiedWith(after, "p1a", (id) => byId.get(id), { name: "À faire" }, {}, today)).toEqual(["p1b", "p1a"]);
+    expect(tiedWith(after, "p1a", (id) => byId.get(id), { name: "A verifier" }, {}, today)).toEqual(after);
   });
 });
 

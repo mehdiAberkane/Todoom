@@ -65,6 +65,10 @@
             "type": "integer",
             "minimum": 1,
             "description": "Cards that stayed this many days in the column are archived by the app (time from the cards' history)."
+          },
+          "sort": {
+            "type": "string",
+            "description": "How the column orders its cards: \"manual\" (their order), or kept sorted by \"priority\" (then due date), \"due\" (then priority), \"created\" (oldest first), \"updated\" (latest first); when kept sorted, a late card comes first (not in a done column). Absent: chosen from the name (« Terminé »: updated; « A verifier »: manual; any other: priority). An unknown value counts as absent. Agents take the cards in this order."
           }
         }
       },

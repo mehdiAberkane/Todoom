@@ -65,7 +65,9 @@ ignorés, un début unique suffit), les cartes par `TOD-12`.
 ### Traiter un ticket
 
 1. `get_board` : lire le contexte du tableau, et le suivre.
-2. `list_cards` avec la colonne « À faire » : prendre la **première** carte, dans l'ordre.
+2. `list_cards` avec la colonne « À faire » : prendre la **première** carte. La liste suit
+   l'ordre affiché de la colonne : son tri (par défaut, la priorité puis l'échéance, une
+   carte en retard en tête), ou l'ordre à la main si l'utilisateur l'a choisi.
 3. `get_card` : lire la description, la checklist, les commentaires et les liens.
 4. `claim_card` avec `column` « En cours » et `conversation` (nom court de la
    conversation). **S'il est refusé** parce qu'un autre l'a pris : ne pas y toucher,
@@ -119,7 +121,14 @@ Todoom/
 - **Format de chaque fichier** : [schema/](schema/) (schémas JSON).
 - **Un fichier par carte** : un conflit Drive ne touche qu'une carte, et les copies de
   conflit (`x (1).json`) sont fusionnées.
-- **Ordre** : `order` est décimal, déplacer une carte ne réécrit qu'elle.
+- **Ordre** : `order` est décimal, déplacer une carte ne réécrit qu'elle. Chaque colonne a
+  un tri (`sort` dans `board.json`) :
+  - `manual` : l'ordre `order` ;
+  - `priority`, `due`, `created` ou `updated` : `order` ne départage plus que les égalités ;
+  - sans `sort`, il dépend du nom de la colonne : « Terminé » en `updated`, « A verifier »
+    en `manual`, les autres en `priority`.
+
+  L'application, la commande, le serveur MCP et l'agent Python appliquent le même ordre.
 - **Fichiers illisibles** : signalés dans l'application (« ⚠ fichiers ignorés »),
   jamais écrasés.
 
