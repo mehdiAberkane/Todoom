@@ -11,6 +11,9 @@ tableaux sans écrire les fichiers JSON à la main. Les deux passent par le mêm
   face aux copies de conflit de Drive ;
 - une carte créée ou déplacée va en bas de sa colonne, comme dans l'application ;
 - un fichier illisible est ignoré, jamais écrasé.
+- sur un même ordinateur, deux écritures (deux conversations Claude, un script) passent l’une après l’autre : un verrou local les sépare (dans le dossier des réglages de Todoom, pas dans Drive). Juste avant d’écrire une carte, elle est relue : si elle a changé entre-temps (par l’application, par exemple), l’opération est refaite sur la version à jour. Une prise de carte (`claim`) est alors refusée si quelqu’un l’a prise entre-temps.
+
+Entre deux ordinateurs, ce verrou ne sert pas : Drive met quelques secondes à porter chaque fichier. Deux cartes créées au même moment sur deux ordinateurs peuvent recevoir le même numéro ; l’application en renumérote une, et la référence donnée par la commande (`TOD-12`) peut alors changer.
 
 L'application ouverte voit les changements d'elle-même, en quelques secondes.
 

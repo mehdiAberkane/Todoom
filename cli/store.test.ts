@@ -1,9 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cardProblem } from "../src/lib/validate";
 import { findDataDir, normalize, Store, TodoomError } from "./store";
+import { acquireLock, LockBusy, lockPath } from "./lock";
+
+// The lock files of these tests stay in a temporary folder, not in Todoom's settings.
+process.env.TODOOM_LOCK_DIR = mkdtempSync(join(tmpdir(), "todoom-locks-"));
 
 let dir: string;
 let store: Store;
@@ -286,6 +290,63 @@ describe("a new board", () => {
     expect(() => store.createBoard("X", { repo: "file:///etc" })).toThrow(/dépôt/);
     expect(store.boards().map((b) => b.name)).toEqual(["Todoom"]);
   });
+});
+
+describe("two writers on the same computer", () => {
+  // The app writes without this lock: what it writes between our reading and our writing is kept.
+  const appWrites = (id: string, patch: Record<string, unknown>) => {
+    const file = join(cardsDir(), `${id}.json`);
+    const card = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify({ ...card, ...patch, updatedAt: new Date(Date.parse(card.updatedAt) + 1000).toISOString() }));
+  };
+  const someoneElse = (conversation: string) => ({ host: "PC-Main", agent: "Claude", conversation, at: "2026-11-23T10:00:00.000Z" });
+
+  it("a card changed underneath is written again from the fresh version", () => {
+    const a = store.create("Todoom", "Carte");
+    let once = true;
+    // Between the reading and the writing of the update, the card is taken elsewhere.
+    store.beforeWrite = () => {
+      if (!once) return;
+      once = false;
+      appWrites(a.id, { claimedBy: someoneElse("autre") });
+    };
+    const updated = store.update(a.id, { title: "Carte renommée" });
+    expect(updated.title).toBe("Carte renommée");
+    // The other one's claim was not lost.
+    expect(onDisk(a.id).claimedBy?.conversation).toBe("autre");
+  });
+
+  it("a claim made underneath wins: the second one is refused", () => {
+    const a = store.create("Todoom", "Carte");
+    let once = true;
+    store.beforeWrite = () => {
+      if (!once) return;
+      once = false;
+      appWrites(a.id, { claimedBy: someoneElse("première") });
+    };
+    expect(() => store.claim(a.id, { conversation: "seconde" })).toThrow(/déjà pris/);
+    expect(onDisk(a.id).claimedBy.conversation).toBe("première");
+  });
+
+  it("waits for the lock, takes over one left by a dead process", () => {
+    const lockDir = mkdtempSync(join(tmpdir(), "todoom-lock-"));
+    const release = acquireLock(dir, { dir: lockDir });
+    // Held by this live process: another taker waits, then gives up.
+    expect(() => acquireLock(dir, { dir: lockDir, waitMs: 50 })).toThrow(LockBusy);
+    release();
+    acquireLock(dir, { dir: lockDir })();
+    // Left by a process that no longer exists, a while ago: taken over at once.
+    const abandoned = lockPath(dir, lockDir);
+    writeFileSync(abandoned, JSON.stringify({ pid: 999999, at: "2026-01-01T00:00:00Z" }));
+    const old = new Date(Date.now() - 5000);
+    utimesSync(abandoned, old, old);
+    acquireLock(dir, { dir: lockDir, waitMs: 50 })();
+    // Just written by a process gone at once: not judged abandoned yet (Windows may still show a lock just given back).
+    writeFileSync(abandoned, JSON.stringify({ pid: 999999, at: new Date().toISOString() }));
+    expect(() => acquireLock(dir, { dir: lockDir, waitMs: 50 })).toThrow(LockBusy);
+    rmSync(lockDir, { recursive: true, force: true });
+  });
+
 });
 
 describe("data folder", () => {

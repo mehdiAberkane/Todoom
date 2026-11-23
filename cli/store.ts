@@ -23,8 +23,12 @@ import { mapByName } from "../src/lib/transfer";
 import { boardSetup, fromSetup } from "../src/lib/templates";
 import { setLang } from "../src/lib/i18n";
 import { parseRepo } from "../src/lib/reviews";
+import { acquireLock, type LockOptions } from "./lock";
 
 export class TodoomError extends Error {}
+
+/** The card changed on disk between its reading and its writing: the operation is done again on the fresh version. */
+class StaleCard extends Error {}
 
 const APP_ID = "fr.devsecopsforce.todoom";
 
@@ -147,10 +151,41 @@ export function identity(tool: Identity["tool"], agent = process.env.TODOOM_AGEN
 }
 
 export class Store {
+  /** Locks held by this Store (an operation may call another one, as branch --save calls update). */
+  private held = 0;
+
   constructor(
     readonly dir: string,
     readonly who: Identity = identity("cli"),
+    /** The lock around each write; its files go to Todoom's local settings folder unless said otherwise. */
+    readonly lock: LockOptions = { dir: process.env.TODOOM_LOCK_DIR || dirname(appConfigPath()) },
   ) {}
+
+  /**
+   * Runs a write operation under the data folder's lock (see lock.ts), done again
+   * from the start when a card changed on disk meanwhile (the app may write too):
+   * a claim then sees the fresh holder, a number the fresh cards.
+   */
+  locked<T>(operation: () => T): T {
+    if (this.held) return operation();
+    const release = acquireLock(this.dir, this.lock);
+    this.held++;
+    try {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return operation();
+        } catch (e) {
+          if (!(e instanceof StaleCard) || attempt >= 3) throw e instanceof StaleCard ? new TodoomError(e.message) : e;
+        }
+      }
+    } finally {
+      this.held--;
+      release();
+    }
+  }
+
+  /** For tests: called just before a card is written, to change it underneath. */
+  beforeWrite?: (card: Card) => void;
 
   private boardDir(id: string) {
     return join(this.dir, "boards", id);
@@ -378,7 +413,12 @@ export class Store {
     const saved = { ...card, updatedAt: nextUpdatedAt(previous?.updatedAt) };
     const problem = cardProblem(saved);
     if (problem) throw new TodoomError(`Carte refusée (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
-    writeAtomic(join(this.boardDir(board.id), "cards", `${card.id}.json`), saved);
+    const path = join(this.boardDir(board.id), "cards", `${card.id}.json`);
+    // Read again just before writing: changed since (by the app, or before the lock), the operation starts over.
+    this.beforeWrite?.(card);
+    const onDisk = existsSync(path) ? (readJson(path) as Card).updatedAt : undefined;
+    if (onDisk !== previous?.updatedAt) throw new StaleCard(`La carte ${card.id} a changé pendant l'écriture : réessaie.`);
+    writeAtomic(path, saved);
     this.record(board, previous, saved);
     return saved;
   }
@@ -659,6 +699,14 @@ export class Store {
     writeAtomic(path, comment);
     return { ...comment, ref: refOf(board, card) };
   }
+}
+
+// Every operation that writes goes through the lock.
+for (const name of ["createBoard", "setBoardDescription", "create", "update", "move", "moveToBoard", "archive", "restore", "link", "unlink", "claim", "release", "comment"] as const) {
+  const operation = Store.prototype[name] as (...args: unknown[]) => unknown;
+  (Store.prototype as unknown as Record<string, unknown>)[name] = function (this: Store, ...args: unknown[]) {
+    return this.locked(() => operation.apply(this, args));
+  };
 }
 
 const LINK_NAMES: Record<string, LinkType> = {
