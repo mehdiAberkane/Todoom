@@ -58,6 +58,13 @@ export function parseRepo(text: string | undefined): Repo | null {
   return { forge, host: forge === "github" ? "github.com" : host, path: (forge === "github" ? parts.slice(0, 2) : parts).join("/") };
 }
 
+/**
+ * The name a repository is known by (what was seen, the open ones of « Mon travail »):
+ * GitHub and GitLab don't mind the case of a path, so two boards naming the same
+ * repository differently share it, and it is read once.
+ */
+export const repoKey = (repo: Repo) => `${repo.forge}:${repo.host}/${repo.path}`.toLowerCase();
+
 /** The repository's web page, for a link next to the list. */
 export const repoUrl = (repo: Repo) => `https://${repo.host}/${repo.path}`;
 
@@ -103,49 +110,75 @@ export function ciOfPipeline(status: string | null | undefined): CiState {
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
-/** gh pr list --json number,title,url,isDraft,headRefName,author,statusCheckRollup,updatedAt */
-export function githubReviews(output: string): Review[] {
-  const list: unknown = JSON.parse(output);
-  if (!Array.isArray(list)) throw new Error("unexpected output");
-  return list.map((p) => ({
-    number: Number(p.number) || 0,
-    title: str(p.title),
-    url: str(p.url),
-    draft: p.isDraft === true,
-    branch: str(p.headRefName),
-    author: str(p.author?.login).replace(/^app\//, ""),
-    ...(p.author?.is_bot === true ? { bot: true } : {}),
-    ci: ciOfChecks(Array.isArray(p.statusCheckRollup) ? p.statusCheckRollup : []),
-    updatedAt: str(p.updatedAt),
-    ...(str(p.mergedAt) ? { mergedAt: str(p.mergedAt) } : {}),
-  }));
+/** What one look at a repository brings: its open ones and its latest merged ones. */
+export interface ReviewSets {
+  open: Review[];
+  merged: Review[];
 }
 
-/** glab api graphql: project.mergeRequests.nodes (see GITLAB_QUERY in Rust). */
-export function gitlabReviews(output: string): Review[] {
+/** The open and merged lists of a GraphQL answer ({ data: { <root>: { open, merged } } }). */
+function graphqlSets(output: string, root: "repository" | "project"): { open: unknown[]; merged: unknown[] } {
   const data = JSON.parse(output);
   if (data?.errors?.length) throw new Error(str(data.errors[0]?.message) || "GraphQL error");
-  const project = data?.data?.project;
-  if (!project) throw new Error("notfound");
-  const nodes: unknown = project.mergeRequests?.nodes;
-  if (!Array.isArray(nodes)) throw new Error("unexpected output");
-  return nodes.map((m) => ({
-    number: Number(m.iid) || 0,
-    title: str(m.title),
-    url: str(m.webUrl),
-    draft: m.draft === true,
-    branch: str(m.sourceBranch),
-    author: str(m.author?.username),
-    ci: ciOfPipeline(m.headPipeline?.status),
-    updatedAt: str(m.updatedAt),
-    ...(str(m.mergedAt) ? { mergedAt: str(m.mergedAt) } : {}),
-  }));
+  const found = data?.data?.[root];
+  if (!found) throw new Error("notfound");
+  const open: unknown = found.open?.nodes;
+  const merged: unknown = found.merged?.nodes;
+  if (!Array.isArray(open) || !Array.isArray(merged)) throw new Error("unexpected output");
+  return { open, merged };
 }
 
-/** The review list from a tool's output, newest first. */
-export function parseReviews(forge: Forge, output: string): Review[] {
-  const list = forge === "github" ? githubReviews(output) : gitlabReviews(output);
-  return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a node of the tool's JSON, read field by field
+function githubReview(p: any): Review {
+  const checks = p?.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes;
+  return {
+    number: Number(p?.number) || 0,
+    title: str(p?.title),
+    url: str(p?.url),
+    draft: p?.isDraft === true,
+    branch: str(p?.headRefName),
+    author: str(p?.author?.login),
+    ...(p?.author?.__typename === "Bot" ? { bot: true } : {}),
+    ci: ciOfChecks(Array.isArray(checks) ? checks : []),
+    updatedAt: str(p?.updatedAt),
+    ...(str(p?.mergedAt) ? { mergedAt: str(p.mergedAt) } : {}),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a node of the tool's JSON, read field by field
+function gitlabReview(m: any): Review {
+  return {
+    number: Number(m?.iid) || 0,
+    title: str(m?.title),
+    url: str(m?.webUrl),
+    draft: m?.draft === true,
+    branch: str(m?.sourceBranch),
+    author: str(m?.author?.username),
+    ci: ciOfPipeline(m?.headPipeline?.status),
+    updatedAt: str(m?.updatedAt),
+    ...(str(m?.mergedAt) ? { mergedAt: str(m.mergedAt) } : {}),
+  };
+}
+
+/** gh api graphql: repository.open / repository.merged (see GITHUB_QUERY in Rust). */
+export function githubReviews(output: string): ReviewSets {
+  const sets = graphqlSets(output, "repository");
+  return { open: sets.open.map(githubReview), merged: sets.merged.map(githubReview) };
+}
+
+/** glab api graphql: project.open / project.merged (see GITLAB_QUERY in Rust). */
+export function gitlabReviews(output: string): ReviewSets {
+  const sets = graphqlSets(output, "project");
+  return { open: sets.open.map(gitlabReview), merged: sets.merged.map(gitlabReview) };
+}
+
+/**
+ * The lists from a tool's output: the open ones newest first, and those merged
+ * in the last 24 hours, latest first.
+ */
+export function parseReviews(forge: Forge, output: string, now = Date.now()): ReviewSets {
+  const sets = forge === "github" ? githubReviews(output) : gitlabReviews(output);
+  return { open: sets.open.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), merged: recentlyMerged(sets.merged, now) };
 }
 
 /** The merged ones of the last 24 hours, latest first. */

@@ -4,7 +4,7 @@ import { backend } from "../lib/backend";
 import { t } from "../lib/i18n";
 import { refOf } from "../lib/shortid";
 import { openExternal } from "../lib/open";
-import { cardOfReview, parseRepo, parseReviews, recentlyMerged, repoUrl, reviewError, type Repo, type Review, type ReviewError } from "../lib/reviews";
+import { cardOfReview, parseRepo, parseReviews, repoUrl, reviewError, type Repo, type Review, type ReviewError } from "../lib/reviews";
 import { formatDateTime } from "../lib/utils";
 
 const REFRESH_MS = 60_000;
@@ -35,13 +35,10 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
     if (!r) return;
     setLoading(true);
     try {
-      // The open ones, and those merged in the last 24 hours (their absence isn't an error).
-      const [open, done] = await Promise.all([
-        backend.listReviews(r.forge, r.host, r.path),
-        backend.listReviews(r.forge, r.host, r.path, true).catch(() => null),
-      ]);
-      setReviews(parseReviews(r.forge, open));
-      setMerged(done ? recentlyMerged(parseReviews(r.forge, done)) : []);
+      // The open ones, and those merged in the last 24 hours: one gh or glab launched.
+      const sets = parseReviews(r.forge, await backend.listReviews(r.forge, r.host, r.path));
+      setReviews(sets.open);
+      setMerged(sets.merged);
       setError(null);
     } catch (e) {
       setError(reviewError(e));

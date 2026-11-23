@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AppSettings, Board, Card } from "../types";
 import type { Repo, Review } from "./reviews";
-import { allowed, isBot, MAX_POPUPS, noticesOf, reviewEvents, reviewNotifySettings, watchedRepos, type Seen } from "./reviewWatch";
+import { allowed, AWAY_LONG_MS, isBot, MAX_POPUPS, nextLookDelay, noticesOf, PR_WATCH_FAST_MS, PR_WATCH_SLOW_MS, reviewEvents, reviewNotifySettings, watchedRepos, type Seen } from "./reviewWatch";
 
 const pr = (number: number, patch: Partial<Review> = {}): Review => ({
   number,
@@ -78,9 +78,31 @@ describe("what is shown", () => {
     const boards = [
       { id: "a", repo: "https://github.com/o/r" },
       { id: "b", repo: "git@github.com:o/r.git" },
+      { id: "e", repo: "https://github.com/O/R" },
       { id: "c", repo: "https://gitlab.com/g/p", archivedAt: "x" },
       { id: "d" },
     ] as Board[];
     expect(watchedRepos(boards).map((w) => [w.key, w.board.id])).toEqual([["github:github.com/o/r", "a"]]);
+  });
+});
+
+describe("when to look again", () => {
+  const now = Date.parse("2026-11-23T12:00:00Z");
+  const done = (n: number, patch: Partial<Review> = {}) => pr(n, { ci: "success", ...patch });
+
+  it("soon while a CI runs, even away from Todoom for long", () => {
+    expect(nextLookDelay([done(1), pr(2)], null, now)).toBe(PR_WATCH_FAST_MS);
+    expect(nextLookDelay([pr(2, { author: "dependabot" })], now - 3 * AWAY_LONG_MS, now)).toBe(PR_WATCH_FAST_MS);
+  });
+
+  it("soon while a person's pull request is open, unless away for long", () => {
+    expect(nextLookDelay([done(1)], null, now)).toBe(PR_WATCH_FAST_MS);
+    expect(nextLookDelay([done(1)], now - AWAY_LONG_MS + 1000, now)).toBe(PR_WATCH_FAST_MS);
+    expect(nextLookDelay([done(1)], now - AWAY_LONG_MS, now)).toBe(PR_WATCH_SLOW_MS);
+  });
+
+  it("slowly when nothing is open, or only robots' with their CI done", () => {
+    expect(nextLookDelay([], null, now)).toBe(PR_WATCH_SLOW_MS);
+    expect(nextLookDelay([done(3, { author: "dependabot" }), done(4, { author: "renovate[bot]", ci: "failure" })], null, now)).toBe(PR_WATCH_SLOW_MS);
   });
 });

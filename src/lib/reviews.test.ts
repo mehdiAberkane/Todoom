@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "../types";
-import { cardOfReview, ciOfChecks, ciOfPipeline, githubReviews, gitlabReviews, parseRepo, parseReviews, recentlyMerged, reviewError } from "./reviews";
+import { cardOfReview, ciOfChecks, ciOfPipeline, githubReviews, gitlabReviews, parseRepo, parseReviews, recentlyMerged, repoKey, reviewError } from "./reviews";
 
 describe("the repository of a board", () => {
   it("is read from the address one copies, web or clone", () => {
@@ -39,55 +39,78 @@ describe("the CI state", () => {
 });
 
 describe("what the tools return", () => {
-  it("reads gh pr list", () => {
-    const out = JSON.stringify([
-      {
-        number: 5,
-        title: "Bump typescript",
-        url: "https://github.com/o/r/pull/5",
-        isDraft: false,
-        headRefName: "dependabot/npm/typescript",
-        author: { login: "app/dependabot", is_bot: true },
-        statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE" }],
-        updatedAt: "2026-11-22T12:00:00Z",
-      },
-    ]);
-    expect(githubReviews(out)).toEqual([
+  // As gh api graphql answers GITHUB_QUERY (shape taken from a real answer).
+  const pr = (number: number, patch: Record<string, unknown> = {}) => ({
+    number,
+    title: `PR ${number}`,
+    url: `https://github.com/o/r/pull/${number}`,
+    isDraft: false,
+    headRefName: `b${number}`,
+    updatedAt: "2026-11-22T12:00:00Z",
+    mergedAt: null,
+    author: { __typename: "User", login: "me" },
+    commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" }] } } } }] },
+    ...patch,
+  });
+  const github = (open: unknown[], merged: unknown[]) => JSON.stringify({ data: { repository: { open: { nodes: open }, merged: { nodes: merged } } } });
+
+  it("reads gh api graphql: the open ones and the merged ones in one answer", () => {
+    const bot = pr(5, {
+      title: "Bump typescript",
+      headRefName: "dependabot/npm/typescript",
+      author: { __typename: "Bot", login: "dependabot" },
+      commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE" }] } } } }] },
+    });
+    const sets = githubReviews(github([bot, pr(6, { commits: { nodes: [{ commit: { statusCheckRollup: null } }] } })], [pr(4, { mergedAt: "2026-11-22T11:00:00Z" })]));
+    expect(sets.open).toEqual([
       { number: 5, title: "Bump typescript", url: "https://github.com/o/r/pull/5", draft: false, branch: "dependabot/npm/typescript", author: "dependabot", bot: true, ci: "failure", updatedAt: "2026-11-22T12:00:00Z" },
+      { number: 6, title: "PR 6", url: "https://github.com/o/r/pull/6", draft: false, branch: "b6", author: "me", ci: "none", updatedAt: "2026-11-22T12:00:00Z" },
     ]);
+    expect(sets.merged.map((r) => [r.number, r.mergedAt, r.ci])).toEqual([[4, "2026-11-22T11:00:00Z", "success"]]);
+  });
+
+  it("says when the repository isn't there, or GraphQL refused", () => {
+    expect(() => githubReviews(JSON.stringify({ data: { repository: null } }))).toThrow("notfound");
+    expect(() => githubReviews(JSON.stringify({ errors: [{ message: "Bad credentials" }] }))).toThrow("Bad credentials");
+    expect(() => githubReviews("[]")).toThrow();
   });
 
   it("reads glab api graphql, and says when the project isn't there", () => {
+    const mr = (iid: string, patch: Record<string, unknown>) => ({ iid, title: `MR ${iid}`, webUrl: `https://gitlab.com/g/p/-/merge_requests/${iid}`, draft: false, sourceBranch: `b${iid}`, updatedAt: "2026-11-22T10:00:00Z", mergedAt: null, author: { username: "me" }, headPipeline: null, ...patch });
     const out = JSON.stringify({
       data: {
         project: {
-          mergeRequests: {
-            nodes: [
-              { iid: "12", title: "Export", webUrl: "https://gitlab.com/g/p/-/merge_requests/12", draft: true, sourceBranch: "feature/export", updatedAt: "2026-11-21T10:00:00Z", author: { username: "me" }, headPipeline: { status: "RUNNING" } },
-              { iid: "13", title: "Fix", webUrl: "https://gitlab.com/g/p/-/merge_requests/13", draft: false, sourceBranch: "bugfix/x", updatedAt: "2026-11-22T10:00:00Z", author: { username: "me" }, headPipeline: null },
-            ],
-          },
+          open: { nodes: [mr("12", { draft: true, updatedAt: "2026-11-21T10:00:00Z", headPipeline: { status: "RUNNING" } }), mr("13", {})] },
+          merged: { nodes: [mr("11", { mergedAt: "2026-11-22T09:00:00Z" })] },
         },
       },
     });
-    expect(parseReviews("gitlab", out).map((r) => [r.number, r.draft, r.ci])).toEqual([
+    const sets = parseReviews("gitlab", out, Date.parse("2026-11-22T14:00:00Z"));
+    expect(sets.open.map((r) => [r.number, r.draft, r.ci])).toEqual([
       [13, false, "none"],
       [12, true, "running"],
     ]);
+    expect(sets.merged.map((r) => r.number)).toEqual([11]);
     expect(() => gitlabReviews(JSON.stringify({ data: { project: null } }))).toThrow("notfound");
   });
 });
 
 describe("merged ones", () => {
   it("keeps those merged in the last 24 hours, latest first", () => {
-    const out = JSON.stringify([
-      { number: 31, title: "a", url: "u31", headRefName: "x", mergedAt: "2026-11-22T12:59:45Z", updatedAt: "2026-11-22T12:59:45Z" },
-      { number: 30, title: "b", url: "u30", headRefName: "y", mergedAt: "2026-11-22T12:40:15Z", updatedAt: "2026-11-22T12:40:15Z" },
-      { number: 20, title: "c", url: "u20", headRefName: "z", mergedAt: "2026-11-20T10:00:00Z", updatedAt: "2026-11-20T10:00:00Z" },
-    ]);
+    const merged = (number: number, at: string) => ({ number, title: "m", url: `u${number}`, headRefName: "x", mergedAt: at, updatedAt: at });
+    const out = JSON.stringify({
+      data: { repository: { open: { nodes: [] }, merged: { nodes: [merged(30, "2026-11-22T12:40:15Z"), merged(20, "2026-11-20T10:00:00Z"), merged(31, "2026-11-22T12:59:45Z")] } } },
+    });
     const now = Date.parse("2026-11-22T14:00:00Z");
-    expect(recentlyMerged(githubReviews(out), now).map((r) => r.number)).toEqual([31, 30]);
-    expect(githubReviews(JSON.stringify([{ number: 1, title: "o" }]))[0].mergedAt).toBeUndefined();
+    expect(parseReviews("github", out, now).merged.map((r) => r.number)).toEqual([31, 30]);
+    expect(recentlyMerged(githubReviews(out).merged, now).map((r) => r.number)).toEqual([31, 30]);
+    expect(githubReviews(JSON.stringify({ data: { repository: { open: { nodes: [{ number: 1, title: "o" }] }, merged: { nodes: [] } } } })).open[0].mergedAt).toBeUndefined();
+  });
+});
+
+describe("the name of a repository", () => {
+  it("doesn't depend on the case, so two boards naming it differently share it", () => {
+    expect(repoKey(parseRepo("https://github.com/mehdiAberkane/Todoom")!)).toBe(repoKey(parseRepo("github.com/mehdiaberkane/todoom")!));
   });
 });
 

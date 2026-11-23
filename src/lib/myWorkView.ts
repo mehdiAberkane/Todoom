@@ -3,7 +3,7 @@
 // going on: cards in progress, waiting for me, open PR/MR and their CI.
 
 import type { Board, Card } from "../types";
-import { parseRepo, type Review } from "./reviews";
+import { parseRepo, repoKey, type Review } from "./reviews";
 
 const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 
@@ -69,7 +69,7 @@ export function projectSummaries(boards: Board[], cards: Record<string, Card[]>,
         return (cards[board.id] ?? []).filter((c) => ids.has(c.columnId) && !c.archivedAt).length;
       };
       const repo = parseRepo(board.repo);
-      const open = repo ? reviews[`${repo.forge}:${repo.host}/${repo.path}`] : undefined;
+      const open = repo ? reviews[repoKey(repo)] : undefined;
       const prs = open
         ? {
             open: open.length,

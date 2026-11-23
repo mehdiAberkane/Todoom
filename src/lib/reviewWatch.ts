@@ -3,7 +3,7 @@
 // one merged. The last state seen is kept per repository on this computer.
 
 import type { AppSettings, Board, Card } from "../types";
-import { cardOfReview, hostAllowed, parseRepo, type Repo, type Review } from "./reviews";
+import { cardOfReview, hostAllowed, parseRepo, repoKey, type Repo, type Review } from "./reviews";
 import { refOf } from "./shortid";
 
 export type PrEventKind = "opened" | "ciFailed" | "merged";
@@ -26,6 +26,28 @@ export interface ReviewNotifySettings {
   opened: boolean;
   ciFailed: boolean;
   merged: boolean;
+}
+
+/** A look every 2 minutes while something can happen soon. */
+export const PR_WATCH_FAST_MS = 2 * 60_000;
+/** Every 10 minutes when nothing is under way, or nobody is at Todoom. */
+export const PR_WATCH_SLOW_MS = 10 * 60_000;
+/** Away from Todoom (window minimized, or another application in front) this long: the slow pace. */
+export const AWAY_LONG_MS = 30 * 60_000;
+/** Back at Todoom: a look at once, unless the last one is this recent. */
+export const BACK_LOOK_AFTER_MS = 30_000;
+
+/**
+ * When to look again. A CI running somewhere: soon, even when away (its failure is
+ * what the popup is for). Otherwise away for long: slowly. Otherwise a pull/merge
+ * request opened by a person (it may be merged or pushed to): soon. Nothing open,
+ * or only robots' (they only report a red CI): slowly. A slower look only delays a
+ * notice: what changed is found by comparing with what was seen, never missed.
+ */
+export function nextLookDelay(open: Review[], awaySince: number | null, now: number): number {
+  if (open.some((r) => r.ci === "running")) return PR_WATCH_FAST_MS;
+  if (awaySince !== null && now - awaySince >= AWAY_LONG_MS) return PR_WATCH_SLOW_MS;
+  return open.some((r) => !isBot(r)) ? PR_WATCH_FAST_MS : PR_WATCH_SLOW_MS;
 }
 
 /** All on unless turned off in the settings. */
@@ -118,7 +140,7 @@ export function watchedRepos(boards: Board[], choices: Record<string, boolean> =
     if (board.archivedAt) continue;
     const repo = parseRepo(board.repo);
     if (!repo || !hostAllowed(repo, choices)) continue;
-    const key = `${repo.forge}:${repo.host}/${repo.path}`;
+    const key = repoKey(repo);
     if (!out.has(key)) out.set(key, { key, repo, board });
   }
   return [...out.values()];

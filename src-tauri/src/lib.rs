@@ -1453,17 +1453,22 @@ fn is_forge_path(forge: &str, path: &str) -> bool {
         })
 }
 
-/// Open merge requests, or the latest merged ones (the interface keeps the last 24 hours).
-fn gitlab_query(merged: bool) -> String {
-    let (state, sort, limit) = if merged {
-        ("merged", "MERGED_AT_DESC", 20)
-    } else {
-        ("opened", "UPDATED_DESC", 50)
-    };
-    format!(
-        "query($path: ID!) {{ project(fullPath: $path) {{ mergeRequests(state: {state}, first: {limit}, sort: {sort}) {{ nodes {{ iid title webUrl draft sourceBranch updatedAt mergedAt author {{ username }} headPipeline {{ status }} }} }} }} }}"
-    )
-}
+/// One question per repository and per look (one gh or glab launched, not two):
+/// the open ones, and the latest merged ones (the interface keeps the last 24 hours).
+/// Read by gitlabReviews in reviews.ts.
+const GITLAB_QUERY: &str = "query($path: ID!) { project(fullPath: $path) { \
+open: mergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...M } } \
+merged: mergeRequests(state: merged, first: 20, sort: MERGED_AT_DESC) { nodes { ...M } } } } \
+fragment M on MergeRequest { iid title webUrl draft sourceBranch updatedAt mergedAt author { username } headPipeline { status } }";
+
+/// The same for GitHub, with each check of the last commit (the CI state is worked
+/// out as before, in ciOfChecks). Read by githubReviews in reviews.ts.
+const GITHUB_QUERY: &str = "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { \
+open: pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...P } } \
+merged: pullRequests(states: MERGED, first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...P } } } } \
+fragment P on PullRequest { number title url isDraft headRefName updatedAt mergedAt author { __typename login } \
+commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename \
+... on CheckRun { status conclusion } ... on StatusContext { state } } } } } } } }";
 
 /// The hosts each tool talks to by default; any other one must be allowed on this computer.
 const DEFAULT_FORGE_HOSTS: [&str; 2] = ["github.com", "gitlab.com"];
@@ -1523,40 +1528,34 @@ fn token_vars_to_drop(tool: &str, host: &str) -> &'static [&'static str] {
     }
 }
 
-/// The command line for a forge, arguments as a list: the open pull/merge
-/// requests, or with `merged` the latest merged ones.
-fn review_args(
-    forge: &str,
-    host: &str,
-    path: &str,
-    merged: bool,
-) -> Option<(&'static str, Vec<String>)> {
+/// The command line for a forge, arguments as a list: one GraphQL question for the
+/// open pull/merge requests and the latest merged ones. The repository goes in
+/// variables (-f: always a string), never into the query text.
+fn review_args(forge: &str, host: &str, path: &str) -> Option<(&'static str, Vec<String>)> {
     if !is_forge_host(host) || !is_forge_path(forge, path) {
         return None;
     }
-    let (state, limit) = if merged {
-        ("merged", "20")
-    } else {
-        ("open", "50")
-    };
     match forge {
-        "github" => Some((
-            "gh",
-            [
-                "pr",
-                "list",
-                "--repo",
-                &format!("{host}/{path}"),
-                "--state",
-                state,
-                "--limit",
-                limit,
-                "--json",
-                "number,title,url,isDraft,headRefName,author,statusCheckRollup,updatedAt,mergedAt",
-            ]
-            .map(String::from)
-            .to_vec(),
-        )),
+        "github" => {
+            let (owner, name) = path.split_once('/')?;
+            Some((
+                "gh",
+                [
+                    "api",
+                    "graphql",
+                    "--hostname",
+                    host,
+                    "-f",
+                    &format!("query={GITHUB_QUERY}"),
+                    "-f",
+                    &format!("owner={owner}"),
+                    "-f",
+                    &format!("name={name}"),
+                ]
+                .map(String::from)
+                .to_vec(),
+            ))
+        }
         "gitlab" => Some((
             "glab",
             [
@@ -1565,7 +1564,7 @@ fn review_args(
                 "--hostname",
                 host,
                 "-f",
-                &format!("query={}", gitlab_query(merged)),
+                &format!("query={GITLAB_QUERY}"),
                 "-f",
                 &format!("path={path}"),
             ]
@@ -1693,17 +1692,18 @@ fn review_error(tool: &str, stderr: &str) -> String {
     }
 }
 
+/// The open pull/merge requests of a repository and its latest merged ones, as the
+/// tool's GraphQL answer ({ open, merged }, see GITHUB_QUERY and GITLAB_QUERY).
 #[tauri::command]
 async fn list_reviews(
     app: AppHandle,
     forge: String,
     host: String,
     path: String,
-    merged: Option<bool>,
 ) -> Result<String, String> {
     blocking(app, move |app| {
-        let (tool, args) = review_args(&forge, &host, &path, merged.unwrap_or(false))
-            .ok_or_else(|| "badrepo".to_string())?;
+        let (tool, args) =
+            review_args(&forge, &host, &path).ok_or_else(|| "badrepo".to_string())?;
         let choices = app
             .state::<AppState>()
             .config
@@ -1959,23 +1959,21 @@ mod tests {
 
     #[test]
     fn review_commands_take_only_plain_repositories() {
-        let (tool, args) =
-            review_args("github", "github.com", "mehdiAberkane/Todoom", false).unwrap();
+        let (tool, args) = review_args("github", "github.com", "mehdiAberkane/Todoom").unwrap();
         assert_eq!(tool, "gh");
-        assert!(args.contains(&"github.com/mehdiAberkane/Todoom".to_string()));
-        let (tool, args) =
-            review_args("gitlab", "gitlab.example.com", "g/sub/project", false).unwrap();
+        assert_eq!(&args[..4], ["api", "graphql", "--hostname", "github.com"]);
+        assert!(args.contains(&"owner=mehdiAberkane".to_string()));
+        assert!(args.contains(&"name=Todoom".to_string()));
+        // One launch brings both lists.
+        let query = args.iter().find(|a| a.starts_with("query=")).unwrap();
+        assert!(query.contains("states: OPEN") && query.contains("states: MERGED"));
+        assert!(!query.contains("Todoom"), "the repository is a variable");
+        let (tool, args) = review_args("gitlab", "gitlab.example.com", "g/sub/project").unwrap();
         assert_eq!(tool, "glab");
         assert!(args.contains(&"path=g/sub/project".to_string()));
-        let (_, merged) = review_args("gitlab", "gitlab.com", "g/p", true).unwrap();
-        assert!(merged.iter().any(|a| a.contains("state: merged")));
-        let (_, merged) = review_args("github", "github.com", "o/r", true).unwrap();
-        assert!(
-            merged
-                .windows(2)
-                .any(|w| w[0] == "--state" && w[1] == "merged")
-        );
         assert!(args.contains(&"gitlab.example.com".to_string()));
+        let query = args.iter().find(|a| a.starts_with("query=")).unwrap();
+        assert!(query.contains("state: opened") && query.contains("state: merged"));
         for (forge, host, path) in [
             ("github", "github.com", "a/b/c"),
             ("github", "github.com", "../b"),
@@ -1989,7 +1987,7 @@ mod tests {
             ("github", "github.com", "a b/c"),
         ] {
             assert!(
-                review_args(forge, host, path, false).is_none(),
+                review_args(forge, host, path).is_none(),
                 "{forge} {host} {path}"
             );
         }

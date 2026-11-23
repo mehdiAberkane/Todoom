@@ -48,7 +48,8 @@ export interface Backend {
   readInbox(name: string): Promise<string>;
   removeInbox(name: string): Promise<void>;
   /** The open pull/merge requests of a repository, as gh or glab print them (see reviews.ts). */
-  listReviews(forge: string, host: string, path: string, merged?: boolean): Promise<string>;
+  /** The open and recently merged PR/MR of a repository, as gh's or glab's GraphQL answer. */
+  listReviews(forge: string, host: string, path: string): Promise<string>;
   /** Forge hosts allowed (true) or refused (false) on this computer, besides github.com and gitlab.com. */
   forgeHosts(): Promise<Record<string, boolean>>;
   setForgeHost(host: string, allowed: boolean): Promise<void>;
@@ -84,7 +85,7 @@ const tauriBackend: Backend = {
   listInbox: () => invoke<InboxFile[]>("list_inbox"),
   readInbox: (name) => invoke<string>("read_inbox", { name }),
   removeInbox: (name) => invoke("remove_inbox", { name }),
-  listReviews: (forge, host, path, merged = false) => invoke<string>("list_reviews", { forge, host, path, merged }),
+  listReviews: (forge, host, path) => invoke<string>("list_reviews", { forge, host, path }),
   forgeHosts: () => invoke<Record<string, boolean>>("forge_hosts"),
   setForgeHost: (host, allowed) => invoke("set_forge_host", { host, allowed }),
   listSnapshots: () => invoke<SnapshotInfo[]>("list_snapshots"),
@@ -235,12 +236,12 @@ const browserBackend: Backend = {
     localStorage.setItem(INBOX_KEY, JSON.stringify(all));
   },
   // No gh or glab in a browser: a test puts their output in localStorage, by "forge:host/path".
-  listReviews: async (forge, host, path, merged = false) => {
+  listReviews: async (forge, host, path) => {
     // The same rule as the app: a host other than the default ones is asked first.
     const choice = readForgeHosts()[host];
     if (!["github.com", "gitlab.com"].includes(host) && choice !== true) throw new Error(`${choice === false ? "refused" : "unapproved"}:${host}`);
     const all = JSON.parse(localStorage.getItem("todoom-reviews") ?? "{}") as Record<string, string>;
-    const output = all[`${forge}:${host}/${path}${merged ? ":merged" : ""}`];
+    const output = all[`${forge}:${host}/${path}`];
     if (output === undefined) throw new Error("desktop");
     if (output.startsWith("error:")) throw new Error(output.slice(6));
     return output;

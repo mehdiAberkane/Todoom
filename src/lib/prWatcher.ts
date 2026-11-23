@@ -1,15 +1,16 @@
-// Watches the repositories of the boards every 2 minutes while Todoom runs
-// (even minimized) and sends what changed to the PR/MR popup window.
+// Watches the repositories of the boards while Todoom runs (even minimized) and
+// sends what changed to the PR/MR popup window: every 2 minutes while something
+// can happen soon, every 10 otherwise, and at once on coming back to Todoom
+// (nextLookDelay). One gh or glab launch per repository and per look.
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import type { AppSettings, Board, Card } from "../types";
 import { backend, isTauri } from "./backend";
 import { openExternal } from "./open";
-import { parseReviews, recentlyMerged, type Review } from "./reviews";
-import { allowed, noticesOf, reviewEvents, reviewNotifySettings, watchedRepos, type PrNotice, type Seen } from "./reviewWatch";
+import { parseReviews, type Review } from "./reviews";
+import { allowed, BACK_LOOK_AFTER_MS, nextLookDelay, noticesOf, reviewEvents, reviewNotifySettings, watchedRepos, type PrNotice, type Seen } from "./reviewWatch";
 
-export const PR_WATCH_MS = 2 * 60_000;
 /** Main → popup: notices to show. Popup → main: ready, received (ids), open (address). */
 export const PR_NOTICES = "todoom://pr-notices";
 export const PR_READY = "todoom://pr-ready";
@@ -66,9 +67,17 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
   useEffect(() => {
     if (!isTauri || !ready || !repoKeys) return;
     let busy = false;
+    let stopped = false;
+    let timer: number | undefined;
+    let lastLook = 0;
+    // The open ones of each repository at its last successful look: they set the pace.
+    const known: Record<string, Review[]> = {};
+    // Since when Todoom is not the application in front (null: it is).
+    let awaySince: number | null = document.hasFocus() ? null : Date.now();
     const look = async () => {
       if (busy) return;
       busy = true;
+      lastLook = Date.now();
       try {
         const { boards, cards, settings } = latest.current;
         const seen = readSeen();
@@ -78,13 +87,11 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
         const choices = await backend.forgeHosts().catch(() => ({}));
         for (const w of watchedRepos(boards, choices)) {
           try {
-            const [open, merged] = await Promise.all([
-              backend.listReviews(w.repo.forge, w.repo.host, w.repo.path),
-              backend.listReviews(w.repo.forge, w.repo.host, w.repo.path, true),
-            ]);
-            const openList = parseReviews(w.repo.forge, open);
-            read[w.key] = openList;
-            const result = reviewEvents(seen[w.key], openList, recentlyMerged(parseReviews(w.repo.forge, merged)));
+            // One gh or glab launched per repository: the open ones and the recently merged ones together.
+            const sets = parseReviews(w.repo.forge, await backend.listReviews(w.repo.forge, w.repo.host, w.repo.path));
+            read[w.key] = sets.open;
+            known[w.key] = sets.open;
+            const result = reviewEvents(seen[w.key], sets.open, sets.merged);
             seen[w.key] = result.next;
             const boardCards = boards.flatMap((b) => cards[b.id] ?? []);
             for (const e of allowed(result.events, reviewNotifySettings(settings))) events.push({ ...e, repo: w.repo, board: w.board, cards: boardCards });
@@ -102,9 +109,34 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
         busy = false;
       }
     };
-    look();
-    const id = window.setInterval(look, PR_WATCH_MS);
-    return () => window.clearInterval(id);
+    // Each look sets when the next one comes (nextLookDelay).
+    const schedule = (delay: number) => {
+      window.clearTimeout(timer);
+      if (!stopped) timer = window.setTimeout(run, delay);
+    };
+    const run = async () => {
+      await look();
+      schedule(nextLookDelay(Object.values(known).flat(), awaySince, Date.now()));
+    };
+    const onBack = () => {
+      awaySince = null;
+      if (Date.now() - lastLook >= BACK_LOOK_AFTER_MS) run();
+    };
+    const onAway = () => {
+      awaySince ??= Date.now();
+    };
+    const onVisibility = () => (document.visibilityState === "visible" ? onBack() : onAway());
+    window.addEventListener("focus", onBack);
+    window.addEventListener("blur", onAway);
+    document.addEventListener("visibilitychange", onVisibility);
+    run();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", onBack);
+      window.removeEventListener("blur", onAway);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [ready, repoKeys]);
   return openReviews;
 }
