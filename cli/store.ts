@@ -3,11 +3,11 @@
 // same files, same checks, atomic writes, updatedAt that always moves forward.
 // The app watches the folder and picks the changes up by itself.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import type { Board, Card, Column } from "../src/types";
-import { boardProblem, cardProblem } from "../src/lib/validate";
+import { boardProblem, cardProblem, MAX_DATA_FILE_BYTES, type IssueReason } from "../src/lib/validate";
 import { nextUpdatedAt, uid } from "../src/lib/ids";
 import { prioritiesOf, priorityOf } from "../src/lib/priority";
 import { inverseOf, isFinished, isLinkType, withLink, withoutLink } from "../src/lib/links";
@@ -78,15 +78,26 @@ function byName<T extends { id: string; name: string }>(items: T[], wanted: stri
   );
 }
 
+/** A data file, unless it is over MAX_DATA_FILE_BYTES: then not read at all (the callers skip it, as the app does). */
 function readJson(path: string): unknown {
+  const size = statSync(path).size;
+  if (size > MAX_DATA_FILE_BYTES) throw new TodoomError(`${path} est trop gros (${(size / 1024 / 1024).toFixed(1)} Mo, au plus 5 Mo) : ignoré.`);
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-/** Writes through a temporary file, so the app and Drive never see half a file. */
+/** Writes through a temporary file, so the app and Drive never see half a file; never past MAX_DATA_FILE_BYTES. */
 function writeAtomic(path: string, data: unknown) {
+  const text = JSON.stringify(data, null, 2) + "\n";
+  if (Buffer.byteLength(text) > MAX_DATA_FILE_BYTES) throw new TodoomError(`Refusé : le fichier dépasserait 5 Mo (${path}).`);
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n", "utf8");
+  writeFileSync(tmp, text, "utf8");
   renameSync(tmp, path);
+}
+
+/** Why a card or board is refused, in a sentence. */
+function refusal(what: string, problem: IssueReason): string {
+  if (problem.code === "too_long") return `${what} refusé${what === "Carte" ? "e" : ""} : le champ « ${problem.field} » est trop long (au plus ${problem.max?.toLocaleString("fr-FR")})`;
+  return `${what} refusé${what === "Carte" ? "e" : ""} (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`;
 }
 
 /** A card with names instead of ids, for people and agents. */
@@ -317,7 +328,7 @@ export class Store {
       updatedAt: at,
     };
     const problem = boardProblem(board);
-    if (problem) throw new TodoomError(`Tableau refusé (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
+    if (problem) throw new TodoomError(refusal("Tableau", problem));
     mkdirSync(join(this.boardDir(board.id), "cards"), { recursive: true });
     writeAtomic(join(this.boardDir(board.id), "board.json"), board);
     return this.boardDetail(board.id);
@@ -341,7 +352,7 @@ export class Store {
     const description = text.replace(/\s+$/, "");
     const next = { ...raw, description, updatedAt: nextUpdatedAt(raw.updatedAt) };
     const problem = boardProblem(next);
-    if (problem) throw new TodoomError(`Tableau refusé (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
+    if (problem) throw new TodoomError(refusal("Tableau", problem));
     writeAtomic(path, next);
     return this.boardDetail(board.id);
   }
@@ -412,7 +423,7 @@ export class Store {
     if (!card.title.trim()) throw new TodoomError("Le titre ne peut pas être vide");
     const saved = { ...card, updatedAt: nextUpdatedAt(previous?.updatedAt) };
     const problem = cardProblem(saved);
-    if (problem) throw new TodoomError(`Carte refusée (${problem.code}${problem.field ? ` : ${problem.field}` : ""})`);
+    if (problem) throw new TodoomError(refusal("Carte", problem));
     const path = join(this.boardDir(board.id), "cards", `${card.id}.json`);
     // Read again just before writing: changed since (by the app, or before the lock), the operation starts over.
     this.beforeWrite?.(card);
@@ -567,7 +578,7 @@ export class Store {
     }
     const saved = { ...moved, updatedAt: nextUpdatedAt(card.updatedAt) };
     const problem = cardProblem(saved);
-    if (problem) throw new TodoomError(`Carte refusée (${problem.code})`);
+    if (problem) throw new TodoomError(refusal("Carte", problem));
     writeAtomic(join(this.boardDir(target.id), "cards", `${card.id}.json`), saved);
     rmSync(join(this.boardDir(source.id), "cards", `${card.id}.json`), { force: true });
     const columnName0 = source.columns.find((c) => c.id === card.columnId)?.name ?? "?";

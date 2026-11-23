@@ -132,7 +132,14 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+# The biggest data file read (MAX_DATA_FILE_BYTES of the app): one past it is a
+# fault (sync accident, faulty script) and is skipped like an unreadable file.
+MAX_DATA_FILE_BYTES = 5 * 1024 * 1024
+
+
 def read_json(path):
+    if os.path.getsize(path) > MAX_DATA_FILE_BYTES:
+        raise OSError(f"{path} : plus de 5 Mo, ignoré")
     with open(path, encoding="utf-8-sig") as f:
         return json.load(f)
 

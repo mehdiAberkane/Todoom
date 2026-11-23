@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, truncateSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -347,6 +347,24 @@ describe("two writers on the same computer", () => {
     rmSync(lockDir, { recursive: true, force: true });
   });
 
+});
+
+describe("sizes", () => {
+  it("refuses a field longer than the app allows, with a clear message, and writes nothing", () => {
+    const a = store.create("Todoom", "Carte");
+    const before = readFileSync(join(cardsDir(), `${a.id}.json`), "utf8");
+    expect(() => store.update(a.id, { description: "x".repeat(100_001) })).toThrow(/« description » est trop long/);
+    expect(() => store.create("Todoom", "t".repeat(501))).toThrow(/« title » est trop long/);
+    expect(readFileSync(join(cardsDir(), `${a.id}.json`), "utf8")).toBe(before);
+  });
+
+  it("skips a card file over 5 MB without reading it, as the app does", () => {
+    store.create("Todoom", "Normale");
+    const huge = join(cardsDir(), "huge.json");
+    writeFileSync(huge, "");
+    truncateSync(huge, 5 * 1024 * 1024 + 1);
+    expect(store.cards(store.board("Todoom")).map((c) => c.title)).toEqual(["Normale"]);
+  });
 });
 
 describe("data folder", () => {

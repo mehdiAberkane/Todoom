@@ -12,6 +12,8 @@ export interface FileEntry {
 
 /** A load of the data folder: the files read, and those not available yet (Google Drive still downloading them). */
 export interface Loaded {
+  /** Data files over MAX_DATA_FILE_BYTES: not read, listed as ignored (absent from older app versions). */
+  tooBig?: { path: string; size: number }[];
   files: FileEntry[];
   pending: string[];
 }

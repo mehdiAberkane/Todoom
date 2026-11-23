@@ -125,13 +125,15 @@ function kindOf(parts: string[]): Kind | null {
  * "board (1).json" carry the same id, so the most recently updated one wins.
  * Files that can't be used are listed in `issues` rather than dropped silently.
  */
-export function parse(files: FileEntry[], pending: string[] = []): Data {
+export function parse(files: FileEntry[], pending: string[] = [], tooBig: { path: string; size: number }[] = []): Data {
   // Boards whose file Google Drive is still downloading: their cards wait silently.
   const boardPending = new Set(pending.filter((p) => /^boards\/[^/]+\/board\.json$/.test(p)).map((p) => p.split("/")[1]));
   const boards = new Map<string, Board>();
   const cards = new Map<string, { card: Card; path: string }>();
   const presence: Presence[] = [];
   const issues: FileIssue[] = [];
+  // Too big to be read (see MAX_DATA_FILE_BYTES): listed as ignored, never overwritten.
+  for (const big of tooBig) issues.push({ path: big.path, reason: { code: "too_big", size: big.size } });
   let settings = DEFAULT_SETTINGS;
   const comments = new Map<string, CardComment>();
   // Indexed by ids read from the files: no prototype, so an id such as
@@ -348,9 +350,9 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
     if (flushing.current) return;
     const slowTimer = window.setTimeout(() => setSlow(true), SLOW_LOAD_MS);
     try {
-      const { files, pending } = await backend.loadAll();
+      const { files, pending, tooBig } = await backend.loadAll();
       if (flushing.current) return;
-      const next = parse(overlay(files, queue.current), pending);
+      const next = parse(overlay(files, queue.current), pending, tooBig);
       const prev = dataRef.current;
       const prevComplete = lastComplete.current;
       lastComplete.current = pending.length === 0;

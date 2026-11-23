@@ -123,6 +123,17 @@ describe("loading the data folder", () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
+  it("reports a field past its limit, and a file too big to be read", () => {
+    const data = parse(
+      files({ "boards/b1/cards/c1.json": card({ title: "x".repeat(501) }), "boards/b1/cards/c2.json": card({ id: "c2", description: "ok" }) }),
+      [],
+      [{ path: "boards/b1/cards/huge.json", size: 6 * 1024 * 1024 }],
+    );
+    expect(data.cards.b1.map((c) => c.id)).toEqual(["c2"]);
+    expect(data.issues).toContainEqual({ path: "boards/b1/cards/c1.json", reason: { code: "too_long", field: "title", max: 500 } });
+    expect(data.issues).toContainEqual({ path: "boards/b1/cards/huge.json", reason: { code: "too_big", size: 6 * 1024 * 1024 } });
+  });
+
   it("reports an unreadable settings file and keeps the defaults", () => {
     const data = parse(files({ "settings.json": JSON.stringify({ backgroundDim: "fort" }) }));
     expect(data.settings.background).toBeNull();

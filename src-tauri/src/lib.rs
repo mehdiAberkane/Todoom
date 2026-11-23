@@ -488,10 +488,24 @@ struct Listed {
     len: u64,
 }
 
+/// The biggest data file read or written (MAX_DATA_FILE_BYTES in validate.ts): one
+/// past it (a sync accident, a faulty script, a file renamed .json) is listed as
+/// ignored, never read, sent to the page, copied into a snapshot, nor overwritten.
+const MAX_DATA_FILE_BYTES: u64 = 5 * 1024 * 1024;
+
+#[derive(Serialize)]
+struct TooBig {
+    path: String,
+    size: u64,
+}
+
 /// What a load returns: the files read, and those not available yet.
 #[derive(Serialize)]
 struct Loaded {
     files: Vec<FileEntry>,
+    /// Data files over MAX_DATA_FILE_BYTES: not read.
+    #[serde(rename = "tooBig")]
+    too_big: Vec<TooBig>,
     /// Still being read (Google Drive downloading an "online only" file) or unreadable for now;
     /// the UI shows what it has and loads again a moment later.
     pending: Vec<String>,
@@ -554,6 +568,24 @@ fn load_files(
     let started = Instant::now();
     let mut listed = Vec::new();
     list(root, root, &mut listed);
+    // Too big: decided from the metadata, before any read.
+    let (listed, big): (Vec<Listed>, Vec<Listed>) = listed
+        .into_iter()
+        .partition(|l| l.len <= MAX_DATA_FILE_BYTES);
+    let too_big: Vec<TooBig> = big
+        .into_iter()
+        .map(|l| {
+            log::warn!(
+                "{} ignoré : {} octets, plus que {MAX_DATA_FILE_BYTES}",
+                l.rel,
+                l.len
+            );
+            TooBig {
+                path: l.rel,
+                size: l.len,
+            }
+        })
+        .collect();
     {
         let seen: HashSet<&PathBuf> = listed.iter().map(|l| &l.path).collect();
         cache.lock().unwrap().retain(|p, _| seen.contains(p));
@@ -655,7 +687,11 @@ fn load_files(
             }
         }
     }
-    Loaded { files, pending }
+    Loaded {
+        files,
+        too_big,
+        pending,
+    }
 }
 
 fn read_file(path: &Path) -> std::io::Result<String> {
@@ -681,6 +717,17 @@ async fn load_all(app: AppHandle) -> Result<Loaded, String> {
 /// Never overwrites an existing file that isn't valid JSON: the UI lists such files
 /// for the user to repair, and writing over one would destroy what is left of it.
 fn refuse_unreadable(target: &Path, rel: &str) -> Result<(), String> {
+    // Too big to have been read: never written over either.
+    if fs::metadata(target).is_ok_and(|m| m.len() > MAX_DATA_FILE_BYTES) {
+        return Err(tr(
+            format!(
+                "{rel} est trop gros (plus de 5 Mo) : il n'est ni lu ni écrasé. Vérifie-le à la main."
+            ),
+            format!(
+                "{rel} is too big (over 5 MB): it is neither read nor overwritten. Check it by hand."
+            ),
+        ));
+    }
     match fs::read_to_string(target) {
         Ok(existing) if serde_json::from_str::<serde_json::Value>(&existing).is_err() => Err(tr(
             format!(
@@ -754,6 +801,12 @@ fn logged<T>(what: String, result: Result<T, String>) -> Result<T, String> {
 async fn write_file(app: AppHandle, path: String, content: String) -> Result<(), String> {
     let what = format!("écriture de {path}");
     let result = blocking(app, move |app| {
+        if content.len() as u64 > MAX_DATA_FILE_BYTES {
+            return Err(tr(
+                format!("{path} dépasserait 5 Mo : pas écrit."),
+                format!("{path} would be over 5 MB: not written."),
+            ));
+        }
         let state = app.state::<AppState>();
         let root = data_root(&state)?;
         let target = prepare_write(&root, &path)?;
@@ -1947,6 +2000,39 @@ mod tests {
         let cfg: Config = serde_json::from_str(r#"{"data_dir":"G:\\Mon Drive\\Todoom"}"#).unwrap();
         assert!(cfg.forge_hosts.is_empty());
         assert!(cfg.data_dir.is_some());
+    }
+
+    #[test]
+    fn a_data_file_too_big_is_listed_never_read_nor_overwritten() {
+        let root = std::env::temp_dir().join(format!("todoom-big-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("boards/b1/cards")).unwrap();
+        fs::write(root.join("boards/b1/board.json"), r#"{"id":"b1"}"#).unwrap();
+        let big = root.join("boards/b1/cards/huge.json");
+        let file = fs::File::create(&big).unwrap();
+        file.set_len(MAX_DATA_FILE_BYTES + 1).unwrap();
+        drop(file);
+        fn read(p: &Path) -> std::io::Result<String> {
+            assert!(
+                !p.ends_with("huge.json"),
+                "a file over the limit must not be read"
+            );
+            fs::read_to_string(p)
+        }
+        let cache: FileCache = Default::default();
+        let loaded = load_files(
+            &root,
+            &cache,
+            &Default::default(),
+            Duration::from_secs(5),
+            read,
+        );
+        assert_eq!(loaded.files.len(), 1);
+        assert_eq!(loaded.too_big.len(), 1);
+        assert_eq!(loaded.too_big[0].path, "boards/b1/cards/huge.json");
+        assert_eq!(loaded.too_big[0].size, MAX_DATA_FILE_BYTES + 1);
+        assert!(refuse_unreadable(&big, "boards/b1/cards/huge.json").is_err());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

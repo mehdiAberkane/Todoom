@@ -14,7 +14,8 @@
       "description": "Also the folder name under boards/."
     },
     "name": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 200
     },
     "key": {
       "type": "string",
@@ -23,7 +24,8 @@
     },
     "description": {
       "type": "string",
-      "description": "Context page of the board: repository, working rules, vocabulary, meaning of the columns. Agents read it before taking a ticket."
+      "description": "Context page of the board: repository, working rules, vocabulary, meaning of the columns. Agents read it before taking a ticket.",
+      "maxLength": 100000
     },
     "branchFormat": {
       "type": "string",
@@ -47,7 +49,8 @@
             "type": "string"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 200
           },
           "collapsed": {
             "type": "boolean",
@@ -64,7 +67,8 @@
             "description": "Cards that stayed this many days in the column are archived by the app (time from the cards' history)."
           }
         }
-      }
+      },
+      "maxItems": 200
     },
     "labels": {
       "type": "array",
@@ -80,14 +84,16 @@
             "type": "string"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 200
           },
           "color": {
             "type": "string",
             "description": "CSS color, e.g. #ff4d2e."
           }
         }
-      }
+      },
+      "maxItems": 200
     },
     "priorities": {
       "type": "array",

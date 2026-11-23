@@ -6,6 +6,36 @@
 
 type Check = [field: string, ok: (v: unknown) => boolean];
 
+/**
+ * The biggest data file read or written (the Rust side, the todoom command and the
+ * agent use the same): a file over it is listed as ignored, never read nor
+ * overwritten. Real files weigh a few KB (the biggest, settings.json with its
+ * background image, 64 KB in November 2026).
+ */
+export const MAX_DATA_FILE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Longest fields, far above what real cards use (in November 2026: title 119
+ * characters, description 4 137, comment 5 336, board context 1 158, 5 checklist
+ * items): a field past them comes from a fault, and would slow the whole board.
+ */
+export const LIMITS = {
+  title: 500,
+  text: 100_000,
+  name: 200,
+  branch: 255,
+  items: 500,
+  itemText: 2_000,
+  labels: 100,
+  columns: 200,
+} as const;
+
+/** A field longer than allowed: its length, the longest of its items' given key, or 0. */
+type Limit = [field: string, max: number, size: (v: unknown) => number];
+const len = (v: unknown) => (typeof v === "string" || Array.isArray(v) ? v.length : 0);
+const longest = (key: string) => (v: unknown) =>
+  Array.isArray(v) ? Math.max(0, ...v.map((x) => (isObject(x) && typeof x[key] === "string" ? (x[key] as string).length : 0))) : 0;
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isString = (v: unknown) => typeof v === "string";
 const isNumber = (v: unknown) => typeof v === "number" && Number.isFinite(v);
@@ -43,6 +73,16 @@ const CARD: Check[] = [
   ["updatedAt", optional(isString)],
 ];
 
+const CARD_LIMITS: Limit[] = [
+  ["title", LIMITS.title, len],
+  ["description", LIMITS.text, len],
+  ["labels", LIMITS.labels, len],
+  ["checklist", LIMITS.items, len],
+  ["checklist", LIMITS.itemText, longest("text")],
+  ["links", LIMITS.items, len],
+  ["branch", LIMITS.branch, len],
+];
+
 const BOARD: Check[] = [
   ["name", optional(isString)],
   ["key", optional(isString)],
@@ -60,6 +100,15 @@ const BOARD: Check[] = [
 
 // Base64 only: no quote or parenthesis can break out of the CSS url() it goes into.
 const isImageDataUrl = (v: unknown) => isString(v) && /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(v);
+
+const BOARD_LIMITS: Limit[] = [
+  ["name", LIMITS.name, len],
+  ["description", LIMITS.text, len],
+  ["columns", LIMITS.columns, len],
+  ["columns", LIMITS.name, longest("name")],
+  ["labels", LIMITS.columns, len],
+  ["labels", LIMITS.name, longest("name")],
+];
 
 const SETTINGS: Check[] = [
   ["background", nullable(isImageDataUrl)],
@@ -119,23 +168,29 @@ const AGENT: Check[] = [
 
 /** Why a data file can't be used; the interface turns the code into a sentence. */
 export interface IssueReason {
-  code: "invalid_json" | "not_object" | "missing_id" | "bad_field" | "missing_board" | "unknown_column";
+  code: "invalid_json" | "not_object" | "missing_id" | "bad_field" | "too_long" | "too_big" | "missing_board" | "unknown_column";
   field?: string;
+  /** too_long: the longest allowed (characters or items). */
+  max?: number;
+  /** too_big: the file's size in bytes. */
+  size?: number;
 }
 
-function problem(raw: unknown, checks: Check[], needsId: boolean): IssueReason | null {
+function problem(raw: unknown, checks: Check[], needsId: boolean, limits: Limit[] = []): IssueReason | null {
   if (!isObject(raw)) return { code: "not_object" };
   if (needsId && (!isString(raw.id) || !raw.id)) return { code: "missing_id" };
   if (needsId && !isId(raw.id)) return { code: "bad_field", field: "id" };
   const bad = checks.find(([f, ok]) => !ok(raw[f]));
-  return bad ? { code: "bad_field", field: bad[0] } : null;
+  if (bad) return { code: "bad_field", field: bad[0] };
+  const over = limits.find(([f, max, size]) => size(raw[f]) > max);
+  return over ? { code: "too_long", field: over[0], max: over[1] } : null;
 }
 
 /** Why a card file can't be used, or null when it is fine. */
-export const cardProblem = (raw: unknown) => problem(raw, CARD, true);
-export const boardProblem = (raw: unknown) => problem(raw, BOARD, true);
+export const cardProblem = (raw: unknown) => problem(raw, CARD, true, CARD_LIMITS);
+export const boardProblem = (raw: unknown) => problem(raw, BOARD, true, BOARD_LIMITS);
 export const settingsProblem = (raw: unknown) => problem(raw, SETTINGS, false);
-export const commentProblem = (raw: unknown) => problem(raw, COMMENT, true);
+export const commentProblem = (raw: unknown) => problem(raw, COMMENT, true, [["text", LIMITS.text, len]]);
 export const historyProblem = (raw: unknown) => problem(raw, HISTORY, false);
 export const agentProblem = (raw: unknown) => problem(raw, AGENT, false);
 export const attachmentProblem = (raw: unknown) => problem(raw, ATTACHMENT, true);

@@ -31,17 +31,20 @@
       "description": "Position in the column, lowest first. Any number; a card placed between two others gets the midpoint."
     },
     "title": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 500
     },
     "description": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 100000
     },
     "labels": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Ids of labels of board.json."
+      "description": "Ids of labels of board.json.",
+      "maxItems": 100
     },
     "priority": {
       "type": [
@@ -72,13 +75,15 @@
             "type": "string"
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           },
           "done": {
             "type": "boolean"
           }
         }
-      }
+      },
+      "maxItems": 500
     },
     "links": {
       "type": "array",
@@ -105,14 +110,16 @@
             "description": "Id of the other card."
           }
         }
-      }
+      },
+      "maxItems": 500
     },
     "branch": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Git branch of the work on this card."
+      "description": "Git branch of the work on this card.",
+      "maxLength": 255
     },
     "mergeRequest": {
       "type": [

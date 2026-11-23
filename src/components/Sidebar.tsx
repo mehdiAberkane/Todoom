@@ -13,7 +13,12 @@ import { t, tn } from "../lib/i18n";
 import type { IssueReason } from "../lib/validate";
 
 /** A loading problem, in the current language. */
-export const issueText = (reason: IssueReason) => t(`issue.${reason.code}`, { field: reason.field ?? "" });
+export const issueText = (reason: IssueReason) =>
+  t(`issue.${reason.code}`, {
+    field: reason.field ?? "",
+    max: reason.max?.toLocaleString() ?? "",
+    size: reason.size === undefined ? "" : `${(reason.size / 1024 / 1024).toFixed(1)} Mo`,
+  });
 
 interface Props {
   boards: Board[];

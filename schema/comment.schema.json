@@ -45,7 +45,8 @@
       }
     },
     "text": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 100000
     }
   }
 }
