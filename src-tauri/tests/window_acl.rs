@@ -38,7 +38,15 @@ fn call(window: &str, cmd: &str) -> Result<String, String> {
             cmd: cmd.into(),
             callback: CallbackFn(0),
             error: CallbackFn(1),
-            url: "http://tauri.localhost".parse().unwrap(),
+            // The app's own pages, as each system serves them: the capabilities grant
+            // the commands to local pages only.
+            url: if cfg!(windows) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
             body: InvokeBody::default(),
             headers: Default::default(),
             invoke_key: INVOKE_KEY.to_string(),
