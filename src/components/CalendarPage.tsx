@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { Board, Card } from "../types";
 import { addMonths, agenda, byDay, dueCards, monthGrid, type DueCard } from "../lib/calendar";
 import { refOf } from "../lib/shortid";
+import { cardColor } from "../lib/priority";
 import { formatDue, toISODate } from "../lib/utils";
 import { locale, t, tn } from "../lib/i18n";
 
@@ -98,7 +99,7 @@ export function CalendarPage({ boards, cards, onOpenCard, onReschedule }: Props)
                       <button
                         key={d.card.id}
                         className={`day-card ${d.due < today ? "late" : ""}`}
-                        style={d.card.color ? ({ "--card-color": d.card.color } as React.CSSProperties) : undefined}
+                        style={cardColor(d.board, d.card) ? ({ "--card-color": cardColor(d.board, d.card) } as React.CSSProperties) : undefined}
                         draggable
                         onDragStart={(e) => {
                           e.dataTransfer.setData(DRAG_TYPE, `${d.board.id}/${d.card.id}`);

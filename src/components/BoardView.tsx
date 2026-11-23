@@ -15,7 +15,7 @@ import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
 import { dueStatus, formatDue, localGet, localSet, reorder, uid } from "../lib/utils";
-import { prioritiesOf } from "../lib/priority";
+import { cardColor, prioritiesOf } from "../lib/priority";
 import { checklistDone, openBlockers, type Located } from "../lib/links";
 import { mergedHistory } from "../lib/activity";
 import { finishedPerWeek } from "../lib/timeline";
@@ -624,6 +624,7 @@ export function BoardView({
                 onRename={(name) => renameColumn(col.id, name)}
                 onDelete={() => actions.deleteColumn(board, col.id, cards)}
                 onSort={(sort) => setColumnSort(col, sort)}
+                colorFor={(card) => cardColor(board, card)}
                 total={cards.filter((c) => c.columnId === col.id).length}
                 onUpdate={(patch) => updateColumn(col.id, patch)}
               />
@@ -646,8 +647,8 @@ export function BoardView({
         <DragOverlay>
           {activeCard && (
             <div
-              className={`card overlay ${colorOf(activeCard).className} ${dragGroup > 1 ? "stacked" : ""}`}
-              style={colorOf(activeCard).style}
+              className={`card overlay ${colorOf(cardColor(board, activeCard)).className} ${dragGroup > 1 ? "stacked" : ""}`}
+              style={colorOf(cardColor(board, activeCard)).style}
               data-count={dragGroup > 1 ? tn("board.dragCount", dragGroup) : undefined}
             >
               <CardBody

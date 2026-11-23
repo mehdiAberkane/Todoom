@@ -30,6 +30,10 @@ export function LabelManager({ board, onSave, onClose }: { board: Board; onSave:
       <ItemList items={board.labels} onChange={(labels) => onSave({ ...board, labels })} placeholder={t("labels.new")} defaultColor={LABEL_COLORS[5]} />
 
       <h4>{t("labels.priorities")}</h4>
+      <label className="settings-check" title={t("labels.colorByPriorityTitle")}>
+        <input type="checkbox" checked={board.colorByPriority !== false} onChange={(e) => onSave({ ...board, colorByPriority: e.target.checked })} />
+        {t("labels.colorByPriority")}
+      </label>
       <ItemList
         items={priorities}
         onChange={savePriorities}

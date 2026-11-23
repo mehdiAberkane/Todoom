@@ -27,6 +27,8 @@ interface Props {
   onAdd: (title: string) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  /** The color of a card's band: its own, else its priority's. */
+  colorFor: (card: Card) => string | null;
   /** Changes how the column orders its cards. */
   onSort: (sort: ColumnSort) => void;
   /** Cards in the column, filters aside: what the limit counts. */
@@ -34,7 +36,7 @@ interface Props {
   onUpdate: (patch: Partial<Column>) => void;
 }
 
-export function ColumnView({ column, cards, labels, priorities, blockers, checklistDone, boardKey, comments, attachments, unsavedIds, onOpen, selectedIds, onSelect, onAdd, onRename, onDelete, onSort, total, onUpdate }: Props) {
+export function ColumnView({ column, cards, labels, priorities, blockers, checklistDone, boardKey, comments, attachments, unsavedIds, onOpen, selectedIds, onSelect, onAdd, onRename, onDelete, onSort, colorFor, total, onUpdate }: Props) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `col:${column.id}`,
   });
@@ -92,6 +94,7 @@ export function ColumnView({ column, cards, labels, priorities, blockers, checkl
             <CardTile
               key={c.id}
               card={c}
+              color={colorFor(c)}
               cardRef={refOf({ key: boardKey }, c)}
               labels={labels}
               priorities={priorities}

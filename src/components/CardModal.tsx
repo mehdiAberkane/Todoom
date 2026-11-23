@@ -482,7 +482,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
             <button
               className={`swatch none ${draft.color ? "" : "on"}`}
               onClick={() => set({ color: null })}
-              title={t("cardModal.noColor")}
+              title={t(board.colorByPriority !== false ? "cardModal.priorityColor" : "cardModal.noColor")}
             />
             {CARD_COLORS.map((c) => (
               <button key={c} className={`swatch ${draft.color === c ? "on" : ""}`} style={{ background: c }} onClick={() => set({ color: c })} />

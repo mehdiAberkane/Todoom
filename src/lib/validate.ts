@@ -92,6 +92,7 @@ const BOARD: Check[] = [
   ["columns", listOf(shaped([["id", isString], ["name", isString], ["collapsed", optional((v) => typeof v === "boolean")], ["limit", optional(isNumber)], ["archiveAfter", optional(isNumber)], ["sort", optional(isString)]]))],
   ["labels", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["priorities", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
+  ["colorByPriority", optional((v) => typeof v === "boolean")],
   ["order", optional(isNumber)],
   ["archivedAt", nullable(isString)],
   ["createdAt", optional(isString)],

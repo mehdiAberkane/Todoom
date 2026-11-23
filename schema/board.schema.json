@@ -123,6 +123,10 @@
         }
       }
     },
+    "colorByPriority": {
+      "type": "boolean",
+      "description": "A card without a color of its own shows its priority's (default P1 red, P2 orange, P3 green). false: only the colors chosen in the cards. Absent: true."
+    },
     "order": {
       "type": "number",
       "description": "Position in the sidebar, lowest first."

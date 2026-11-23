@@ -39,6 +39,8 @@ export interface Board {
   repo?: string;
   /** Priority levels, highest first; absent means the defaults P1, P2, P3. */
   priorities?: Priority[];
+  /** A card without a color of its own takes its priority's (P1 red, P2 orange, P3 green); false turns that off. */
+  colorByPriority?: boolean;
   /** Fractional position in the sidebar; absent on boards created before reordering existed. */
   order?: number;
   /** Set when the board is in the trash: hidden, restorable, deleted for good after a while. */

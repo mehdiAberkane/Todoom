@@ -8,9 +8,9 @@ import { openExternal } from "../lib/open";
 import { claimLabel } from "../lib/claim";
 import { formatDateTime } from "../lib/utils";
 
-/** The class and style giving a card its color band, if it has one. */
-export function colorOf(card: Card): { className: string; style: React.CSSProperties } {
-  return card.color ? { className: "colored", style: { "--card-color": card.color } as React.CSSProperties } : { className: "", style: {} };
+/** The class and style giving a card its color band (see cardColor), if it has one. */
+export function colorOf(color: string | null | undefined): { className: string; style: React.CSSProperties } {
+  return color ? { className: "colored", style: { "--card-color": color } as React.CSSProperties } : { className: "", style: {} };
 }
 
 export function CardBody({
@@ -158,6 +158,7 @@ function MrBadge({ url, state }: { url: string; state: MergeRequestState }) {
 
 export function CardTile({
   card,
+  color,
   cardRef,
   labels,
   priorities,
@@ -171,6 +172,8 @@ export function CardTile({
   onSelect,
 }: {
   card: Card;
+  /** Its band: its own color, else its priority's (cardColor). */
+  color?: string | null;
   cardRef?: string | null;
   labels: Label[];
   priorities: Priority[];
@@ -192,8 +195,8 @@ export function CardTile({
   return (
     <article
       ref={setNodeRef}
-      style={{ ...colorOf(card).style, transform: CSS.Translate.toString(transform), transition }}
-      className={`card ${colorOf(card).className} ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""} ${selected ? "selected" : ""}`}
+      style={{ ...colorOf(color).style, transform: CSS.Translate.toString(transform), transition }}
+      className={`card ${colorOf(color).className} ${isDragging ? "ghost" : ""} ${unsaved ? "unsaved" : ""} ${selected ? "selected" : ""}`}
       aria-selected={selected}
       data-card-id={card.id}
       {...attributes}
