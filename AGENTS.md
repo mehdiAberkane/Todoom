@@ -131,7 +131,7 @@ Todoom/
 
 | Dossier | Contenu |
 |---|---|
-| `src-tauri/src/lib.rs` | Le côté Rust (Tauri 2) : accès au dossier de données (liste blanche `allowed()`, `resolve()`), surveillance du dossier, instantanés, export, pièces jointes, boîte de réception, `list_reviews` (gh/glab), fenêtres de capture et de popup PR, icône de la barre des tâches. Tests en bas du fichier. |
+| `src-tauri/src/` | Le côté Rust (Tauri 2), un module par sujet, chacun avec ses tests en bas du fichier :<br>• `lib.rs` : l'état, la configuration et l'enregistrement des commandes (`run`) ;<br>• `data.rs` : liste blanche `allowed()`, `resolve()`, lecture et écriture des fichiers ;<br>• `folder.rs` : choix et surveillance du dossier de données ;<br>• `attachments.rs`, `snapshots.rs`, `export.rs`, `reading.rs` (résumés pour le téléphone), `inbox.rs` (boîte de réception) ;<br>• `reviews.rs` : `list_reviews` (gh/glab) ;<br>• `windows.rs` : fenêtres de capture et de popup PR, icône de la barre des tâches. |
 | `src-tauri/capabilities/` | Ce que chaque fenêtre a le droit de faire (`default` : principale, `capture`, `prpopup`). CSP dans `tauri.conf.json`. |
 | `src/lib/` | La logique, testée (`*.test.ts` à côté) : `store.ts` (chargement, écriture, file d'attente), `validate.ts` (format des fichiers), `backend.ts` (Tauri ou navigateur), `reviews.ts`, `reviewWatch.ts`, `myWorkView.ts`, `inbox.ts`, `reading.ts`… |
 | `src/components/` | L'interface React 19. `main.tsx` choisit la fenêtre (principale, capture, popup PR) selon son nom. |

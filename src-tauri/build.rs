@@ -1,5 +1,5 @@
-/// Every command of lib.rs. Declared here, a command can only be called from a
-/// window whose capability grants it (capabilities/*.json, "allow-<command>"):
+/// Every command of src/ (registered in run(), lib.rs). Declared here, a command
+/// can only be called from a window whose capability grants it (capabilities/*.json, "allow-<command>"):
 /// without this list, any window could call any of them.
 const COMMANDS: &[&str] = &[
     "get_data_dir",
