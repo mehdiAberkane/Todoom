@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pr-popup-layout"
+description = "Enables the pr_popup_layout command without any pre-configured scope."
+commands.allow = ["pr_popup_layout"]
+
+[[permission]]
+identifier = "deny-pr-popup-layout"
+description = "Denies the pr_popup_layout command without any pre-configured scope."
+commands.deny = ["pr_popup_layout"]

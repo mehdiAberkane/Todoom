@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-suggest-data-dir"
+description = "Enables the suggest_data_dir command without any pre-configured scope."
+commands.allow = ["suggest_data_dir"]
+
+[[permission]]
+identifier = "deny-suggest-data-dir"
+description = "Denies the suggest_data_dir command without any pre-configured scope."
+commands.deny = ["suggest_data_dir"]

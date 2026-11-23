@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open, save } from "@tauri-apps/plugin-dialog";
 import { t } from "./i18n";
 import { restorePlan, type SnapshotInfo } from "./snapshots";
 import type { InboxFile } from "./inbox";
@@ -64,10 +63,9 @@ const tauriBackend: Backend = {
   getDataDir: () => invoke<string | null>("get_data_dir"),
   setDataDir: (path) => invoke("set_data_dir", { path }),
   suggestDataDir: () => invoke<string | null>("suggest_data_dir"),
-  pickFolder: async () => {
-    const picked = await open({ directory: true, title: t("setup.pickTitle") });
-    return typeof picked === "string" ? picked : null;
-  },
+  // The dialogs are opened from Rust, which keeps what they return: a folder or a
+  // save path can only be one the user chose, never one made up by the page.
+  pickFolder: () => invoke<string | null>("pick_data_dir", { title: t("setup.pickTitle") }),
   hostname: () => invoke<string>("hostname"),
   loadAll: () => invoke<Loaded>("load_all"),
   write: (path, content) => invoke("write_file", { path, content }),
@@ -77,13 +75,7 @@ const tauriBackend: Backend = {
   writeAttachment: (path, data) => invoke("write_attachment", { path, data }),
   readAttachment: (path) => invoke<string>("read_attachment", { path }),
   revealAttachment: (path) => invoke("reveal_attachment", { path }),
-  saveExport: async (fileName, content) => {
-    const ext = fileName.split(".").pop() ?? "txt";
-    const path = await save({ defaultPath: fileName, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
-    if (!path) return false;
-    await invoke("save_export", { path, content });
-    return true;
-  },
+  saveExport: (fileName, content) => invoke<boolean>("save_export", { fileName, content }),
   listReading: () => invoke<string[]>("list_reading"),
   writeReading: (name, content) => invoke("write_reading", { name, content }),
   removeReading: (name) => invoke("remove_reading", { name }),

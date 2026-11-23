@@ -76,6 +76,9 @@ struct AppState {
     files: FileCache,
     /// Files being read by a background reader, possibly started by an earlier load.
     reading: Arc<Mutex<HashSet<PathBuf>>>,
+    /// The last folder picked in the folder dialog (pick_data_dir): with the Drive
+    /// folder found and the current one, the only folders set_data_dir accepts.
+    picked_dir: Mutex<Option<String>>,
 }
 
 /// Runs disk work on a blocking thread. Synchronous Tauri commands run on the main
@@ -359,10 +362,57 @@ fn get_data_dir(state: State<AppState>) -> Option<String> {
     state.config.lock().unwrap().data_dir.clone()
 }
 
+/// Is this the folder the user chose? The one picked in the dialog, the Drive
+/// folder Todoom proposed, or the current one: never a path a script made up.
+fn chosen_data_dir(
+    path: &str,
+    picked: Option<&str>,
+    suggested: Option<&str>,
+    current: Option<&str>,
+) -> bool {
+    [picked, suggested, current]
+        .into_iter()
+        .flatten()
+        .any(|p| Path::new(p) == Path::new(path))
+}
+
+/// The folder dialog, opened from Rust: what it returns is remembered as chosen.
+#[tauri::command]
+async fn pick_data_dir(app: AppHandle, title: String) -> Result<Option<String>, String> {
+    blocking(app, move |app| {
+        use tauri_plugin_dialog::DialogExt;
+        let picked = app
+            .dialog()
+            .file()
+            .set_title(title)
+            .blocking_pick_folder()
+            .and_then(|p| p.into_path().ok())
+            .map(|p| p.to_string_lossy().into_owned());
+        if let Some(dir) = &picked {
+            *app.state::<AppState>().picked_dir.lock().unwrap() = Some(dir.clone());
+        }
+        Ok(picked)
+    })
+    .await
+}
+
 #[tauri::command]
 async fn set_data_dir(app: AppHandle, path: String) -> Result<(), String> {
     blocking(app, move |app| {
         let state = app.state::<AppState>();
+        let picked = state.picked_dir.lock().unwrap().clone();
+        let current = state.config.lock().unwrap().data_dir.clone();
+        if !chosen_data_dir(
+            &path,
+            picked.as_deref(),
+            find_drive_folder().as_deref(),
+            current.as_deref(),
+        ) {
+            return Err(tr(
+                format!("Choisis le dossier avec « Parcourir… » : {path}"),
+                format!("Choose the folder with « Browse… »: {path}"),
+            ));
+        }
         check_data_dir(Path::new(&path))?;
         fs::create_dir_all(&path).map_err(|e| {
             tr(
@@ -1008,12 +1058,44 @@ fn export_target(path: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 
+/// The save dialog, opened from Rust, and the export written where it says: the
+/// destination is never a path given by the page. False when it is cancelled.
 #[tauri::command]
-async fn save_export(app: AppHandle, path: String, content: String) -> Result<(), String> {
-    blocking(app, move |_| {
-        fs::write(export_target(&path)?, content).map_err(|e| e.to_string())
+async fn save_export(app: AppHandle, file_name: String, content: String) -> Result<bool, String> {
+    blocking(app, move |app| {
+        use tauri_plugin_dialog::DialogExt;
+        let ext = export_extension(&file_name)?;
+        let Some(chosen) = app
+            .dialog()
+            .file()
+            .set_file_name(&file_name)
+            .add_filter(ext.to_uppercase(), &[ext])
+            .blocking_save_file()
+        else {
+            return Ok(false);
+        };
+        let path = chosen.into_path().map_err(|e| e.to_string())?;
+        fs::write(export_target(&path.to_string_lossy())?, content).map_err(|e| e.to_string())?;
+        Ok(true)
     })
     .await
+}
+
+/// The kind of report a suggested file name asks for: Markdown, CSV or text only.
+fn export_extension(file_name: &str) -> Result<&'static str, String> {
+    let ext = Path::new(file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("md") => Ok("md"),
+        Some("csv") => Ok("csv"),
+        Some("txt") => Ok("txt"),
+        _ => Err(tr(
+            format!("Export refusé : {file_name}"),
+            format!("Export refused: {file_name}"),
+        )),
+    }
 }
 
 // ---- Quick capture ---------------------------------------------------------
@@ -1753,6 +1835,7 @@ pub fn run() {
             set_language,
             set_data_dir,
             suggest_data_dir,
+            pick_data_dir,
             hostname,
             load_all,
             write_file,
@@ -1864,6 +1947,45 @@ mod tests {
         let cfg: Config = serde_json::from_str(r#"{"data_dir":"G:\\Mon Drive\\Todoom"}"#).unwrap();
         assert!(cfg.forge_hosts.is_empty());
         assert!(cfg.data_dir.is_some());
+    }
+
+    #[test]
+    fn the_data_folder_is_one_the_user_chose() {
+        let picked = Some("D:\\Partage\\Todoom");
+        assert!(chosen_data_dir("D:\\Partage\\Todoom", picked, None, None));
+        assert!(chosen_data_dir(
+            "G:\\Mon Drive\\Todoom",
+            None,
+            Some("G:\\Mon Drive\\Todoom"),
+            None
+        ));
+        assert!(chosen_data_dir(
+            "E:\\Todoom",
+            None,
+            None,
+            Some("E:\\Todoom")
+        ));
+        // A path no dialog gave: refused, even next to a picked one.
+        assert!(!chosen_data_dir(
+            "C:\\Users\\kirua\\.ssh",
+            picked,
+            Some("G:\\Mon Drive\\Todoom"),
+            None
+        ));
+        assert!(!chosen_data_dir(
+            "D:\\Partage\\Todoom\\..\\x",
+            picked,
+            None,
+            None
+        ));
+    }
+
+    #[test]
+    fn an_export_is_a_text_report() {
+        assert_eq!(export_extension("Todoom-2026-11-23.MD"), Ok("md"));
+        assert_eq!(export_extension("board.csv"), Ok("csv"));
+        assert!(export_extension("x.exe").is_err());
+        assert!(export_extension("noext").is_err());
     }
 
     #[test]

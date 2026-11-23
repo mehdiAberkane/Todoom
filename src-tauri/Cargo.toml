@@ -42,3 +42,7 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+[dev-dependencies]
+# The mock runtime, to check which window may call which command (tests/window_acl.rs).
+tauri = { version = "2", features = ["tray-icon", "test"] }

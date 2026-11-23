@@ -70,7 +70,8 @@ jobs:
 
       - name: Rust tests
         working-directory: src-tauri
-        run: cargo test --lib
+        # --lib and tests/ (which window may call which command).
+        run: cargo test
 
       - name: Rust dependency audit
         working-directory: src-tauri
@@ -114,7 +115,8 @@ jobs:
 
       - name: Rust tests
         working-directory: src-tauri
-        run: cargo test --lib
+        # --lib and tests/ (which window may call which command).
+        run: cargo test
 
   # Static audit of the workflows (injections, permissions, credentials left
   # in the checkout, unpinned actions...).

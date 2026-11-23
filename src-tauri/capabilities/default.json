@@ -1,18 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "The main window: every command of the app except pr_popup_layout (the popup sizes itself), and the core and plugin permissions it uses. Dialogs to pick a folder or a save path are opened from Rust (pick_data_dir, save_export).",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
-    "dialog:allow-open",
     "updater:default",
     "process:allow-restart",
     "notification:default",
     "dialog:allow-ask",
-    "dialog:allow-save",
     "core:window:allow-destroy",
     "core:window:allow-set-theme",
     "core:webview:allow-set-webview-zoom",
@@ -26,6 +24,33 @@
           "url": "http://*"
         }
       ]
-    }
+    },
+    "allow-get-data-dir",
+    "allow-set-language",
+    "allow-set-data-dir",
+    "allow-suggest-data-dir",
+    "allow-pick-data-dir",
+    "allow-hostname",
+    "allow-load-all",
+    "allow-write-file",
+    "allow-remove-path",
+    "allow-write-attachment",
+    "allow-read-attachment",
+    "allow-reveal-attachment",
+    "allow-list-snapshots",
+    "allow-save-snapshot",
+    "allow-delete-snapshot",
+    "allow-restore-snapshot",
+    "allow-save-export",
+    "allow-list-reading",
+    "allow-write-reading",
+    "allow-remove-reading",
+    "allow-list-inbox",
+    "allow-read-inbox",
+    "allow-remove-inbox",
+    "allow-list-reviews",
+    "allow-forge-hosts",
+    "allow-set-forge-host",
+    "allow-open-pr-popup"
   ]
 }

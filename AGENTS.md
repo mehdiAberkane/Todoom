@@ -150,7 +150,7 @@ npm run build            # typage + interface
 npm run lint             # ESLint
 npm run test:coverage    # tests, avec seuils de couverture
 npm run build:cli        # la commande todoom
-cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --lib
+cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 python -m unittest discover -s agent
 ```
 
@@ -170,6 +170,8 @@ ouvrirait son vrai dossier Drive et y écrirait.
   - le contenu du dossier Drive n'est pas fiable : tout identifiant lu dans un fichier
     passe la règle d'identifiant avant de servir dans un chemin ;
   - les commandes Rust vérifient leurs arguments (pas de shell, pas de chemin libre) ;
+  - chaque commande Rust est déclarée dans `src-tauri/build.rs` et accordée fenêtre par fenêtre (`capabilities/*.json`, `allow-<commande>`) : une nouvelle commande s’ajoute aux deux, et à `tests/window_acl.rs` si une petite fenêtre doit l’appeler ;
+  - un chemin hors du dossier de données (dossier choisi, export) vient d’une boîte de dialogue ouverte côté Rust, jamais de la page ;
   - pas de HTML brut dans l'interface ;
   - les actions GitHub sont épinglées par SHA.
 - Voir aussi [SECURITY.md](SECURITY.md) et la section Sécurité de

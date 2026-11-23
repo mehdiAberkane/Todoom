@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "prpopup",
-  "description": "The PR/MR popup: it only talks to the main window (events); its size and place are set by the app.",
+  "description": "The PR/MR popup: events with the main window, and pr_popup_layout to size and place itself. No other command of the app.",
   "windows": [
     "prpopup"
   ],
   "permissions": [
-    "core:event:default"
+    "core:event:default",
+    "allow-pr-popup-layout"
   ]
 }

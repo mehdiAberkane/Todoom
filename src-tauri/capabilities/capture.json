@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "capture",
-  "description": "The quick capture window: it only talks to the main window and closes itself.",
+  "description": "The quick capture window: it only talks to the main window (events) and closes itself. No command of the app.",
   "windows": [
     "capture"
   ],

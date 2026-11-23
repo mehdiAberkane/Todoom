@@ -40,7 +40,8 @@ export function Setup({ current, onDone, onCancel }: { current: string | null; o
 
         <label className="setup-label">{t("setup.label")}</label>
         <div className="setup-row">
-          <input value={path} onChange={(e) => setPath(e.target.value)} placeholder={t("setup.placeholder")} onKeyDown={(e) => e.key === "Enter" && submit()} />
+          {/* Chosen with the dialog only: the app accepts the folder picked there, the Drive folder it proposes, or the current one. */}
+          <input value={path} readOnly onClick={browse} placeholder={t("setup.placeholder")} onKeyDown={(e) => e.key === "Enter" && submit()} title={t("setup.browse")} />
           <button className="btn-ghost" onClick={browse}>
             {t("setup.browse")}
           </button>

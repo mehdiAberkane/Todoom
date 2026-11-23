@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-reading"
+description = "Enables the list_reading command without any pre-configured scope."
+commands.allow = ["list_reading"]
+
+[[permission]]
+identifier = "deny-list-reading"
+description = "Denies the list_reading command without any pre-configured scope."
+commands.deny = ["list_reading"]
