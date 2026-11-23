@@ -12,7 +12,8 @@
 #   beforeBuildCommand is emptied there and cargo finds everything up to date,
 #   so no dependency code (vite, plugins, build.rs, macros) runs next to the key;
 # - no cache is restored in the build job (a CI run could have written it);
-# - only the two steps that sign receive the key;
+# - only the two steps that sign receive the key, and only from the
+#   "release" environment, which only runs from v* tags can enter;
 # - the checks of ci.yml (tests, Clippy, audits) must pass first.
 # Replacing a leaked key: docs/cle-de-signature.md.
 name: Release
@@ -32,6 +33,10 @@ jobs:
 
   build:
     needs: checks
+    # The signing key belongs in this environment's secrets: GitHub only lets a
+    # run from a v* tag enter it, so a workflow pushed on a branch never gets it
+    # (docs/cle-de-signature.md).
+    environment: release
     permissions:
       contents: write # create the release and upload the installers
     strategy:

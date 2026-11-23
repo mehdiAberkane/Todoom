@@ -6,9 +6,37 @@ la **clé privée** correspondante.
 
 | Élément | Où |
 |---|---|
-| Clé privée | `~/.tauri/todoom.key` (hors du dépôt) et secret GitHub `TAURI_SIGNING_PRIVATE_KEY` |
-| Mot de passe | `~/.tauri/todoom.key.password.txt` et secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
+| Clé privée | `~/.tauri/todoom.key` (hors du dépôt) et secret GitHub `TAURI_SIGNING_PRIVATE_KEY` de l'environnement `release` |
+| Mot de passe | `~/.tauri/todoom.key.password.txt` et secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` de l'environnement `release` |
 | Clé publique | `~/.tauri/todoom.key.pub` et `src-tauri/tauri.conf.json` |
+
+## Où vivent les secrets : l'environnement `release`
+
+Un secret **de dépôt** est lisible par tout workflow, depuis n'importe quelle branche
+poussée par un compte qui a le droit d'écrire. Les deux secrets de signature vont donc
+dans l'**environnement** `release` (Settings → Environments → release) :
+
+- seuls les tags `v*` peuvent y entrer (« Deployment branches and tags » : tag `v*`) ;
+- le job `build` de `.github/workflows/release.yml` le déclare (`environment: release`) ;
+- un workflow lancé depuis une branche est refusé à l'entrée de l'environnement, et ne
+  voit pas ces secrets.
+
+Les mettre en place (ou les remplacer), depuis le dossier du dépôt :
+
+```bash
+gh secret set TAURI_SIGNING_PRIVATE_KEY --env release < ~/.tauri/todoom.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release < ~/.tauri/todoom.key.password.txt
+gh secret list --env release
+```
+
+Puis supprimer les secrets **de dépôt** du même nom (Settings → Secrets and variables →
+Actions → Repository secrets), sinon la protection ne sert à rien : un job sans
+environnement les lirait encore.
+
+```bash
+gh secret delete TAURI_SIGNING_PRIVATE_KEY
+gh secret delete TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+```
 
 Garde une copie de `~/.tauri/` dans un gestionnaire de mots de passe : sans elle, plus
 aucune mise à jour automatique n'est possible.
@@ -32,8 +60,9 @@ les installations l'acceptent, et à partir de là elles font confiance à la no
    `npm run release`. Elle est signée avec l'ancienne clé.
 4. Installer cette version sur **chaque** PC et Mac (bouton de mise à jour), vérifier
    le numéro dans la barre de titre.
-5. Remplacer les deux secrets GitHub par la nouvelle clé et son mot de passe
-   (Settings → Secrets and variables → Actions → crayon → Update secret).
+5. Remplacer les deux secrets de l'environnement `release` par la nouvelle clé et son
+   mot de passe (commandes `gh secret set … --env release` ci-dessus, ou Settings →
+   Environments → release → crayon → Update secret).
 6. Publier une version de test : l'étape « Check update signing secrets » doit passer,
    et la mise à jour doit s'installer.
 7. Remplacer `~/.tauri/todoom.key*` par les nouveaux fichiers, mettre à jour la copie
@@ -60,7 +89,11 @@ Sans l'ancienne clé, aucune version de transition n'est possible : générer un
 nouvelle paire (étapes 1, 2, 5), publier, puis **réinstaller à la main** la nouvelle
 version sur chaque poste. Les mises à jour automatiques reprennent ensuite.
 
-## Protections GitHub à garder actives
+## Protections GitHub conseillées
+
+En place : l'environnement `release`, limité aux tags `v*` (ci-dessus).
+
+Pas encore en place (choix de l'utilisateur, à ajouter s'il le décide) :
 
 - **Règles d'étiquettes** (Settings → Rules → Rulesets) sur `refs/tags/v*` : seules
   les créations par toi, pas de suppression ni de déplacement d'un tag publié.
