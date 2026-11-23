@@ -48,6 +48,9 @@ export interface Backend {
   removeInbox(name: string): Promise<void>;
   /** The open pull/merge requests of a repository, as gh or glab print them (see reviews.ts). */
   listReviews(forge: string, host: string, path: string, merged?: boolean): Promise<string>;
+  /** Forge hosts allowed (true) or refused (false) on this computer, besides github.com and gitlab.com. */
+  forgeHosts(): Promise<Record<string, boolean>>;
+  setForgeHost(host: string, allowed: boolean): Promise<void>;
   /** Snapshots of the data folder, kept on this computer (see snapshots.ts), newest first. */
   listSnapshots(): Promise<SnapshotInfo[]>;
   saveSnapshot(name: string, content: string): Promise<void>;
@@ -88,6 +91,8 @@ const tauriBackend: Backend = {
   readInbox: (name) => invoke<string>("read_inbox", { name }),
   removeInbox: (name) => invoke("remove_inbox", { name }),
   listReviews: (forge, host, path, merged = false) => invoke<string>("list_reviews", { forge, host, path, merged }),
+  forgeHosts: () => invoke<Record<string, boolean>>("forge_hosts"),
+  setForgeHost: (host, allowed) => invoke("set_forge_host", { host, allowed }),
   listSnapshots: () => invoke<SnapshotInfo[]>("list_snapshots"),
   saveSnapshot: (name, content) => invoke("save_snapshot", { name, content }),
   deleteSnapshot: (name) => invoke("delete_snapshot", { name }),
@@ -101,6 +106,16 @@ const ATTACH_KEY = "todoom-attachments";
 const readAttachments = (): Record<string, string> => {
   try {
     return JSON.parse(localStorage.getItem(ATTACH_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+};
+
+// Forge hosts allowed or refused, as the app keeps them in its own settings.
+const FORGE_HOSTS_KEY = "todoom-forge-hosts";
+const readForgeHosts = (): Record<string, boolean> => {
+  try {
+    return JSON.parse(localStorage.getItem(FORGE_HOSTS_KEY) ?? "{}");
   } catch {
     return {};
   }
@@ -227,12 +242,17 @@ const browserBackend: Backend = {
   },
   // No gh or glab in a browser: a test puts their output in localStorage, by "forge:host/path".
   listReviews: async (forge, host, path, merged = false) => {
+    // The same rule as the app: a host other than the default ones is asked first.
+    const choice = readForgeHosts()[host];
+    if (!["github.com", "gitlab.com"].includes(host) && choice !== true) throw new Error(`${choice === false ? "refused" : "unapproved"}:${host}`);
     const all = JSON.parse(localStorage.getItem("todoom-reviews") ?? "{}") as Record<string, string>;
     const output = all[`${forge}:${host}/${path}${merged ? ":merged" : ""}`];
     if (output === undefined) throw new Error("desktop");
     if (output.startsWith("error:")) throw new Error(output.slice(6));
     return output;
   },
+  forgeHosts: async () => readForgeHosts(),
+  setForgeHost: async (host, allowed) => localStorage.setItem(FORGE_HOSTS_KEY, JSON.stringify({ ...readForgeHosts(), [host]: allowed })),
   listSnapshots: async () =>
     Object.entries(readSnapshots())
       .map(([name, content]) => ({ name, size: content.length }))

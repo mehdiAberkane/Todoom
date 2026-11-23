@@ -109,6 +109,8 @@ describe("errors", () => {
     expect(reviewError("missing:glab")).toEqual({ code: "missing", tool: "glab" });
     expect(reviewError("auth:gh")).toEqual({ code: "auth", tool: "gh" });
     expect(reviewError("notfound")).toEqual({ code: "notfound" });
+    expect(reviewError("unapproved:evil.test")).toEqual({ code: "unapproved", host: "evil.test" });
+    expect(reviewError(new Error("refused:evil.test"))).toEqual({ code: "refused", host: "evil.test" });
     expect(reviewError("failed:boom: really")).toEqual({ code: "failed", message: "boom: really" });
     expect(reviewError(new Error("weird"))).toEqual({ code: "failed", message: "weird" });
   });

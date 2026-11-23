@@ -41,6 +41,15 @@ const SELF_WRITE_GRACE: Duration = Duration::from_secs(3);
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct Config {
     data_dir: Option<String>,
+    /// Forge hosts (GitLab instances) the user allowed (true) or refused (false) on
+    /// this computer, for the PR/MR panel. github.com and gitlab.com need no answer.
+    #[serde(default)]
+    forge_hosts: HashMap<String, bool>,
+}
+
+fn save_config(app: &AppHandle, cfg: &Config) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+    fs::write(config_path(app)?, json).map_err(|e| e.to_string())
 }
 
 #[derive(Serialize)]
@@ -364,8 +373,7 @@ async fn set_data_dir(app: AppHandle, path: String) -> Result<(), String> {
         {
             let mut cfg = state.config.lock().unwrap();
             cfg.data_dir = Some(path);
-            let json = serde_json::to_string_pretty(&*cfg).map_err(|e| e.to_string())?;
-            fs::write(config_path(app)?, json).map_err(|e| e.to_string())?;
+            save_config(app, &cfg)?;
         }
         state.files.lock().unwrap().clear();
         start_watcher(app, &state);
@@ -1322,6 +1330,64 @@ fn gitlab_query(merged: bool) -> String {
     )
 }
 
+/// The hosts each tool talks to by default; any other one must be allowed on this computer.
+const DEFAULT_FORGE_HOSTS: [&str; 2] = ["github.com", "gitlab.com"];
+
+/// May the PR/MR panel contact this host? The repository comes from the board's file,
+/// which anyone who can write the synced folder chooses: a host other than github.com
+/// or gitlab.com is contacted only once the user allowed it here. Err holds the code
+/// the interface explains: "unapproved:<host>" (to ask) or "refused:<host>".
+fn forge_host_allowed(
+    forge: &str,
+    host: &str,
+    choices: &HashMap<String, bool>,
+) -> Result<(), String> {
+    let host = host.to_ascii_lowercase();
+    match forge {
+        // Todoom reads GitHub at github.com only (gh would send GH_ENTERPRISE_TOKEN elsewhere).
+        "github" if host == "github.com" => Ok(()),
+        "github" => Err("badrepo".into()),
+        _ if DEFAULT_FORGE_HOSTS.contains(&host.as_str()) => Ok(()),
+        _ => match choices.get(&host) {
+            Some(true) => Ok(()),
+            Some(false) => Err(format!("refused:{host}")),
+            None => Err(format!("unapproved:{host}")),
+        },
+    }
+}
+
+/// Token variables a tool would attach to a request whatever the host: removed from
+/// its environment unless the host is the tool's own default, so an allowed GitLab
+/// instance only ever gets the token glab keeps for that very host.
+fn token_vars_to_drop(tool: &str, host: &str) -> &'static [&'static str] {
+    match (
+        tool,
+        host.eq_ignore_ascii_case(if tool == "gh" {
+            "github.com"
+        } else {
+            "gitlab.com"
+        }),
+    ) {
+        ("gh", true) => &["GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST"],
+        ("gh", false) => &[
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
+            "GH_ENTERPRISE_TOKEN",
+            "GITHUB_ENTERPRISE_TOKEN",
+            "GH_HOST",
+        ],
+        (_, true) => &["GITLAB_HOST", "GL_HOST"],
+        _ => &[
+            "GITLAB_TOKEN",
+            "GITLAB_ACCESS_TOKEN",
+            "OAUTH_TOKEN",
+            "CI_JOB_TOKEN",
+            "GITLAB_HOST",
+            "GL_HOST",
+        ],
+    }
+}
+
 /// The command line for a forge, arguments as a list: the open pull/merge
 /// requests, or with `merged` the latest merged ones.
 fn review_args(
@@ -1405,9 +1471,12 @@ fn find_tool(name: &str) -> Option<PathBuf> {
 
 /// Runs the tool and returns its output, or an error code the interface explains:
 /// "missing:<tool>", "auth:<tool>", "notfound", or "failed:<message>".
-fn run_review_tool(tool: &str, args: &[String]) -> Result<String, String> {
+fn run_review_tool(tool: &str, host: &str, args: &[String]) -> Result<String, String> {
     let program = find_tool(tool).ok_or_else(|| format!("missing:{tool}"))?;
     let mut cmd = std::process::Command::new(program);
+    for var in token_vars_to_drop(tool, host) {
+        cmd.env_remove(var);
+    }
     cmd.args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -1497,10 +1566,40 @@ async fn list_reviews(
     path: String,
     merged: Option<bool>,
 ) -> Result<String, String> {
-    blocking(app, move |_| {
+    blocking(app, move |app| {
         let (tool, args) = review_args(&forge, &host, &path, merged.unwrap_or(false))
             .ok_or_else(|| "badrepo".to_string())?;
-        run_review_tool(tool, &args)
+        let choices = app
+            .state::<AppState>()
+            .config
+            .lock()
+            .unwrap()
+            .forge_hosts
+            .clone();
+        forge_host_allowed(&forge, &host, &choices)?;
+        run_review_tool(tool, &host, &args)
+    })
+    .await
+}
+
+/// The hosts allowed (true) or refused (false) on this computer.
+#[tauri::command]
+fn forge_hosts(state: State<AppState>) -> HashMap<String, bool> {
+    state.config.lock().unwrap().forge_hosts.clone()
+}
+
+/// The user's answer for a host, kept in this computer's settings (not in Drive).
+#[tauri::command]
+async fn set_forge_host(app: AppHandle, host: String, allowed: bool) -> Result<(), String> {
+    blocking(app, move |app| {
+        let host = host.to_ascii_lowercase();
+        if !is_forge_host(&host) || DEFAULT_FORGE_HOSTS.contains(&host.as_str()) {
+            return Err("badrepo".into());
+        }
+        let state = app.state::<AppState>();
+        let mut cfg = state.config.lock().unwrap();
+        cfg.forge_hosts.insert(host, allowed);
+        save_config(app, &cfg)
     })
     .await
 }
@@ -1673,6 +1772,8 @@ pub fn run() {
             read_inbox,
             remove_inbox,
             list_reviews,
+            forge_hosts,
+            set_forge_host,
             open_pr_popup,
             pr_popup_layout
         ])
@@ -1756,6 +1857,50 @@ mod tests {
                 "{forge} {host} {path}"
             );
         }
+    }
+
+    #[test]
+    fn an_older_settings_file_still_reads() {
+        let cfg: Config = serde_json::from_str(r#"{"data_dir":"G:\\Mon Drive\\Todoom"}"#).unwrap();
+        assert!(cfg.forge_hosts.is_empty());
+        assert!(cfg.data_dir.is_some());
+    }
+
+    #[test]
+    fn only_allowed_forge_hosts_are_contacted() {
+        let mut choices = HashMap::new();
+        assert_eq!(forge_host_allowed("github", "github.com", &choices), Ok(()));
+        assert_eq!(forge_host_allowed("gitlab", "GitLab.com", &choices), Ok(()));
+        // GitHub elsewhere than github.com: never (gh would hand it GH_ENTERPRISE_TOKEN).
+        assert_eq!(
+            forge_host_allowed("github", "evil.test", &choices),
+            Err("badrepo".into())
+        );
+        // A host named in a board file: asked first, then the answer stands.
+        assert_eq!(
+            forge_host_allowed("gitlab", "evil.test", &choices),
+            Err("unapproved:evil.test".into())
+        );
+        choices.insert("evil.test".into(), false);
+        assert_eq!(
+            forge_host_allowed("gitlab", "evil.test", &choices),
+            Err("refused:evil.test".into())
+        );
+        choices.insert("git.example.fr".into(), true);
+        assert_eq!(
+            forge_host_allowed("gitlab", "git.example.fr", &choices),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn token_variables_only_reach_the_tools_own_host() {
+        // glab sends GITLAB_TOKEN / GITLAB_ACCESS_TOKEN to any host (checked: Private-Token header).
+        assert!(token_vars_to_drop("glab", "git.example.fr").contains(&"GITLAB_TOKEN"));
+        assert!(token_vars_to_drop("glab", "git.example.fr").contains(&"GITLAB_ACCESS_TOKEN"));
+        assert!(!token_vars_to_drop("glab", "gitlab.com").contains(&"GITLAB_TOKEN"));
+        assert!(!token_vars_to_drop("gh", "github.com").contains(&"GH_TOKEN"));
+        assert!(token_vars_to_drop("gh", "github.com").contains(&"GH_ENTERPRISE_TOKEN"));
     }
 
     #[test]

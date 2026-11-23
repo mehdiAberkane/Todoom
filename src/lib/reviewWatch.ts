@@ -3,7 +3,7 @@
 // one merged. The last state seen is kept per repository on this computer.
 
 import type { AppSettings, Board, Card } from "../types";
-import { cardOfReview, parseRepo, type Repo, type Review } from "./reviews";
+import { cardOfReview, hostAllowed, parseRepo, type Repo, type Review } from "./reviews";
 import { refOf } from "./shortid";
 
 export type PrEventKind = "opened" | "ciFailed" | "merged";
@@ -107,13 +107,17 @@ export function noticesOf(events: (PrEvent & { repo: Repo; board: Board; cards: 
   return notices;
 }
 
-/** The repositories to watch: each one once, from the boards not in the trash, with the board it is shown on. */
-export function watchedRepos(boards: Board[]): { key: string; repo: Repo; board: Board }[] {
+/**
+ * The repositories to watch: each one once, from the boards not in the trash, with
+ * the board it is shown on. A host other than github.com or gitlab.com only once
+ * allowed on this computer (choices): the address comes from a synced file.
+ */
+export function watchedRepos(boards: Board[], choices: Record<string, boolean> = {}): { key: string; repo: Repo; board: Board }[] {
   const out = new Map<string, { key: string; repo: Repo; board: Board }>();
   for (const board of boards) {
     if (board.archivedAt) continue;
     const repo = parseRepo(board.repo);
-    if (!repo) continue;
+    if (!repo || !hostAllowed(repo, choices)) continue;
     const key = `${repo.forge}:${repo.host}/${repo.path}`;
     if (!out.has(key)) out.set(key, { key, repo, board });
   }

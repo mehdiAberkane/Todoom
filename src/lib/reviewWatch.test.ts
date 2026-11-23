@@ -68,6 +68,12 @@ describe("what is shown", () => {
     expect(allowed(events, { ...s, enabled: false })).toEqual([]);
   });
 
+  it("only watches a host other than github.com and gitlab.com once allowed on this computer", () => {
+    const boards = [{ id: "a", repo: "https://evil.test/g/p" }, { id: "b", repo: "https://git.example.fr/g/p" }, { id: "c", repo: "https://gitlab.com/g/p" }] as Board[];
+    expect(watchedRepos(boards).map((w) => w.board.id)).toEqual(["c"]);
+    expect(watchedRepos(boards, { "evil.test": false, "git.example.fr": true }).map((w) => w.board.id)).toEqual(["b", "c"]);
+  });
+
   it("watches each repository once, not those of boards in the trash", () => {
     const boards = [
       { id: "a", repo: "https://github.com/o/r" },

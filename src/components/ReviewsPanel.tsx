@@ -91,7 +91,29 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
           <button className="reviews-repo link-btn" onClick={() => openExternal(repoUrl(repo))} title={t("reviews.openRepo")}>
             {repo.host}/{repo.path}
           </button>
-          {error && <ReviewErrorText error={error} />}
+          {error && (error.code === "unapproved" || error.code === "refused") ? (
+            <div className="reviews-host">
+              <p>
+                <strong>{t(error.code === "unapproved" ? "reviews.host.ask" : "reviews.host.refused", { host: error.host })}</strong>
+              </p>
+              <p className="hint">{t("reviews.host.why", { host: error.host })}</p>
+              <div className="reviews-host-actions">
+                <button
+                  className="btn-primary small"
+                  onClick={() => backend.setForgeHost(error.host, true).then(refresh).catch(() => {})}
+                >
+                  {t("reviews.host.allow")}
+                </button>
+                {error.code === "unapproved" && (
+                  <button className="btn-ghost small" onClick={() => backend.setForgeHost(error.host, false).then(refresh).catch(() => {})}>
+                    {t("reviews.host.refuse")}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            error && <ReviewErrorText error={error} />
+          )}
           {reviews && reviews.length === 0 && !error && <p className="muted reviews-empty">{t("reviews.none")}</p>}
           {reviews && reviews.length > 0 && (
             <ul className="reviews-list">
@@ -161,6 +183,8 @@ function ReviewErrorText({ error }: { error: ReviewError }) {
         ? t("reviews.err.auth", { tool: error.tool })
         : error.code === "failed"
           ? t("reviews.err.failed", { message: error.message })
-          : t(`reviews.err.${error.code}`);
+          : error.code === "unapproved" || error.code === "refused"
+            ? t("reviews.host.refused", { host: error.host })
+            : t(`reviews.err.${error.code}`);
   return <p className="reviews-error">{text}</p>;
 }

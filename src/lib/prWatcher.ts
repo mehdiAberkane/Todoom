@@ -74,7 +74,9 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
         const seen = readSeen();
         const events: Parameters<typeof noticesOf>[0] = [];
         const read: Record<string, Review[]> = {};
-        for (const w of watchedRepos(boards)) {
+        // Hosts allowed on this computer, read at each look: an answer given in the panel counts at once.
+        const choices = await backend.forgeHosts().catch(() => ({}));
+        for (const w of watchedRepos(boards, choices)) {
           try {
             const [open, merged] = await Promise.all([
               backend.listReviews(w.repo.forge, w.repo.host, w.repo.path),

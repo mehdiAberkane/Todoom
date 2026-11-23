@@ -165,7 +165,18 @@ export function cardOfReview(review: Review, cards: Card[]): Card | undefined {
   );
 }
 
-export type ReviewError = { code: "missing" | "auth"; tool: "gh" | "glab" } | { code: "notfound" | "badrepo" | "desktop" } | { code: "failed"; message: string };
+export type ReviewError =
+  | { code: "missing" | "auth"; tool: "gh" | "glab" }
+  | { code: "unapproved" | "refused"; host: string }
+  | { code: "notfound" | "badrepo" | "desktop" }
+  | { code: "failed"; message: string };
+
+/** The hosts each tool talks to by default; another one must be allowed on this computer (see forge_host_allowed in Rust). */
+export const DEFAULT_FORGE_HOSTS = ["github.com", "gitlab.com"];
+
+/** Whether the PR/MR of this repository may be read: its host is a default one, or allowed here. */
+export const hostAllowed = (repo: Repo, choices: Record<string, boolean>) =>
+  DEFAULT_FORGE_HOSTS.includes(repo.host) || choices[repo.host] === true;
 
 /** The error code list_reviews returns, as something the interface can explain. */
 export function reviewError(raw: unknown): ReviewError {
@@ -173,6 +184,7 @@ export function reviewError(raw: unknown): ReviewError {
   const [code, ...rest] = text.split(":");
   const detail = rest.join(":");
   if ((code === "missing" || code === "auth") && (detail === "gh" || detail === "glab")) return { code, tool: detail };
+  if ((code === "unapproved" || code === "refused") && detail) return { code, host: detail };
   if (code === "notfound" || code === "badrepo" || code === "desktop") return { code };
   return { code: "failed", message: code === "failed" ? detail : text };
 }
