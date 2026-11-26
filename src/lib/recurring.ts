@@ -8,6 +8,7 @@ import type { Board, Card } from "../types";
 import { uid } from "./ids";
 import { isDoneName } from "./links";
 import { toISODate } from "./utils";
+import { cardProblem } from "./validate";
 
 export type Repeat = NonNullable<Card["repeat"]>;
 export const REPEATS: Repeat["every"][] = ["day", "week", "month"];
@@ -62,8 +63,37 @@ export function pendingRepeats(boards: Board[], cards: Record<string, Card[]>): 
   return out;
 }
 
-/** The id of the card following `card` on `due`: the same on every computer. */
-export const successorId = (card: Card, due: string) => `${card.id}r${due.replace(/-/g, "")}`;
+/** What a routine's card ids end with: « r » and a due date, then « -2 »… when that date was taken. */
+const DATE_SUFFIX = /(?:r\d{8}(?:-\d+)?)+$/;
+/** Room left for the routine's base id under the 128 characters of an id: « r20261222-99 ». */
+const BASE_MAX = 128 - 12;
+
+/**
+ * The id of the card following `card` on `due`: the same on every computer, so two of
+ * them write the same file. The routine's first id with this due date, not the
+ * previous id grown by one more date: it would pass the 128 characters an id may have
+ * after a dozen times, and the routine would be lost (TOD-83). `n` > 1 when that date's
+ * id is already an old card of the routine (its due date was moved back by hand).
+ */
+export const successorId = (card: Pick<Card, "id">, due: string, n = 1) =>
+  `${card.id.replace(DATE_SUFFIX, "").slice(0, BASE_MAX) || "r"}r${due.replace(/-/g, "")}${n > 1 ? `-${n}` : ""}`;
+
+/**
+ * The next card of a routine, and whether to write it. Its id taken by a card on the
+ * board: another computer made it already, only the repetition is to move. Taken by
+ * an archived card: an older one of the routine on the same date, so the next free
+ * « -2 », « -3 »… (the same on every computer). Never one that isn't a valid card.
+ */
+export function nextOfRoutine(card: Card, board: Board, today: string, order: number, existing: Card[], at?: string): { next: Card; made: boolean } | null {
+  const first = successorOf(card, board, today, order, at);
+  for (let n = 1; n <= 99; n++) {
+    const next = n === 1 ? first : { ...first, id: successorId(card, first.due!, n) };
+    const taken = existing.find((c) => c.id === next.id);
+    if (!taken) return cardProblem(next) ? null : { next, made: true };
+    if (!taken.archivedAt) return { next: taken, made: false };
+  }
+  return null;
+}
 
 /**
  * The next card of a routine: same title, description, labels, priority, color

@@ -32,7 +32,7 @@ import { usePrWatch, type MergeHandlers } from "./lib/prWatcher";
 import { mayMoveOnMerge } from "./lib/reviewWatch";
 import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
-import { isAsleep, pendingRepeats, successorOf } from "./lib/recurring";
+import { isAsleep, nextOfRoutine, pendingRepeats } from "./lib/recurring";
 import { dueForArchive } from "./lib/autoArchive";
 import { mergedHistory } from "./lib/activity";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
@@ -226,9 +226,14 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       if (!column) continue;
       const cards = data.cards[board.id] ?? [];
       const last = cards.filter((c) => c.columnId === column.id && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1);
-      const next = successorOf(card, board, today, last + 1);
       // Another computer may have made it already: then only the repetition is moved.
-      const made = !cards.some((c) => c.id === next.id);
+      const found = nextOfRoutine(card, board, today, last + 1, cards);
+      // No valid next card: the finished one keeps its repetition rather than losing the routine (TOD-83).
+      if (!found) {
+        console.warn("routine : carte suivante impossible", card.id);
+        continue;
+      }
+      const { next, made } = found;
       actions.untracked(() => {
         if (made) actions.saveCard(next);
         actions.saveCard({ ...card, repeat: null });

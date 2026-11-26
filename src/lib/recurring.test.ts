@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Board, Card } from "../types";
-import { isAsleep, nextDue, pendingRepeats, successorId, successorOf, wakeOnFor } from "./recurring";
+import { isAsleep, nextDue, nextOfRoutine, pendingRepeats, successorId, successorOf, wakeOnFor } from "./recurring";
+import { ID_PATTERN } from "./validate";
 
 const board = {
   id: "b",
@@ -124,5 +125,54 @@ describe("the next card waits off the board (TOD-82)", () => {
     expect(next).toMatchObject({ due: "2026-12-22", wakeOn: "2026-12-15" });
     expect(isAsleep(next, "2026-11-26")).toBe(true);
     expect(isAsleep(next, "2026-12-15")).toBe(false);
+  });
+});
+
+describe("the next card's id stays short (TOD-83)", () => {
+  it("is the routine's first id and the due date, never the previous id grown by one more date", () => {
+    expect(successorId({ id: "mwrs948zev4ziy" }, "2026-12-22")).toBe("mwrs948zev4ziyr20261222");
+    expect(successorId({ id: "mwrs948zev4ziyr20261222" }, "2027-01-22")).toBe("mwrs948zev4ziyr20270122");
+    // The chains made before this fix shrink back at their next card.
+    expect(successorId({ id: "mwrs948zev4ziyr20261222r20270122r20270222" }, "2027-03-22")).toBe("mwrs948zev4ziyr20270322");
+    expect(successorId({ id: "mwrs948zev4ziyr20261222-2" }, "2027-01-22", 3)).toBe("mwrs948zev4ziyr20270122-3");
+  });
+
+  it("stays a valid id of the same length over a year of a daily routine", () => {
+    let current = card({ id: "mwrs948zev4ziy", due: "2026-11-26", repeat: { every: "day" } });
+    for (let i = 0; i < 400; i++) {
+      const found = nextOfRoutine(current, board, current.due!, 0, []);
+      expect(found?.made).toBe(true);
+      current = found!.next;
+      expect(ID_PATTERN.test(current.id)).toBe(true);
+      expect(current.id).toHaveLength(23);
+    }
+    expect(current.due).toBe("2027-12-31");
+  });
+
+  it("an id that would be too long still fits in 128 characters", () => {
+    const long = "x".repeat(128);
+    expect(successorId({ id: long }, "2026-12-22", 99).length).toBeLessThanOrEqual(128);
+    expect(ID_PATTERN.test(successorId({ id: long }, "2026-12-22", 99))).toBe(true);
+  });
+});
+
+describe("the next card when its id is taken", () => {
+  const today = "2026-11-21";
+  const done = card();
+  const nextId = successorId(done, "2026-11-24");
+
+  it("is the one another computer made already, on the board: only the repetition moves", () => {
+    const other = { ...successorOf(done, board, today, 0), title: "déjà là" };
+    expect(nextOfRoutine(done, board, today, 0, [done, other])).toEqual({ next: other, made: false });
+  });
+
+  it("is a new one when an archived card of the routine has that date (its due date moved back by hand)", () => {
+    const old = { ...successorOf(done, board, today, 0), archivedAt: "2026-11-01T00:00:00Z" };
+    const found = nextOfRoutine(done, board, today, 0, [done, old]);
+    expect(found).toMatchObject({ made: true, next: { id: `${nextId}-2`, due: "2026-11-24", archivedAt: null } });
+  });
+
+  it("is none when the card can't be valid: the finished card then keeps its repetition", () => {
+    expect(nextOfRoutine(card({ title: "x".repeat(600) }), board, today, 0, [])).toBeNull();
   });
 });
