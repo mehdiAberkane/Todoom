@@ -28,6 +28,7 @@ import { TRASH_DAYS } from "../lib/store";
 import { ColumnPreview, ColumnView } from "./ColumnView";
 import { CardBody, colorOf } from "./CardTile";
 import { ExportMenu } from "./ExportMenu";
+import { DependencyGraph } from "./DependencyGraph";
 import { CardModal } from "./CardModal";
 import { LabelManager } from "./LabelManager";
 import { ArchiveModal } from "./ArchiveModal";
@@ -102,6 +103,7 @@ export function BoardView({
   // Cards finished per week, from the history: the last one is this week.
   const weekly = useMemo(() => finishedPerWeek(board, allCards, (id) => mergedHistory(history[id])), [board, allCards, history]);
   const [showArchive, setShowArchive] = useState(false);
+  const [showGraph, setShowGraph] = useState(false);
   const [showContext, setShowContext] = useState(false);
   // The pull/merge request panel: open or not is remembered on this computer.
   const [showReviews, setShowReviews] = useState(() => localGet("todoom-reviews-open") === "1");
@@ -573,6 +575,9 @@ export function BoardView({
             {t("reviews.button")}
           </button>
           <ExportMenu board={board} cards={cards} />
+          <button className="btn-ghost" onClick={() => setShowGraph(true)} title={t("graph.buttonTitle")}>
+            {t("graph.button")}
+          </button>
           <button className="btn-ghost" onClick={onOpenMetrics} title={t("metrics.boardTitle")}>
             {t("metrics.button")}
           </button>
@@ -750,6 +755,7 @@ export function BoardView({
       {selected.length > 0 && <BulkBar board={board} count={selected.length} actions={bulk} />}
       {showContext && <BoardContext board={board} onSave={actions.saveBoard} onClose={() => setShowContext(false)} />}
       {showLabels && <LabelManager board={board} onSave={actions.saveBoard} onClose={() => setShowLabels(false)} />}
+      {showGraph && <DependencyGraph board={board} index={index} onOpen={openLinked} onClose={() => setShowGraph(false)} />}
       {showArchive && (
         <ArchiveModal
           board={board}

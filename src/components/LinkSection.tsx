@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { Card, LinkType } from "../types";
 import { isFinished, LINK_TYPES, type Located } from "../lib/links";
 import { refOf, refsIn } from "../lib/shortid";
+import { createsCycle, dependsOnIn } from "../lib/depGraph";
 import { t } from "../lib/i18n";
 
 const MAX_RESULTS = 8;
@@ -35,7 +36,15 @@ export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps
       .slice(0, MAX_RESULTS);
   }, [query, index, card.id, card.links, self?.board.id]);
 
+  // A link that would make two cards wait on each other is refused (TOD-73).
+  const [refused, setRefused] = useState<string | null>(null);
   const link = (target: Card) => {
+    if (createsCycle(card.id, type, target.id, dependsOnIn(index))) {
+      const other = index.get(target.id);
+      setRefused(t(type === "blocks" ? "links.cycleBlocks" : "links.cycle", { other: (other && refOf(other.board, other.card)) ?? target.title }));
+      return;
+    }
+    setRefused(null);
     onLink(type, target);
     setQuery("");
   };
@@ -94,7 +103,10 @@ export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps
           <input
             placeholder={t("links.search")}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setRefused(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && results[0]) link(results[0].card);
               // Escape clears the search before it closes the card.
@@ -122,6 +134,7 @@ export function LinkSection({ card, index, onLink, onUnlink, onOpen }: LinkProps
           )}
         </div>
       </div>
+      {refused && <p className="link-refused">{refused}</p>}
     </>
   );
 }

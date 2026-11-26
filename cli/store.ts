@@ -24,6 +24,7 @@ import { boardSetup, fromSetup } from "../src/lib/templates";
 import { setLang } from "../src/lib/i18n";
 import { parseRepo } from "../src/lib/reviews";
 import { orderColumn } from "../src/lib/sorting";
+import { createsCycle, dependsOnIn } from "../src/lib/depGraph";
 import { isAsleep, REPEATS, type Repeat } from "../src/lib/recurring";
 import { toISODate } from "../src/lib/utils";
 import { acquireLock, type LockOptions } from "./lock";
@@ -675,6 +676,13 @@ export class Store {
     const a = this.card(cardId);
     const b = this.card(otherId);
     if (a.card.id === b.card.id) throw new TodoomError("Une carte ne peut pas être liée à elle-même");
+    // A depends on B while B already waits on A: nothing could ever start (TOD-73).
+    const index = new Map(this.boards().flatMap((board) => this.cards(board).map((card) => [card.id, { card, board }] as const)));
+    if (createsCycle(a.card.id, kind, b.card.id, dependsOnIn(index))) {
+      // « A depends on B »: B already waits on A. « A blocks B »: A already waits on B.
+      const [first, then] = kind === "blocks" ? [a, b] : [b, a];
+      throw new TodoomError(`Lien refusé : ${refOf(first.board, first.card) ?? first.card.id} dépend déjà, directement ou par d'autres cartes, de ${refOf(then.board, then.card) ?? then.card.id}. Les deux cartes s'attendraient l'une l'autre.`);
+    }
     const saved = this.save(a.board, withLink(a.card, kind, b.card.id), a.card);
     this.save(b.board, withLink(b.card, inverseOf(kind), a.card.id), b.card);
     return this.detail(saved, a.board);

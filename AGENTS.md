@@ -32,7 +32,7 @@ croisent :
 | **Pris par** | `claimedBy` d'une carte : qui travaille dessus (ordinateur, agent, conversation). C'est un **verrou** : on ne prend pas une carte prise par un autre. |
 | **Commentaires** | Un fichier par commentaire, daté et signé. C'est là que vont les comptes rendus, jamais dans la description. |
 | **Historique** | Chaque changement d'une carte, un fichier par carte et par écrivain. La commande et le serveur MCP l'écrivent tout seuls. |
-| **Liens** | Entre cartes, même de deux tableaux : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` pour la commande ; `dependsOn`, `blocks`, `duplicateOf`, `duplicatedBy`, `relatesTo` pour le serveur MCP. Une carte qui dépend d'une carte non terminée est « Bloquée ». |
+| **Liens** | Entre cartes, même de deux tableaux : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` pour la commande ; `dependsOn`, `blocks`, `duplicateOf`, `duplicatedBy`, `relatesTo` pour le serveur MCP. Une carte qui dépend d'une carte non terminée est « Bloquée ». Un lien qui ferait s'attendre deux cartes l'une l'autre (cycle) est refusé. La vue « ⇢ Dépendances » d'un tableau les montre en graphe. |
 | **Archives et corbeille** | Une carte archivée quitte le tableau, sans être perdue. Un tableau supprimé reste 30 jours dans la corbeille. |
 
 ---

@@ -516,3 +516,18 @@ describe("what an agent needs to work without going around the tool (TOD-70)", (
     expect(() => store.place(a.id, "after", a.id)).toThrow(/elle-même/);
   });
 });
+
+describe("a link that would close a cycle (TOD-73)", () => {
+  it("is refused, with the cards named, and nothing is written", () => {
+    const a = store.create("Todoom", "A");
+    const b = store.create("Todoom", "B");
+    const c = store.create("Todoom", "C");
+    store.link(a.id, "depends-on", b.id);
+    store.link(b.id, "depends-on", c.id);
+    expect(() => store.link(c.id, "depends-on", a.id)).toThrow(/Lien refusé : TOD-\d+ dépend déjà/);
+    expect(() => store.link(a.id, "blocks", c.id)).toThrow(new RegExp(`Lien refusé : ${a.ref} dépend déjà`));
+    expect(onDisk(c.id).links).toEqual([{ type: "blocks", cardId: b.id }]);
+    // Another kind of link between them is fine.
+    expect(store.link(c.id, "relates-to", a.id).links).toContainEqual(expect.objectContaining({ type: "relatesTo" }));
+  });
+});
