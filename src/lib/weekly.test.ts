@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { Board, Card, HistoryEvent } from "../types";
 import { isoWeek, isWeeklyName, lastWeek, oldWeeklyFiles, weekOfBoard, weeklyName, weeklyReading } from "./weekly";
 import { readingChanges } from "./reading";
+import { setLang } from "./i18n";
+
+// The texts checked below are the French ones, whatever the language of the machine running the tests.
+beforeAll(() => setLang("fr"));
 
 const board = {
   id: "b",
