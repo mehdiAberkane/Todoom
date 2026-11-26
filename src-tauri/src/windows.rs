@@ -29,9 +29,109 @@ pub(crate) fn open_capture(app: &AppHandle) {
         .center()
         .focused(true)
         .build();
-    if let Err(e) = built {
-        log::warn!("fenêtre de capture impossible : {e}");
+    match built {
+        Ok(window) => set_taskbar_icon(&window),
+        Err(e) => log::warn!("fenêtre de capture impossible : {e}"),
     }
+}
+
+// ---- Taskbar (Windows) -------------------------------------------------------
+// The taskbar draws a window's button with its big icon (ICON_BIG). Tauri (tao)
+// only sets the small one, so Windows sometimes draws a blank page instead of
+// Todoom's icon (TOD-76).
+
+/// The id of the app's icon in the exe (tauri-build puts icons/icon.ico there).
+#[cfg(windows)]
+const EXE_ICON_RESOURCE_ID: usize = 32512;
+
+/// Gives a window its big icon: the exe's own, at the size the taskbar uses on its screen.
+#[cfg(windows)]
+pub(crate) fn set_taskbar_icon(window: &tauri::WebviewWindow) {
+    use ::windows::Win32::Foundation::{HINSTANCE, LPARAM, WPARAM};
+    use ::windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use ::windows::Win32::UI::HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi};
+    use ::windows::Win32::UI::WindowsAndMessaging::{
+        ICON_BIG, IMAGE_ICON, LR_SHARED, LoadImageW, SM_CXICON, SM_CYICON, SendMessageW, WM_SETICON,
+    };
+    use ::windows::core::PCWSTR;
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    // SAFETY: plain Win32 calls on a window of this process; LR_SHARED icons are owned by
+    // the system and never destroyed here.
+    unsafe {
+        let Ok(module) = GetModuleHandleW(None) else {
+            return;
+        };
+        let dpi = GetDpiForWindow(hwnd);
+        let icon = LoadImageW(
+            Some(HINSTANCE(module.0)),
+            // MAKEINTRESOURCE: a resource id passed where a name is expected.
+            PCWSTR(EXE_ICON_RESOURCE_ID as *const u16),
+            IMAGE_ICON,
+            GetSystemMetricsForDpi(SM_CXICON, dpi),
+            GetSystemMetricsForDpi(SM_CYICON, dpi),
+            LR_SHARED,
+        );
+        match icon {
+            Ok(icon) => {
+                SendMessageW(
+                    hwnd,
+                    WM_SETICON,
+                    Some(WPARAM(ICON_BIG as usize)),
+                    Some(LPARAM(icon.0 as isize)),
+                );
+            }
+            Err(e) => log::warn!("icône de la barre des tâches introuvable : {e}"),
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn set_taskbar_icon(_window: &tauri::WebviewWindow) {}
+
+#[cfg(any(windows, test))]
+const WS_EX_TOOLWINDOW: isize = 0x80;
+#[cfg(any(windows, test))]
+const WS_EX_APPWINDOW: isize = 0x4_0000;
+
+/// The extended style of a window kept off the taskbar: a tool window, never an app window.
+#[cfg(any(windows, test))]
+fn off_taskbar_style(ex_style: isize) -> isize {
+    (ex_style & !WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW
+}
+
+/// Shows or hides the PR/MR popup. On Windows, done here: tao puts WS_EX_APPWINDOW back
+/// each time it shows a window, and skip_taskbar only removes the button once, so the
+/// popup got a taskbar button of its own (blank) at each notice (TOD-76). Shown as a
+/// tool window, without taking the focus.
+#[cfg(windows)]
+fn show_popup(window: &tauri::WebviewWindow, visible: bool) -> Result<(), String> {
+    use ::windows::Win32::UI::WindowsAndMessaging::{
+        GWL_EXSTYLE, GetWindowLongPtrW, SW_HIDE, SW_SHOWNOACTIVATE, SetWindowLongPtrW, ShowWindow,
+    };
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+    // SAFETY: plain Win32 calls on the popup, a window of this process.
+    unsafe {
+        if visible {
+            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, off_taskbar_style(style));
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        } else {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn show_popup(window: &tauri::WebviewWindow, visible: bool) -> Result<(), String> {
+    if visible {
+        window.show()
+    } else {
+        window.hide()
+    }
+    .map_err(|e| e.to_string())
 }
 
 pub(crate) fn show_main(app: &AppHandle) {
@@ -159,7 +259,7 @@ pub(crate) fn pr_popup_layout(window: tauri::WebviewWindow, height: f64) -> Resu
         return Err("not the popup".into());
     }
     if height <= 0.0 {
-        return window.hide().map_err(|e| e.to_string());
+        return show_popup(&window, false);
     }
     let monitor = window
         .current_monitor()
@@ -182,12 +282,23 @@ pub(crate) fn pr_popup_layout(window: tauri::WebviewWindow, height: f64) -> Resu
     window
         .set_position(tauri::PhysicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
-    window.show().map_err(|e| e.to_string())
+    show_popup(&window, true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_pr_popup_is_a_tool_window_never_an_app_window() {
+        // As read on the running popup: WS_EX_APPWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST…
+        let shown_by_tao = 0x4_0000 | 0x800_0000 | 0x8 | 0x100;
+        let style = off_taskbar_style(shown_by_tao);
+        assert_eq!(style & WS_EX_APPWINDOW, 0);
+        assert_eq!(style & WS_EX_TOOLWINDOW, WS_EX_TOOLWINDOW);
+        // The rest is kept: no activation, always on top.
+        assert_eq!(style & (0x800_0000 | 0x8 | 0x100), 0x800_0000 | 0x8 | 0x100);
+    }
 
     #[test]
     fn the_pr_popup_sits_in_the_bottom_right_corner_of_the_work_area() {

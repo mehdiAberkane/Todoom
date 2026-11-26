@@ -180,6 +180,7 @@ pub fn run() {
             // Shows which build is running, e.g. "Todoom v0.2.1".
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_title(&format!("Todoom v{}", app.package_info().version));
+                set_taskbar_icon(&window);
             }
             Ok(())
         })

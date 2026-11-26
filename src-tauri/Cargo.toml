@@ -34,6 +34,11 @@ base64 = "0.22"
 tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
 
+# The taskbar icon and the PR/MR popup's place off the taskbar (windows.rs): the same
+# version as Tauri's own, so its window handles are the same type.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
