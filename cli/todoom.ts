@@ -31,6 +31,15 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
                 [--repeat day|week|month | --no-repeat]
   todoom move <carte> <colonne> [--top] [--board <tableau>]
                                               --board : vers un autre tableau (étiquettes par nom)
+  todoom move <carte> --before <carte> | --after <carte>
+                                              juste avant ou après une autre carte du tableau
+  todoom checklist <carte> [--add <texte>]... [--check <élément>]... [--uncheck <élément>]... [--remove <élément>]...
+                                              élément : position (1 = le premier), identifiant
+                                              ou début unique du texte
+  todoom search <texte> [--archived]          cartes de tous les tableaux qui contiennent le texte
+  todoom mine [--conversation <nom>]          cartes prises par cet ordinateur (ou cette conversation)
+  todoom next <tableau> [--column <nom>]      la carte à prendre : première de « À faire »,
+                                              libre et non bloquée (null s'il n'y en a pas)
   todoom link <carte> <type> <autre carte>    type : depends-on, blocks, duplicate-of,
                                               duplicated-by, relates-to (écrit sur les deux cartes)
   todoom unlink <carte> <autre carte>
@@ -95,6 +104,12 @@ export async function main(argv: string[]): Promise<number> {
       repeat: { type: "string" },
       "no-repeat": { type: "boolean" },
       waiting: { type: "boolean" },
+      before: { type: "string" },
+      after: { type: "string" },
+      add: { type: "string", multiple: true },
+      check: { type: "string", multiple: true },
+      uncheck: { type: "string", multiple: true },
+      remove: { type: "string", multiple: true },
       top: { type: "boolean" },
       save: { type: "boolean" },
       template: { type: "string" },
@@ -172,6 +187,25 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
 
+    case "checklist":
+      need(1, "checklist <carte> [--add <texte>]... [--check <élément>]... [--uncheck <élément>]... [--remove <élément>]...");
+      out(store().checklist(rest[0], { add: o.add, check: o.check, uncheck: o.uncheck, remove: o.remove }));
+      return 0;
+
+    case "search":
+      need(1, "search <texte> [--archived]");
+      out(store().search(rest.join(" "), { archived: o.archived }));
+      return 0;
+
+    case "mine":
+      out(store().mine({ conversation: o.conversation }));
+      return 0;
+
+    case "next":
+      need(1, "next <tableau> [--column <nom>]");
+      out(store().next(rest[0], { column: o.column }));
+      return 0;
+
     case "show": {
       need(1, "show <carte>");
       const s = store();
@@ -214,6 +248,11 @@ export async function main(argv: string[]): Promise<number> {
     }
 
     case "move":
+      if (o.before || o.after) {
+        need(1, "move <carte> --before <carte> | --after <carte>");
+        out(store().place(rest[0], o.before ? "before" : "after", (o.before ?? o.after)!));
+        return 0;
+      }
       need(2, "move <carte> <colonne> [--top] [--board <tableau>]");
       out(
         o.board

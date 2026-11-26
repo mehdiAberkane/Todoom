@@ -208,17 +208,87 @@ export function createServer(dir: string): McpServer {
     {
       title: "Move a card",
       description:
-        `Moves a card to a column of its board, at the bottom (or the top). With board, moves it to another board: same id, labels and priority matched by name, comments, history and attachments moved along, a new short id. ${NAMES}`,
+        `Moves a card to a column of its board, at the bottom (or the top), or just before or after another card of the board (in that card's column; in a column kept sorted by priority…, this only orders it among the cards tied with it). With board, moves it to another board: same id, labels and priority matched by name, comments, history and attachments moved along, a new short id. ${NAMES}`,
       inputSchema: {
         card: z.string().describe("Card short id (SOL-42) or id"),
-        column: z.string().describe("Column name, e.g. « En cours »"),
+        column: z.string().optional().describe("Column name, e.g. « En cours »; not needed with before or after"),
         position: z.enum(["top", "bottom"]).optional(),
+        before: z.string().optional().describe("Put it just before this card (short id or id)"),
+        after: z.string().optional().describe("Put it just after this card (short id or id)"),
         board: z.string().optional().describe("Another board to move the card to"),
       },
       annotations: { ...writes, idempotentHint: true },
     },
-    ({ card, column, position, board }) =>
-      run(() => (board ? store.moveToBoard(card, board, column) : store.move(card, column, position ?? "bottom"))),
+    ({ card, column, position, before, after, board }) =>
+      run(() => {
+        if (before || after) {
+          if (board) throw new TodoomError("before / after : sur le même tableau seulement (déplace d'abord avec board)");
+          return store.place(card, before ? "before" : "after", (before ?? after)!);
+        }
+        if (!column) throw new TodoomError("Donne column, ou before / after");
+        return board ? store.moveToBoard(card, board, column) : store.move(card, column, position ?? "bottom");
+      }),
+  );
+
+  server.registerTool(
+    "update_checklist",
+    {
+      title: "Update a checklist",
+      description:
+        "Adds items to a card's checklist, ticks, unticks or removes them. An item is named by its position (1 is the first), its id, or the unique start of its text. Positions all mean the checklist as it was before this call.",
+      inputSchema: {
+        card: z.string().describe("Card short id (SOL-42) or id"),
+        add: z.array(z.string()).optional().describe("Texts of new items, added at the end, not ticked"),
+        check: z.array(z.string()).optional().describe("Items to tick"),
+        uncheck: z.array(z.string()).optional().describe("Items to untick"),
+        remove: z.array(z.string()).optional().describe("Items to remove"),
+      },
+      annotations: writes,
+    },
+    ({ card, add, check, uncheck, remove }) => run(() => store.checklist(card, { add, check, uncheck, remove })),
+  );
+
+  server.registerTool(
+    "search_cards",
+    {
+      title: "Search every board",
+      description:
+        "Cards of every board (not in the trash) whose title or description contains the text (case and accents ignored), each board in the order the app shows it, without their descriptions (use get_card).",
+      inputSchema: {
+        text: z.string().min(1),
+        archived: z.boolean().optional().describe("Search the archived cards instead"),
+      },
+      annotations: readOnly,
+    },
+    ({ text, archived }) => run(() => store.search(text, { archived })),
+  );
+
+  server.registerTool(
+    "my_cards",
+    {
+      title: "My cards",
+      description:
+        "The cards taken (claim_card) by this computer, on every board: to pick up work left off. With conversation, only those this conversation took.",
+      inputSchema: {
+        conversation: z.string().optional().describe("The short name this conversation gave to claim_card"),
+      },
+      annotations: readOnly,
+    },
+    ({ conversation }) => run(() => store.mine({ conversation })),
+  );
+
+  server.registerTool(
+    "next_card",
+    {
+      title: "Next card to take",
+      description: `The card to take on a board: the first one of « À faire » (or the column given), in the order the app shows it, that nobody holds and that depends on no unfinished card; with its description, checklist, comments and links. null when there is none. Then claim_card it. ${NAMES}`,
+      inputSchema: {
+        board: z.string().describe("Board name"),
+        column: z.string().optional().describe("Another column than « À faire »"),
+      },
+      annotations: readOnly,
+    },
+    ({ board, column }) => run(() => store.next(board, { column })),
   );
 
   server.registerTool(

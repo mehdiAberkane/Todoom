@@ -53,7 +53,9 @@ Installation, branchement dans Claude Code et liste complète des commandes :
 
 **Outils MCP** :
 - `list_boards`, `get_board`, `create_board` (seulement si l’utilisateur demande un nouveau tableau), `update_board` ;
-- `list_cards`, `get_card`, `create_card`, `update_card`, `move_card` ;
+- `list_cards`, `get_card`, `create_card`, `update_card`, `move_card` (aussi avant / après une carte) ;
+- `next_card` (la carte à prendre), `search_cards` (tous les tableaux), `my_cards` (cartes prises ici) ;
+- `update_checklist` ;
 - `claim_card`, `release_card` ;
 - `add_comment` ;
 - `link_cards`, `unlink_cards` ;
@@ -65,9 +67,10 @@ ignorés, un début unique suffit), les cartes par `TOD-12`.
 ### Traiter un ticket
 
 1. `get_board` : lire le contexte du tableau, et le suivre.
-2. `list_cards` avec la colonne « À faire » : prendre la **première** carte. La liste suit
-   l'ordre affiché de la colonne : son tri (par défaut, la priorité puis l'échéance, une
-   carte en retard en tête), ou l'ordre à la main si l'utilisateur l'a choisi.
+2. `next_card` : la carte à prendre, c'est-à-dire la **première** de « À faire » que personne
+   ne tient et qui ne dépend d'aucune carte non terminée. L'ordre est celui affiché dans la
+   colonne : son tri (par défaut, la priorité puis l'échéance, une carte en retard en tête),
+   ou l'ordre à la main si l'utilisateur l'a choisi. `my_cards` retrouve un travail interrompu.
 3. `get_card` : lire la description, la checklist, les commentaires et les liens.
 4. `claim_card` avec `column` « En cours » et `conversation` (nom court de la
    conversation). **S'il est refusé** parce qu'un autre l'a pris : ne pas y toucher,

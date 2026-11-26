@@ -427,3 +427,92 @@ describe("data folder", () => {
     }
   });
 });
+
+describe("what an agent needs to work without going around the tool (TOD-70)", () => {
+  const addBoard = (id: string, name: string, columns: { id: string; name: string }[]) => {
+    mkdirSync(join(dir, "boards", id, "cards"), { recursive: true });
+    writeFileSync(join(dir, "boards", id, "board.json"), JSON.stringify({ id, name, columns, labels: [], createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }));
+  };
+
+  it("changes a checklist: adds, ticks, unticks and removes items by position, id or start of text", () => {
+    const a = store.create("Todoom", "Un");
+    let c = store.checklist(a.id, { add: ["Écrire les tests", "Mettre à jour la doc", "  ", "Publier"] });
+    expect(c.checklist.map((i) => [i.text, i.done])).toEqual([["Écrire les tests", false], ["Mettre à jour la doc", false], ["Publier", false]]);
+    c = store.checklist(a.id, { check: ["1", "ecrire"], remove: ["publier"] });
+    expect(c.checklist.map((i) => [i.text, i.done])).toEqual([["Écrire les tests", true], ["Mettre à jour la doc", false]]);
+    // Positions mean the checklist as it was: item 2 is still « Mettre à jour la doc » even with item 1 removed in the same call.
+    c = store.checklist(a.id, { remove: ["1"], check: ["2"] });
+    expect(c.checklist.map((i) => [i.text, i.done])).toEqual([["Mettre à jour la doc", true]]);
+    c = store.checklist(a.id, { uncheck: [c.checklist[0].id] });
+    expect(c.checklist[0].done).toBe(false);
+    expect(() => store.checklist(a.id, { check: ["9"] })).toThrow(/Pas d'élément « 9 »/);
+    expect(() => store.checklist(a.id, {})).toThrow(/Rien à changer/);
+    expect(cardProblem(onDisk(a.id))).toBeNull();
+  });
+
+  it("searches every board, not the trashed ones, and the archived ones on demand", () => {
+    addBoard("b2", "Solaris", [{ id: "s1", name: "À faire" }]);
+    addBoard("b3", "Vieux", [{ id: "v1", name: "À faire" }]);
+    store.create("Todoom", "Export PDF", { description: "x" });
+    store.create("Solaris", "Rapport", { description: "Un export en PDF aussi" });
+    store.create("Vieux", "Export perdu");
+    // « Vieux » goes to the trash.
+    const raw = JSON.parse(readFileSync(join(dir, "boards", "b3", "board.json"), "utf8"));
+    writeFileSync(join(dir, "boards", "b3", "board.json"), JSON.stringify({ ...raw, archivedAt: "2026-01-02T00:00:00.000Z" }));
+    const archived = store.create("Todoom", "Ancien export");
+    store.archive(archived.id);
+    expect(store.search("EXPORT").map((c) => [c.board, c.title])).toEqual([["Solaris", "Rapport"], ["Todoom", "Export PDF"]]);
+    expect(store.search("export", { archived: true }).map((c) => c.title)).toEqual(["Ancien export"]);
+    expect(() => store.search("  ")).toThrow(/vide/);
+  });
+
+  it("lists the cards taken here, on every board, or only this conversation's", () => {
+    addBoard("b2", "Solaris", [{ id: "s1", name: "À faire" }]);
+    const here = new Store(dir, { tool: "mcp", author: { host: "PC-Main", agent: "Claude" } });
+    const there = new Store(dir, { tool: "cli", author: { host: "PC-Portable" } });
+    const a = here.create("Todoom", "Un");
+    const b = here.create("Solaris", "Deux");
+    const c = here.create("Todoom", "Trois");
+    here.claim(a.id, { conversation: "login" });
+    here.claim(b.id, { conversation: "export" });
+    there.claim(c.id);
+    expect(here.mine().map((x) => x.title)).toEqual(["Deux", "Un"]);
+    expect(here.mine({ conversation: "login" }).map((x) => x.title)).toEqual(["Un"]);
+    expect(there.mine().map((x) => x.title)).toEqual(["Trois"]);
+  });
+
+  it("gives the card to take: first of « À faire » as shown, not taken, not waiting on an unfinished one", () => {
+    const raw = JSON.parse(readFileSync(join(dir, "boards", "b1", "board.json"), "utf8"));
+    raw.columns.push({ id: "done", name: "Terminé" });
+    writeFileSync(join(dir, "boards", "b1", "board.json"), JSON.stringify(raw));
+    const low = store.create("Todoom", "Basse", { priority: "P3" });
+    const high = store.create("Todoom", "Haute", { priority: "P1" });
+    const blocker = store.create("Todoom", "Prérequis", { column: "En cours" });
+    expect(store.next("Todoom")?.title).toBe("Haute");
+    store.claim(high.id);
+    expect(store.next("Todoom")?.title).toBe("Basse");
+    store.link(low.id, "depends-on", blocker.id);
+    expect(store.next("Todoom")).toBeNull();
+    store.move(blocker.id, "Terminé");
+    expect(store.next("Todoom")).toMatchObject({ title: "Basse", links: [{ type: "dependsOn", finished: true }] });
+    expect(store.next("Todoom", { column: "en cours" })).toBeNull();
+  });
+
+  it("puts a card just before or after another one, in that one's column", () => {
+    const raw = JSON.parse(readFileSync(join(dir, "boards", "b1", "board.json"), "utf8"));
+    raw.columns[0].sort = "manual";
+    writeFileSync(join(dir, "boards", "b1", "board.json"), JSON.stringify(raw));
+    const a = store.create("Todoom", "A");
+    const b = store.create("Todoom", "B");
+    const c = store.create("Todoom", "C");
+    const d = store.create("Todoom", "D", { column: "En cours" });
+    const order = () => store.cards(store.board("Todoom")).filter((x) => x.columnId === "todo").map((x) => x.title);
+    store.place(c.id, "before", b.id);
+    expect(order()).toEqual(["A", "C", "B"]);
+    store.place(a.id, "after", b.id);
+    expect(order()).toEqual(["C", "B", "A"]);
+    expect(store.place(d.id, "before", c.id).column).toBe("À faire");
+    expect(order()).toEqual(["D", "C", "B", "A"]);
+    expect(() => store.place(a.id, "after", a.id)).toThrow(/elle-même/);
+  });
+});

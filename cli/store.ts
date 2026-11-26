@@ -744,6 +744,109 @@ export class Store {
     return this.view(this.save(board, { ...card, claimedBy: null }, card), board);
   }
 
+  /**
+   * Changes a card's checklist (TOD-70): adds items, ticks, unticks or removes
+   * them. An item is named by its position (1 is the first), its id, or the
+   * unique start of its text (case and accents ignored). Removals come last, so
+   * positions given in one call all mean the checklist as it was.
+   */
+  checklist(cardId: string, changes: { add?: string[]; check?: string[]; uncheck?: string[]; remove?: string[] }) {
+    const { card, board } = this.card(cardId);
+    const items = card.checklist;
+    const find = (wanted: string) => {
+      const w = wanted.trim();
+      if (/^\d+$/.test(w) && Number(w) >= 1 && Number(w) <= items.length) return items[Number(w) - 1];
+      const byId = items.find((i) => i.id === w);
+      if (byId) return byId;
+      const found = items.filter((i) => normalize(i.text).startsWith(normalize(w)));
+      if (found.length === 1) return found[0];
+      throw new TodoomError(
+        found.length ? `« ${wanted} » désigne plusieurs éléments de la checklist` : `Pas d'élément « ${wanted} » dans la checklist (${items.length} élément${items.length > 1 ? "s" : ""})`,
+      );
+    };
+    const ticked = new Map<string, boolean>();
+    for (const w of changes.check ?? []) ticked.set(find(w).id, true);
+    for (const w of changes.uncheck ?? []) ticked.set(find(w).id, false);
+    const gone = new Set((changes.remove ?? []).map((w) => find(w).id));
+    const added = (changes.add ?? []).map((text) => text.trim()).filter(Boolean).map((text) => ({ id: uid(), text, done: false }));
+    if (!ticked.size && !gone.size && !added.length) throw new TodoomError("Rien à changer dans la checklist");
+    const checklist = [...items.filter((i) => !gone.has(i.id)).map((i) => (ticked.has(i.id) ? { ...i, done: ticked.get(i.id)! } : i)), ...added];
+    return this.detail(this.save(board, { ...card, checklist }, card), board);
+  }
+
+  /** A card in a list of several boards: what tells it apart, without its description. */
+  private summary(card: Card, board: Board) {
+    const v = this.view(card, board);
+    return { id: v.id, ref: v.ref, board: v.board, column: v.column, title: v.title, priority: v.priority, labels: v.labels, due: v.due, claimedBy: v.claimedBy ? claimLabel(v.claimedBy) : null, updatedAt: v.updatedAt };
+  }
+
+  /** The cards of every board (not in the trash) whose title or description holds the text, each board in its order (TOD-70). */
+  search(text: string, opts: { archived?: boolean } = {}) {
+    const q = normalize(text);
+    if (!q) throw new TodoomError("Recherche vide");
+    return this.boards().flatMap((board) =>
+      this.cards(board)
+        .filter((c) => listed(c, { archived: opts.archived }) || (!opts.archived && listed(c, { waiting: true })))
+        .filter((c) => normalize(`${c.title}\n${c.description}`).includes(q))
+        .map((c) => this.summary(c, board)),
+    );
+  }
+
+  /**
+   * The cards taken by this computer, on every board (TOD-70): to pick up work
+   * left off. With a conversation, only those it took; else all of this computer's.
+   */
+  mine(opts: { conversation?: string } = {}) {
+    const me = { ...this.who.author, ...(opts.conversation ? { conversation: opts.conversation } : {}) };
+    const mine = (c: Card) => !!c.claimedBy && (opts.conversation ? sameClaimant(c.claimedBy, me) : c.claimedBy.host === me.host);
+    return this.boards().flatMap((board) => this.cards(board).filter((c) => !c.archivedAt && mine(c)).map((c) => this.summary(c, board)));
+  }
+
+  /**
+   * The card to take on a board (TOD-70): the first one of « À faire » (or the
+   * column given) in the order the app shows it, nobody holds, and that depends
+   * on no card still unfinished. Null when there is none.
+   */
+  next(boardName: string, opts: { column?: string } = {}) {
+    const board = this.board(boardName);
+    const column = opts.column ? this.column(board, opts.column) : (board.columns.find((c) => normalize(c.name) === "a faire") ?? board.columns[0]);
+    if (!column) throw new TodoomError(`Le tableau « ${board.name} » n'a aucune colonne`);
+    const blocked = (card: Card) =>
+      card.links.some((l) => {
+        if (l.type !== "dependsOn") return false;
+        try {
+          const other = this.card(l.cardId);
+          return !isFinished(other.card, other.board);
+        } catch {
+          return false; // a card gone blocks nothing
+        }
+      });
+    const card = this.cards(board).find((c) => c.columnId === column.id && listed(c) && !c.claimedBy && !blocked(c));
+    return card ? this.detail(card, board) : null;
+  }
+
+  /**
+   * Puts a card just before or after another one of the same board, in that one's
+   * column (TOD-70). In a column kept sorted (by priority…), this only orders it
+   * among the cards tied with it; « by hand », it is exactly there.
+   */
+  place(cardId: string, where: "before" | "after", otherId: string): CardView {
+    const { card, board } = this.card(cardId);
+    const other = this.card(otherId);
+    if (other.board.id !== board.id) throw new TodoomError("Les deux cartes ne sont pas sur le même tableau : déplace-la d'abord avec --board");
+    if (other.card.id === card.id) throw new TodoomError("Une carte ne peut pas être placée par rapport à elle-même");
+    const column = other.card.columnId;
+    const list = this.cards(board)
+      .filter((c) => c.columnId === column && !c.archivedAt && c.id !== card.id)
+      .sort((a, b) => a.order - b.order);
+    const at = list.findIndex((c) => c.id === other.card.id);
+    const neighbour = list[where === "before" ? at - 1 : at + 1];
+    const order = neighbour ? (other.card.order + neighbour.order) / 2 : other.card.order + (where === "before" ? -1 : 1);
+    const next: Card = { ...card, columnId: column, order };
+    if (card.wakeOn) next.wakeOn = null;
+    return this.view(this.save(board, next, card), board);
+  }
+
   /** Adds a comment, dated and signed (computer, agent, conversation), in a file of its own. */
   comment(cardId: string, text: string): CardComment & { ref: string | null } {
     if (!text.trim()) throw new TodoomError("Le commentaire est vide");
@@ -757,7 +860,7 @@ export class Store {
 }
 
 // Every operation that writes goes through the lock.
-for (const name of ["createBoard", "setBoardDescription", "create", "update", "move", "moveToBoard", "archive", "restore", "link", "unlink", "claim", "release", "comment"] as const) {
+for (const name of ["createBoard", "setBoardDescription", "create", "update", "move", "moveToBoard", "place", "checklist", "archive", "restore", "link", "unlink", "claim", "release", "comment"] as const) {
   const operation = Store.prototype[name] as (...args: unknown[]) => unknown;
   (Store.prototype as unknown as Record<string, unknown>)[name] = function (this: Store, ...args: unknown[]) {
     return this.locked(() => operation.apply(this, args));

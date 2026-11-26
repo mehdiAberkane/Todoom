@@ -46,9 +46,14 @@ noms possibles quand un nom n'est pas reconnu.
 | `todoom board <tableau> [--description <texte>]` | un tableau et sa page de contexte (dépôt, règles, vocabulaire, sens des colonnes), à lire avant de prendre un ticket ; `--description` la remplace |
 | `todoom new-board <nom> [--template dev|simple|<tableau>] [--description <texte>] [--repo <adresse>]` | nouveau tableau, comme dans l’application : modèle « dev » par défaut (À faire, En cours, A verifier, Terminé, Backlog et leurs étiquettes), « simple », ou la configuration d’un tableau existant ; clé des cartes donnée tout de suite ; refusé si le nom existe déjà |
 | `todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived \| --waiting]` | cartes, colonne par colonne, sans description ; la prochaine carte d'une routine n'y est qu'à partir de quelques jours avant son échéance (`--waiting` liste celles qui attendent) |
+| `todoom checklist <carte> [--add <texte>]… [--check <élément>]… [--uncheck <élément>]… [--remove <élément>]…` | coche, décoche, ajoute ou retire des éléments de la checklist ; un élément se désigne par sa position (1 = le premier), son identifiant ou le début unique de son texte |
+| `todoom search <texte> [--archived]` | cartes de tous les tableaux dont le titre ou la description contient le texte |
+| `todoom mine [--conversation <nom>]` | cartes prises par cet ordinateur, tous tableaux confondus (avec `--conversation`, seulement celles de cette conversation) : pour reprendre un travail interrompu |
+| `todoom next <tableau> [--column <nom>]` | la carte à prendre : la première de « À faire » dans l'ordre affiché, que personne ne tient et qui ne dépend d'aucune carte non terminée ; `null` s'il n'y en a pas |
 | `todoom show <carte>` | une carte entière, avec ses commentaires, son historique et ses liens (titre, tableau, colonne, terminée ou non) |
 | `todoom create <tableau> <titre> [--column <nom>] [--description <texte>] [--label <nom>]… [--priority <nom>] [--due AAAA-MM-JJ]` | nouvelle carte, par défaut dans la première colonne |
 | `todoom update <carte> [--title …] [--description …] [--append …] [--label …]… [--unlabel …]… [--priority … \| --no-priority] [--due … \| --no-due] [--branch … \| --no-branch] [--mr <adresse>] [--mr-state open\|merged\|closed] [--no-mr] [--repeat day\|week\|month \| --no-repeat]` | modifie les champs donnés, garde les autres ; une merge request garde son état quand son adresse change ; `--no-repeat` arrête une routine |
+| `todoom move <carte> --before <carte>` / `--after <carte>` | juste avant ou après une autre carte du même tableau, dans sa colonne (dans une colonne triée par priorité…, seulement parmi les cartes à égalité) |
 | `todoom move <carte> <colonne> [--top] [--board <tableau>]` | déplace en bas (ou en haut) d'une colonne ; avec `--board`, vers un autre tableau : même identifiant interne, étiquettes et priorité par leur nom, commentaires, historique et pièces jointes déplacés, nouveau numéro |
 | `todoom link <carte> <type> <autre carte>` | lie deux cartes, même sur deux tableaux, et écrit le lien sur les deux. Types : `depends-on`, `blocks`, `duplicate-of`, `duplicated-by`, `relates-to` |
 | `todoom unlink <carte> <autre carte>` | retire le lien des deux cartes |
@@ -76,8 +81,8 @@ ou la variable `TODOOM_AGENT` (le serveur MCP signe « Claude » par défaut), e
 ## Serveur MCP pour Claude
 
 `todoom mcp` expose les mêmes opérations comme outils : `list_boards`, `get_board`, `create_board`, `update_board`, `list_cards`,
-`get_card`, `create_card`, `update_card`, `move_card`, `claim_card`, `release_card`, `link_cards`, `unlink_cards`, `add_comment`,
-`archive_card`, `restore_card`.
+`get_card`, `create_card`, `update_card`, `move_card` (aussi `before` / `after`), `update_checklist`, `search_cards`, `my_cards`,
+`next_card`, `claim_card`, `release_card`, `link_cards`, `unlink_cards`, `add_comment`, `archive_card`, `restore_card`.
 
 Pour Claude Code, une fois pour toutes sur chaque PC :
 
