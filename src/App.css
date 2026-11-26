@@ -24,12 +24,12 @@
   /* Tints over any surface: white on the dark theme, black on the light one (rgb(var(--ink) / 0.05)). */
   --ink: 255 255 255;
   --scrollbar: #34303d;
-  --accent-text: var(--accent-text);
-  --danger-text: var(--danger-text);
-  --warn-text: var(--warn-text);
-  --ok-text: var(--ok-text);
-  --blocked-text: var(--blocked-text);
-  --merged: var(--merged);
+  --accent-text: #ffd2c8;
+  --danger-text: #ffb4a6;
+  --warn-text: #ff8a6b;
+  --ok-text: #7bd88f;
+  --blocked-text: #ff6b57;
+  --merged: #b58cff;
   --tip-bg: #0b0a0e;
   --backdrop: rgba(5, 4, 8, 0.7);
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
