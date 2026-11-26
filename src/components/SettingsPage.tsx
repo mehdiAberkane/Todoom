@@ -208,7 +208,7 @@ export function SettingsPage({
           {t("settings.prNotifyEnabled")}
         </label>
         <div className={`notify-options ${prNotify.enabled ? "" : "off"}`}>
-          {(["opened", "ciFailed", "merged"] as const).map((kind) => (
+          {(["opened", "ciFailed", "merged", "releaseStarted", "releaseFinished"] as const).map((kind) => (
             <label key={kind} className="settings-check">
               <input type="checkbox" checked={prNotify[kind]} disabled={!prNotify.enabled} onChange={(e) => savePrNotify({ [kind]: e.target.checked })} />
               {t(`settings.prNotify.${kind}`)}

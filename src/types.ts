@@ -199,7 +199,7 @@ export interface AppSettings {
   /** Columns shown in « My work », by name; absent means the usual ones (En cours, A verifier…). */
   myWorkColumns?: string[];
   /** PR/MR popups (new one, CI failed, merged), for the boards with a repository; absent means all on. */
-  reviewNotifications?: { enabled?: boolean; opened?: boolean; ciFailed?: boolean; merged?: boolean };
+  reviewNotifications?: { enabled?: boolean; opened?: boolean; ciFailed?: boolean; merged?: boolean; releaseStarted?: boolean; releaseFinished?: boolean };
   /** System notifications; absent means on, for « A verifier » and « Echec », and for due dates. */
   notifications?: { enabled?: boolean; columns?: string[]; due?: boolean };
   /** Template a new board starts from: "simple", "dev" or "copy:<board id>"; absent means "dev". */

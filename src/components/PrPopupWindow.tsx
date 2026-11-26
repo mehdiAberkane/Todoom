@@ -82,7 +82,7 @@ export function PrPopupWindow({ demo }: { demo?: PrNotice[] }) {
         ) : (
           <div key={n.id} className={`pr-notice pr-${n.kind}`} role="button" tabIndex={0} onClick={() => open(n)} title={t("prPopup.open")}>
             <div className="pr-notice-head">
-              <span className="pr-kind">⑂ {t(`prPopup.${n.kind}`)}</span>
+              <span className="pr-kind">{n.kind.startsWith("release") ? "🏷" : "⑂"} {t(`prPopup.${n.kind}`)}</span>
               <span className="pr-repo">{n.repo}</span>
               <button
                 className="pr-close"
@@ -98,10 +98,12 @@ export function PrPopupWindow({ demo }: { demo?: PrNotice[] }) {
             <div className="pr-notice-title">
               <span className="pr-number">{n.number}</span> {n.title}
             </div>
-            <div className="pr-notice-meta">
-              {n.author}
-              {n.card && <span className="pr-card"> · {n.card}</span>}
-            </div>
+            {(n.author || n.card) && (
+              <div className="pr-notice-meta">
+                {n.author}
+                {n.card && <span className="pr-card"> · {n.card}</span>}
+              </div>
+            )}
           </div>
         ),
       )}

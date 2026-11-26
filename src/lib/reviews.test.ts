@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "../types";
-import { cardOfReview, ciOfChecks, ciOfPipeline, githubReviews, gitlabReviews, parseRepo, parseReviews, recentlyMerged, repoKey, reviewError } from "./reviews";
+import { cardOfReview, ciOfChecks, ciOfPipeline, githubReviews, gitlabReviews, parseRepo, parseReviews, recentlyMerged, repoKey, reviewError, shownRelease } from "./reviews";
 
 describe("the repository of a board", () => {
   it("is read from the address one copies, web or clone", () => {
@@ -67,6 +67,83 @@ describe("what the tools return", () => {
       { number: 6, title: "PR 6", url: "https://github.com/o/r/pull/6", draft: false, branch: "b6", author: "me", ci: "none", updatedAt: "2026-11-22T12:00:00Z" },
     ]);
     expect(sets.merged.map((r) => [r.number, r.mergedAt, r.ci])).toEqual([[4, "2026-11-22T11:00:00Z", "success"]]);
+  });
+
+  // The latest tag and the check suites of its commit, as GitHub answered for v0.16.1:
+  // the CI and CodeQL ran on main, the Release workflow on the tag.
+  const suite = (branch: string, status: string, conclusion: string | null, run: string | null) => ({
+    status,
+    conclusion,
+    branch: { name: branch },
+    workflowRun: run && { url: `https://github.com/o/r/actions/runs/${run}`, createdAt: `2026-11-26T17:0${run.length}:00Z`, updatedAt: `2026-11-26T17:3${run.length}:00Z` },
+  });
+  const withTag = (suites: unknown[], annotated = false) => {
+    const commit = { checkSuites: { nodes: suites } };
+    return JSON.stringify({
+      data: {
+        repository: {
+          open: { nodes: [] },
+          merged: { nodes: [] },
+          tags: { nodes: [{ name: "v0.16.1", target: annotated ? { target: commit } : commit }] },
+          releases: { nodes: [{ tagName: "v0.16.1", url: "https://github.com/o/r/releases/tag/v0.16.1" }] },
+        },
+      },
+    });
+  };
+
+  it("reads the release: the workflows the latest tag started, not those of the branch (TOD-78)", () => {
+    const main = [suite("main", "QUEUED", null, null), suite("main", "COMPLETED", "FAILURE", "ci")];
+    const running = githubReviews(withTag([...main, suite("v0.16.1", "IN_PROGRESS", null, "release")])).release;
+    expect(running).toEqual({
+      tag: "v0.16.1",
+      state: "running",
+      url: "https://github.com/o/r/actions/runs/release",
+      startedAt: "2026-11-26T17:07:00Z",
+      updatedAt: "2026-11-26T17:37:00Z",
+    });
+    // Done: its release page; an annotated tag reads the same.
+    const done = githubReviews(withTag([...main, suite("v0.16.1", "COMPLETED", "SUCCESS", "release")], true)).release;
+    expect(done).toMatchObject({ state: "success", url: "https://github.com/o/r/releases/tag/v0.16.1" });
+    // One workflow failed among two: failed, linking to that run.
+    const failed = githubReviews(withTag([suite("v0.16.1", "COMPLETED", "SUCCESS", "build"), suite("v0.16.1", "COMPLETED", "CANCELLED", "sign")])).release;
+    expect(failed).toMatchObject({ state: "failure", url: "https://github.com/o/r/actions/runs/sign" });
+    // A tag that started nothing, or no tag: no release.
+    expect(githubReviews(withTag(main)).release).toBeNull();
+    expect(githubReviews(github([], [])).release).toBeNull();
+  });
+
+  it("reads the release on GitLab: the latest tag's pipeline, its page once done", () => {
+    const project = (status: string, releases: unknown[] = []) =>
+      JSON.stringify({
+        data: {
+          project: {
+            open: { nodes: [] },
+            merged: { nodes: [] },
+            tags: { nodes: [{ ref: "v19.4.5", status, path: "/g/p/-/pipelines/31", createdAt: "2026-11-24T09:56:35Z", updatedAt: "2026-11-25T02:06:49Z" }] },
+            releases: { nodes: releases },
+          },
+        },
+      });
+    expect(gitlabReviews(project("RUNNING"), "git.example.fr").release).toEqual({
+      tag: "v19.4.5",
+      state: "running",
+      url: "https://git.example.fr/g/p/-/pipelines/31",
+      startedAt: "2026-11-24T09:56:35Z",
+      updatedAt: "2026-11-25T02:06:49Z",
+    });
+    const page = [{ tagName: "v19.4.5", links: { selfUrl: "https://gitlab.com/g/p/-/releases/v19.4.5" } }];
+    expect(gitlabReviews(project("SUCCESS", page)).release?.url).toBe("https://gitlab.com/g/p/-/releases/v19.4.5");
+    expect(gitlabReviews(project("FAILED", page)).release).toMatchObject({ state: "failure", url: "https://gitlab.com/g/p/-/pipelines/31" });
+    expect(gitlabReviews(project("CANCELED")).release).toBeNull();
+  });
+
+  it("shows a release while it is built, and for a day once finished", () => {
+    const r = { tag: "v1", url: "u", startedAt: "2026-11-25T10:00:00Z", updatedAt: "2026-11-25T10:30:00Z" };
+    const now = Date.parse("2026-11-26T12:00:00Z");
+    expect(shownRelease({ ...r, state: "running" }, now)).not.toBeNull();
+    expect(shownRelease({ ...r, state: "success" }, Date.parse("2026-11-25T20:00:00Z"))).not.toBeNull();
+    expect(shownRelease({ ...r, state: "success" }, now)).toBeNull();
+    expect(shownRelease(null, now)).toBeNull();
   });
 
   it("says when the repository isn't there, or GraphQL refused", () => {

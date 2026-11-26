@@ -8,7 +8,7 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import type { AppSettings, Board, Card } from "../types";
 import { backend, isTauri } from "./backend";
 import { openExternal } from "./open";
-import { parseReviews, type Review } from "./reviews";
+import { parseReviews, type Release, type Review } from "./reviews";
 import { allowed, BACK_LOOK_AFTER_MS, nextLookDelay, noticesOf, reviewEvents, reviewNotifySettings, watchedRepos, type PrNotice, type Seen } from "./reviewWatch";
 
 /** Main → popup: notices to show. Popup → main: ready, received (ids), open (address). */
@@ -46,8 +46,9 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
   latest.current = { boards, cards, settings };
   // Sent to the popup until it says it received them (it may still be loading).
   const pending = useRef<PrNotice[]>([]);
-  // The open PR/MR of each repository at the last look, by "forge:host/path", for « Mon travail ».
+  // The open PR/MR and the release of each repository at the last look, by "forge:host/path", for « Mon travail ».
   const [openReviews, setOpenReviews] = useState<Record<string, Review[]>>({});
+  const [releases, setReleases] = useState<Record<string, Release | null>>({});
   const repoKeys = watchedRepos(boards)
     .map((w) => w.key)
     .join(" ");
@@ -70,8 +71,9 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
     let stopped = false;
     let timer: number | undefined;
     let lastLook = 0;
-    // The open ones of each repository at its last successful look: they set the pace.
+    // The open ones and the release of each repository at its last successful look: they set the pace.
     const known: Record<string, Review[]> = {};
+    const building: Record<string, boolean> = {};
     // Since when Todoom is not the application in front (null: it is).
     let awaySince: number | null = document.hasFocus() ? null : Date.now();
     const look = async () => {
@@ -83,15 +85,18 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
         const seen = readSeen();
         const events: Parameters<typeof noticesOf>[0] = [];
         const read: Record<string, Review[]> = {};
+        const readReleases: Record<string, Release | null> = {};
         // Hosts allowed on this computer, read at each look: an answer given in the panel counts at once.
         const choices = await backend.forgeHosts().catch(() => ({}));
         for (const w of watchedRepos(boards, choices)) {
           try {
-            // One gh or glab launched per repository: the open ones and the recently merged ones together.
-            const sets = parseReviews(w.repo.forge, await backend.listReviews(w.repo.forge, w.repo.host, w.repo.path));
+            // One gh or glab launched per repository: the open ones, the recently merged ones and the release together.
+            const sets = parseReviews(w.repo.forge, await backend.listReviews(w.repo.forge, w.repo.host, w.repo.path), Date.now(), w.repo.host);
             read[w.key] = sets.open;
+            readReleases[w.key] = sets.release;
             known[w.key] = sets.open;
-            const result = reviewEvents(seen[w.key], sets.open, sets.merged);
+            building[w.key] = sets.release?.state === "running";
+            const result = reviewEvents(seen[w.key], sets.open, sets.merged, sets.release);
             seen[w.key] = result.next;
             const boardCards = boards.flatMap((b) => cards[b.id] ?? []);
             for (const e of allowed(result.events, reviewNotifySettings(settings))) events.push({ ...e, repo: w.repo, board: w.board, cards: boardCards });
@@ -100,7 +105,10 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
           }
         }
         writeSeen(seen);
-        if (Object.keys(read).length) setOpenReviews((current) => ({ ...current, ...read }));
+        if (Object.keys(read).length) {
+          setOpenReviews((current) => ({ ...current, ...read }));
+          setReleases((current) => ({ ...current, ...readReleases }));
+        }
         if (!events.length) return;
         pending.current = [...pending.current, ...noticesOf(events, Date.now().toString(36))];
         await invoke("open_pr_popup").catch(() => {});
@@ -116,7 +124,7 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
     };
     const run = async () => {
       await look();
-      schedule(nextLookDelay(Object.values(known).flat(), awaySince, Date.now()));
+      schedule(nextLookDelay(Object.values(known).flat(), awaySince, Date.now(), Object.values(building).some(Boolean)));
     };
     const onBack = () => {
       awaySince = null;
@@ -138,5 +146,5 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [ready, repoKeys]);
-  return openReviews;
+  return { openReviews, releases };
 }

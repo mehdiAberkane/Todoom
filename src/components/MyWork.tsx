@@ -7,7 +7,7 @@ import { t, tn } from "../lib/i18n";
 import { CardBody } from "./CardTile";
 import { projectSummaries, workColumns } from "../lib/myWorkView";
 import { formatDuration } from "../lib/timeline";
-import type { Review } from "../lib/reviews";
+import type { Release, Review } from "../lib/reviews";
 
 /** Columns shown when none were chosen: the usual "being worked on" ones, in French and English. */
 export const DEFAULT_MY_WORK = ["En cours", "A verifier", "In progress", "To review"];
@@ -42,6 +42,8 @@ export function myWork(boards: Board[], cards: Record<string, Card[]>, chosen: s
     .filter((g) => g.columns.length > 0);
 }
 
+const RELEASE_ICON = { running: "◌", success: "✓", failure: "✕" } as const;
+
 export function MyWork({
   boards,
   cards,
@@ -50,6 +52,7 @@ export function MyWork({
   index,
   comments,
   reviews,
+  releases = {},
   onOpen,
 }: {
   boards: Board[];
@@ -60,12 +63,14 @@ export function MyWork({
   comments: Record<string, CardComment[]>;
   /** Open PR/MR of each repository at the last look (see prWatcher), by "forge:host/path". */
   reviews: Record<string, Review[]>;
+  /** The release of each repository at the last look (TOD-78). */
+  releases?: Record<string, Release | null>;
   onOpen: (boardId: string, cardId: string) => void;
 }) {
   const chosen = myWorkColumns(settings);
   // Boards picked in the summary; none means all.
   const [only, setOnly] = useState<Set<string>>(new Set());
-  const summaries = useMemo(() => projectSummaries(boards, cards, reviews), [boards, cards, reviews]);
+  const summaries = useMemo(() => projectSummaries(boards, cards, reviews, releases), [boards, cards, reviews, releases]);
   const columns = useMemo(() => workColumns(boards, cards, chosen, only), [boards, cards, chosen, only]);
   const total = columns.reduce((n, c) => n + c.items.length, 0);
   const now = Date.now();
@@ -146,6 +151,12 @@ export function MyWork({
                     )
                   ) : (
                     <span className="muted">{t("myWork.prsUnknown")}</span>
+                  )}
+                  {p.release && (
+                    <span className={`ci ci-${p.release.state} project-release`} title={t(`reviews.release.${p.release.state}`, { tag: p.release.tag })}>
+                      {" · "}
+                      {RELEASE_ICON[p.release.state]} {p.release.tag}
+                    </span>
                   )}
                 </span>
               )}

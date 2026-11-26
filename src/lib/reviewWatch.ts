@@ -3,10 +3,12 @@
 // one merged. The last state seen is kept per repository on this computer.
 
 import type { AppSettings, Board, Card } from "../types";
-import { cardOfReview, hostAllowed, parseRepo, repoKey, type Repo, type Review } from "./reviews";
+import { cardOfReview, hostAllowed, parseRepo, repoKey, type Release, type Repo, type Review } from "./reviews";
 import { refOf } from "./shortid";
 
 export type PrEventKind = "opened" | "ciFailed" | "merged";
+/** A release started, published, or failed (TOD-78). */
+export type ReleaseEventKind = "releaseStarted" | "releasePublished" | "releaseFailed";
 
 /** What was seen of a repository at the last look. */
 export interface Seen {
@@ -14,19 +16,25 @@ export interface Seen {
   open: Record<string, { ci: Review["ci"] }>;
   /** Addresses of the merged ones already reported (or there at the first look). */
   merged: string[];
+  /** The latest tag's release and its state; absent when not looked at yet (before TOD-78). */
+  release?: { tag: string; state: Release["state"] } | null;
 }
 
-export interface PrEvent {
-  kind: PrEventKind;
-  review: Review;
-}
+export type PrEvent = { kind: PrEventKind; review: Review } | { kind: ReleaseEventKind; release: Release };
 
 export interface ReviewNotifySettings {
   enabled: boolean;
   opened: boolean;
   ciFailed: boolean;
   merged: boolean;
+  releaseStarted: boolean;
+  /** Published or failed. */
+  releaseFinished: boolean;
 }
+
+/** The setting that lets an event through. */
+const settingOf = (kind: PrEvent["kind"]): Exclude<keyof ReviewNotifySettings, "enabled"> =>
+  kind === "releasePublished" || kind === "releaseFailed" ? "releaseFinished" : kind;
 
 /** A look every 2 minutes while something can happen soon. */
 export const PR_WATCH_FAST_MS = 2 * 60_000;
@@ -44,8 +52,9 @@ export const BACK_LOOK_AFTER_MS = 30_000;
  * or only robots' (they only report a red CI): slowly. A slower look only delays a
  * notice: what changed is found by comparing with what was seen, never missed.
  */
-export function nextLookDelay(open: Review[], awaySince: number | null, now: number): number {
-  if (open.some((r) => r.ci === "running")) return PR_WATCH_FAST_MS;
+export function nextLookDelay(open: Review[], awaySince: number | null, now: number, releaseRunning = false): number {
+  // A release being built: its end is what the popup is for, as a CI's failure.
+  if (releaseRunning || open.some((r) => r.ci === "running")) return PR_WATCH_FAST_MS;
   if (awaySince !== null && now - awaySince >= AWAY_LONG_MS) return PR_WATCH_SLOW_MS;
   return open.some((r) => !isBot(r)) ? PR_WATCH_FAST_MS : PR_WATCH_SLOW_MS;
 }
@@ -53,7 +62,14 @@ export function nextLookDelay(open: Review[], awaySince: number | null, now: num
 /** All on unless turned off in the settings. */
 export function reviewNotifySettings(settings: AppSettings): ReviewNotifySettings {
   const n = settings.reviewNotifications;
-  return { enabled: n?.enabled ?? true, opened: n?.opened ?? true, ciFailed: n?.ciFailed ?? true, merged: n?.merged ?? true };
+  return {
+    enabled: n?.enabled ?? true,
+    opened: n?.opened ?? true,
+    ciFailed: n?.ciFailed ?? true,
+    merged: n?.merged ?? true,
+    releaseStarted: n?.releaseStarted ?? true,
+    releaseFinished: n?.releaseFinished ?? true,
+  };
 }
 
 /** Dependabot, Renovate, GitHub Apps, GitLab bot users. */
@@ -64,14 +80,15 @@ export const isBot = (review: Review) => review.bot === true || /bot\]?$|^(depen
  * (nothing seen yet) reports nothing: it only records the state. Robots only
  * report a CI going red.
  */
-export function reviewEvents(prev: Seen | undefined, open: Review[], merged: Review[]): { events: PrEvent[]; next: Seen } {
+export function reviewEvents(prev: Seen | undefined, open: Review[], merged: Review[], release: Release | null = null): { events: PrEvent[]; next: Seen } {
   const next: Seen = {
     open: Object.fromEntries(open.map((r) => [r.url, { ci: r.ci }])),
     // Kept while GitHub/GitLab still list them as recent, so none is reported twice.
     merged: [...new Set([...merged.map((r) => r.url), ...(prev?.merged ?? []).filter((u) => merged.some((r) => r.url === u))])],
+    release: release && { tag: release.tag, state: release.state },
   };
   if (!prev) return { events: [], next };
-  const events: PrEvent[] = [];
+  const events: PrEvent[] = releaseEvents(prev, release);
   for (const r of open) {
     const before = prev.open[r.url];
     if (!before) {
@@ -87,13 +104,28 @@ export function reviewEvents(prev: Seen | undefined, open: Review[], merged: Rev
   return { events, next };
 }
 
+/**
+ * A release's events: started when a new tag is being built, or the tag seen being
+ * built is no longer; published or failed when it ends. A new tag already finished
+ * between two looks reports its end only. Nothing when the release was never
+ * looked at before (the first look after TOD-78).
+ */
+function releaseEvents(prev: Seen, release: Release | null): PrEvent[] {
+  if (!release || prev.release === undefined) return [];
+  const before = prev.release && prev.release.tag === release.tag ? prev.release.state : null;
+  if (before === release.state) return [];
+  if (release.state === "running") return [{ kind: "releaseStarted", release }];
+  // Ended: after running, as a new tag seen only once done, or re-run after a failure.
+  return [{ kind: release.state === "success" ? "releasePublished" : "releaseFailed", release }];
+}
+
 /** The events the settings let through. */
-export const allowed = (events: PrEvent[], s: ReviewNotifySettings) => (s.enabled ? events.filter((e) => s[e.kind]) : []);
+export const allowed = (events: PrEvent[], s: ReviewNotifySettings) => (s.enabled ? events.filter((e) => s[settingOf(e.kind)]) : []);
 
 /** What a popup shows. */
 export interface PrNotice {
   id: string;
-  kind: PrEventKind | "more";
+  kind: PrEvent["kind"] | "more";
   repo: string;
   /** #12 on GitHub, !12 on GitLab. */
   number: string;
@@ -112,6 +144,8 @@ export const MAX_POPUPS = 3;
 export function noticesOf(events: (PrEvent & { repo: Repo; board: Board; cards: Card[] })[], stamp: string): PrNotice[] {
   const shown = events.slice(0, events.length > MAX_POPUPS ? MAX_POPUPS - 1 : MAX_POPUPS);
   const notices: PrNotice[] = shown.map((e, i) => {
+    // A release: its tag in place of a number, nobody's, no card.
+    if (!("review" in e)) return { id: `${stamp}-${i}`, kind: e.kind, repo: e.repo.path, number: e.release.tag, title: "", author: "", url: e.release.url, card: null };
     const card = cardOfReview(e.review, e.cards);
     return {
       id: `${stamp}-${i}`,

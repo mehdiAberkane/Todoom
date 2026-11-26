@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Board, Card } from "../types";
-import type { Review } from "./reviews";
+import type { Release, Review } from "./reviews";
 import { projectSummaries, workColumns } from "./myWorkView";
 
 const board = (id: string, order: number, extra: Partial<Board> = {}) =>
@@ -61,5 +61,15 @@ describe("the summary per project", () => {
     const s = projectSummaries([todoom], { todoom: [] }, { "github:github.com/o/todoom": [pr("running")] });
     expect(s[0].state).toBe("active");
     expect(projectSummaries([todoom], { todoom: [] }, {})[0].state).toBe("paused");
+  });
+
+  it("shows the release: active while built, waiting for me when it failed, for a day (TOD-78)", () => {
+    const now = Date.parse("2026-11-26T18:00:00Z");
+    const release = (state: Release["state"], updatedAt = "2026-11-26T17:30:00Z"): Release => ({ tag: "v0.16.1", state, url: "u", startedAt: "2026-11-26T17:10:00Z", updatedAt });
+    const of = (r: Release) => projectSummaries([todoom], { todoom: [] }, {}, { "github:github.com/o/todoom": r }, now)[0];
+    expect(of(release("running"))).toMatchObject({ state: "active", release: { tag: "v0.16.1", state: "running" } });
+    expect(of(release("failure")).state).toBe("attention");
+    expect(of(release("success")).state).toBe("paused");
+    expect(of(release("success", "2026-11-24T17:30:00Z")).release).toBeNull();
   });
 });

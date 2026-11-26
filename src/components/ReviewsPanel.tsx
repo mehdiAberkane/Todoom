@@ -4,7 +4,7 @@ import { backend } from "../lib/backend";
 import { t } from "../lib/i18n";
 import { refOf } from "../lib/shortid";
 import { openExternal } from "../lib/open";
-import { cardOfReview, parseRepo, parseReviews, repoUrl, reviewError, type Repo, type Review, type ReviewError } from "../lib/reviews";
+import { cardOfReview, parseRepo, parseReviews, repoUrl, reviewError, shownRelease, type Release, type Repo, type Review, type ReviewError } from "../lib/reviews";
 import { formatDateTime } from "../lib/utils";
 
 const REFRESH_MS = 60_000;
@@ -25,6 +25,7 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
   const repo = parseRepo(board.repo);
   const [reviews, setReviews] = useState<Review[] | null>(null);
   const [merged, setMerged] = useState<Review[]>([]);
+  const [release, setRelease] = useState<Release | null>(null);
   const [error, setError] = useState<ReviewError | null>(null);
   const [loading, setLoading] = useState(false);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
@@ -36,9 +37,10 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
     setLoading(true);
     try {
       // The open ones, and those merged in the last 24 hours: one gh or glab launched.
-      const sets = parseReviews(r.forge, await backend.listReviews(r.forge, r.host, r.path));
+      const sets = parseReviews(r.forge, await backend.listReviews(r.forge, r.host, r.path), Date.now(), r.host);
       setReviews(sets.open);
       setMerged(sets.merged);
+      setRelease(sets.release);
       setError(null);
     } catch (e) {
       setError(reviewError(e));
@@ -53,6 +55,7 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
   useEffect(() => {
     setReviews(null);
     setMerged([]);
+    setRelease(null);
     setError(null);
     if (!key) return;
     refresh();
@@ -111,6 +114,7 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
           ) : (
             error && <ReviewErrorText error={error} />
           )}
+          {!error && <ReleaseLine release={shownRelease(release)} />}
           {reviews && reviews.length === 0 && !error && <p className="muted reviews-empty">{t("reviews.none")}</p>}
           {reviews && reviews.length > 0 && (
             <ul className="reviews-list">
@@ -137,6 +141,18 @@ export function ReviewsPanel({ board, cards, onOpenCard, onEditRepo, onClose }: 
 }
 
 const CI_ICON = { running: "◌", success: "✓", failure: "✕", none: "·" } as const;
+
+/** « ◌ Release v0.16.1 in progress · since 18:09 »: the latest tag's build, under way or of the last day (TOD-78). */
+export function ReleaseLine({ release }: { release: Release | null }) {
+  if (!release) return null;
+  return (
+    <button className={`release-line release-${release.state}`} onClick={() => openExternal(release.url)} title={t("reviews.release.open")}>
+      <span className={`ci ci-${release.state}`}>{CI_ICON[release.state]}</span>
+      <span className="release-text">{t(`reviews.release.${release.state}`, { tag: release.tag })}</span>
+      <span className="muted">{release.state === "running" ? t("reviews.release.since", { date: formatDateTime(release.startedAt) }) : formatDateTime(release.updatedAt)}</span>
+    </button>
+  );
+}
 
 /** One pull/merge request: CI, number and title (opens it), draft, author, its card. Merged: when instead of the CI. */
 function ReviewItem({ review: r, repo, board, cards, onOpenCard }: { review: Review; repo: Repo; board: Board; cards: Card[]; onOpenCard: (id: string) => void }) {

@@ -3,7 +3,7 @@
 // going on: cards in progress, waiting for me, open PR/MR and their CI.
 
 import type { Board, Card } from "../types";
-import { parseRepo, repoKey, type Review } from "./reviews";
+import { parseRepo, repoKey, shownRelease, type Release, type Review } from "./reviews";
 
 const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 
@@ -55,11 +55,22 @@ export interface ProjectSummary {
   failed: number;
   /** The open PR/MR of its repository, null when it has none set or they aren't read yet. */
   prs: { open: number; failing: number; running: number; passing: number } | null;
+  /** Its release under way, or finished in the last day (TOD-78). */
+  release: Release | null;
   state: ProjectState;
 }
 
-/** Waiting for me (to review, failed, a red CI), else something moving (in progress, a running CI or an open PR), else paused. */
-export function projectSummaries(boards: Board[], cards: Record<string, Card[]>, reviews: Record<string, Review[]>): ProjectSummary[] {
+/**
+ * Waiting for me (to review, failed, a red CI, a failed release), else something moving
+ * (in progress, a running CI, an open PR, a release being built), else paused.
+ */
+export function projectSummaries(
+  boards: Board[],
+  cards: Record<string, Card[]>,
+  reviews: Record<string, Review[]>,
+  releases: Record<string, Release | null> = {},
+  now = Date.now(),
+): ProjectSummary[] {
   const order: Record<ProjectState, number> = { attention: 0, active: 1, paused: 2 };
   return boards
     .filter((b) => !b.archivedAt)
@@ -78,9 +89,14 @@ export function projectSummaries(boards: Board[], cards: Record<string, Card[]>,
             passing: open.filter((r) => r.ci === "success").length,
           }
         : null;
-      const summary = { board, doing: inColumn(DOING), review: inColumn(REVIEW), failed: inColumn(FAILED), prs };
+      const release = repo ? shownRelease(releases[repoKey(repo)], now) : null;
+      const summary = { board, doing: inColumn(DOING), review: inColumn(REVIEW), failed: inColumn(FAILED), prs, release };
       const state: ProjectState =
-        summary.review || summary.failed || prs?.failing ? "attention" : summary.doing || prs?.open ? "active" : "paused";
+        summary.review || summary.failed || prs?.failing || release?.state === "failure"
+          ? "attention"
+          : summary.doing || prs?.open || release?.state === "running"
+            ? "active"
+            : "paused";
       return { ...summary, state };
     })
     .sort((a, b) => order[a.state] - order[b.state] || (a.board.order ?? 0) - (b.board.order ?? 0));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AppSettings, Board, Card } from "../types";
-import type { Repo, Review } from "./reviews";
+import type { Release, Repo, Review } from "./reviews";
 import { allowed, AWAY_LONG_MS, isBot, MAX_POPUPS, nextLookDelay, noticesOf, PR_WATCH_FAST_MS, PR_WATCH_SLOW_MS, reviewEvents, reviewNotifySettings, watchedRepos, type Seen } from "./reviewWatch";
 
 const pr = (number: number, patch: Partial<Review> = {}): Review => ({
@@ -15,13 +15,38 @@ const pr = (number: number, patch: Partial<Review> = {}): Review => ({
   ...patch,
 });
 const seen = (open: Review[], merged: string[] = []): Seen => ({ open: Object.fromEntries(open.map((r) => [r.url, { ci: r.ci }])), merged });
-const kinds = (r: ReturnType<typeof reviewEvents>) => r.events.map((e) => `${e.kind} ${e.review.number}`);
+const kinds = (r: ReturnType<typeof reviewEvents>) => r.events.map((e) => `${e.kind} ${"review" in e ? e.review.number : e.release.tag}`);
+const release = (tag: string, state: Release["state"]): Release => ({ tag, state, url: `https://github.com/o/r/actions/runs/${tag}`, startedAt: "2026-11-26T17:09:58Z", updatedAt: "2026-11-26T17:20:00Z" });
 
 describe("what changed since the last look", () => {
   it("reports nothing at the first look, only records the state", () => {
     const r = reviewEvents(undefined, [pr(1, { ci: "failure" })], [pr(9, { mergedAt: "2026-11-22T09:00:00Z" })]);
     expect(r.events).toEqual([]);
-    expect(r.next).toEqual({ open: { [pr(1).url]: { ci: "failure" } }, merged: [pr(9).url] });
+    expect(r.next).toEqual({ open: { [pr(1).url]: { ci: "failure" } }, merged: [pr(9).url], release: null });
+  });
+
+  it("follows a release: started, then published or failed, each once (TOD-78)", () => {
+    const start = { ...seen([]), release: null };
+    const started = reviewEvents(start, [], [], release("v1.2.0", "running"));
+    expect(kinds(started)).toEqual(["releaseStarted v1.2.0"]);
+    expect(started.next.release).toEqual({ tag: "v1.2.0", state: "running" });
+    // Still building: nothing new.
+    expect(reviewEvents(started.next, [], [], release("v1.2.0", "running")).events).toEqual([]);
+    const done = reviewEvents(started.next, [], [], release("v1.2.0", "success"));
+    expect(kinds(done)).toEqual(["releasePublished v1.2.0"]);
+    expect(reviewEvents(done.next, [], [], release("v1.2.0", "success")).events).toEqual([]);
+    expect(kinds(reviewEvents(started.next, [], [], release("v1.2.0", "failure")))).toEqual(["releaseFailed v1.2.0"]);
+  });
+
+  it("reports the end of a release built between two looks, and nothing the first time releases are looked at", () => {
+    const before = { ...seen([]), release: { tag: "v1.1.0", state: "success" as const } };
+    expect(kinds(reviewEvents(before, [], [], release("v1.2.0", "success")))).toEqual(["releasePublished v1.2.0"]);
+    // Seen before TOD-78 (no release recorded): the current release is only recorded.
+    const old = reviewEvents(seen([]), [], [], release("v1.2.0", "running"));
+    expect(old.events).toEqual([]);
+    expect(old.next.release).toEqual({ tag: "v1.2.0", state: "running" });
+    // No tag, or a tag that set nothing off: nothing.
+    expect(reviewEvents(before, [], [], null).events).toEqual([]);
   });
 
   it("reports a new one, a CI that turns red once, and a merge", () => {
@@ -60,11 +85,21 @@ describe("what is shown", () => {
     expect(noticesOf(events.slice(2, 3), "t")[0]).toMatchObject({ number: "#3", card: "TOD-12", repo: "o/r" });
   });
 
+  it("a release's popup: its tag, its build or release page, no card", () => {
+    const [notice] = noticesOf([{ kind: "releaseFailed" as const, release: release("v1.2.0", "failure"), repo, board, cards }], "t");
+    expect(notice).toEqual({ id: "t-0", kind: "releaseFailed", repo: "o/r", number: "v1.2.0", title: "", author: "", url: "https://github.com/o/r/actions/runs/v1.2.0", card: null });
+  });
+
   it("follows the settings, all on by default", () => {
     const s = reviewNotifySettings({} as AppSettings);
-    expect(s).toEqual({ enabled: true, opened: true, ciFailed: true, merged: true });
+    expect(s).toEqual({ enabled: true, opened: true, ciFailed: true, merged: true, releaseStarted: true, releaseFinished: true });
     const events = [{ kind: "opened" as const, review: pr(1) }, { kind: "merged" as const, review: pr(2) }];
     expect(allowed(events, { ...s, merged: false }).map((e) => e.kind)).toEqual(["opened"]);
+    // A release's start and end have a setting each; the end covers published and failed.
+    const r = release("v1", "success");
+    const ends = [{ kind: "releaseStarted" as const, release: r }, { kind: "releasePublished" as const, release: r }, { kind: "releaseFailed" as const, release: r }];
+    expect(allowed(ends, { ...s, releaseFinished: false }).map((e) => e.kind)).toEqual(["releaseStarted"]);
+    expect(allowed(ends, { ...s, releaseStarted: false }).map((e) => e.kind)).toEqual(["releasePublished", "releaseFailed"]);
     expect(allowed(events, { ...s, enabled: false })).toEqual([]);
   });
 
@@ -93,6 +128,11 @@ describe("when to look again", () => {
   it("soon while a CI runs, even away from Todoom for long", () => {
     expect(nextLookDelay([done(1), pr(2)], null, now)).toBe(PR_WATCH_FAST_MS);
     expect(nextLookDelay([pr(2, { author: "dependabot" })], now - 3 * AWAY_LONG_MS, now)).toBe(PR_WATCH_FAST_MS);
+  });
+
+  it("soon while a release is being built, even with nothing open and away for long", () => {
+    expect(nextLookDelay([], now - 3 * AWAY_LONG_MS, now, true)).toBe(PR_WATCH_FAST_MS);
+    expect(nextLookDelay([], now - 3 * AWAY_LONG_MS, now, false)).toBe(PR_WATCH_SLOW_MS);
   });
 
   it("soon while a person's pull request is open, unless away for long", () => {

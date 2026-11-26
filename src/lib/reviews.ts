@@ -30,7 +30,20 @@ export interface Review {
   bot?: boolean;
 }
 
-/** Merged ones are shown for a day. */
+/**
+ * The release under way, or the latest one: what the repository's latest tag set off
+ * (its GitHub workflows, its GitLab pipeline). TOD-78.
+ */
+export interface Release {
+  tag: string;
+  state: "running" | "success" | "failure";
+  /** The workflow run or pipeline; the release page once it is published. */
+  url: string;
+  startedAt: string;
+  updatedAt: string;
+}
+
+/** Merged ones, and a finished release, are shown for a day. */
 export const MERGED_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const HOST = /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/;
@@ -110,14 +123,17 @@ export function ciOfPipeline(status: string | null | undefined): CiState {
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
-/** What one look at a repository brings: its open ones and its latest merged ones. */
+/** What one look at a repository brings: its open ones, its latest merged ones, its release. */
 export interface ReviewSets {
   open: Review[];
   merged: Review[];
+  /** Null when the latest tag set nothing off (or there is no tag). */
+  release: Release | null;
 }
 
-/** The open and merged lists of a GraphQL answer ({ data: { <root>: { open, merged } } }). */
-function graphqlSets(output: string, root: "repository" | "project"): { open: unknown[]; merged: unknown[] } {
+/** The open and merged lists of a GraphQL answer ({ data: { <root>: { open, merged, tags, releases } } }). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the tool's JSON, read field by field
+function graphqlSets(output: string, root: "repository" | "project"): { open: unknown[]; merged: unknown[]; found: any } {
   const data = JSON.parse(output);
   if (data?.errors?.length) throw new Error(str(data.errors[0]?.message) || "GraphQL error");
   const found = data?.data?.[root];
@@ -125,7 +141,64 @@ function graphqlSets(output: string, root: "repository" | "project"): { open: un
   const open: unknown = found.open?.nodes;
   const merged: unknown = found.merged?.nodes;
   if (!Array.isArray(open) || !Array.isArray(merged)) throw new Error("unexpected output");
-  return { open, merged };
+  return { open, merged, found };
+}
+
+const FAILED = ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"];
+
+/** The address of the tag's release page, when the forge has one. */
+function releasePage(releases: unknown, tag: string, link: (node: Record<string, unknown>) => unknown): string {
+  const nodes = (releases as { nodes?: unknown } | null | undefined)?.nodes;
+  const node = Array.isArray(nodes) ? nodes.find((r) => r && typeof r === "object" && r.tagName === tag) : undefined;
+  return node ? str(link(node)) : "";
+}
+
+/**
+ * GitHub: the workflows the latest tag started (their check suites are on the tag's
+ * name, not a branch). One failed: failure; one still going: running; else success,
+ * linking to the release page when there is one.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the tool's JSON, read field by field
+export function githubRelease(found: any): Release | null {
+  const tag = found?.tags?.nodes?.[0];
+  const name = str(tag?.name);
+  // A lightweight tag points at the commit, an annotated one at a tag object first.
+  const commit = tag?.target?.checkSuites ? tag.target : tag?.target?.target;
+  const suites: unknown = commit?.checkSuites?.nodes;
+  if (!name || !Array.isArray(suites)) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- as above
+  const runs: any[] = suites.filter((s: any) => s?.branch?.name === name && str(s?.workflowRun?.url));
+  if (!runs.length) return null;
+  const states = runs.map((s) => (s.status === "COMPLETED" ? str(s.conclusion).toUpperCase() : "RUNNING"));
+  const failed = states.findIndex((s) => FAILED.includes(s));
+  const going = states.indexOf("RUNNING");
+  const state: Release["state"] = failed >= 0 ? "failure" : going >= 0 ? "running" : "success";
+  const run = str(runs[failed >= 0 ? failed : going >= 0 ? going : 0].workflowRun.url);
+  return {
+    tag: name,
+    state,
+    url: (state === "success" && releasePage(found.releases, name, (r) => r.url)) || run,
+    startedAt: runs.map((s) => str(s.workflowRun.createdAt)).sort()[0],
+    updatedAt: runs.map((s) => str(s.workflowRun.updatedAt)).sort().pop()!,
+  };
+}
+
+/** GitLab: the pipeline of the latest tag. A canceled or skipped one is no release. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the tool's JSON, read field by field
+export function gitlabRelease(found: any, host: string): Release | null {
+  const p = found?.tags?.nodes?.[0];
+  const tag = str(p?.ref);
+  const ci = ciOfPipeline(p?.status);
+  if (!tag || ci === "none") return null;
+  const path = str(p?.path);
+  const page = ci === "success" ? releasePage(found.releases, tag, (r) => (r.links as { selfUrl?: unknown } | undefined)?.selfUrl) : "";
+  return {
+    tag,
+    state: ci,
+    url: page || (path.startsWith("/") ? `https://${host}${path}` : ""),
+    startedAt: str(p?.createdAt),
+    updatedAt: str(p?.updatedAt),
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a node of the tool's JSON, read field by field
@@ -160,26 +233,30 @@ function gitlabReview(m: any): Review {
   };
 }
 
-/** gh api graphql: repository.open / repository.merged (see GITHUB_QUERY in Rust). */
+/** gh api graphql: repository.open / merged / tags / releases (see GITHUB_QUERY in Rust). */
 export function githubReviews(output: string): ReviewSets {
   const sets = graphqlSets(output, "repository");
-  return { open: sets.open.map(githubReview), merged: sets.merged.map(githubReview) };
+  return { open: sets.open.map(githubReview), merged: sets.merged.map(githubReview), release: githubRelease(sets.found) };
 }
 
-/** glab api graphql: project.open / project.merged (see GITLAB_QUERY in Rust). */
-export function gitlabReviews(output: string): ReviewSets {
+/** glab api graphql: project.open / merged / tags / releases (see GITLAB_QUERY in Rust). */
+export function gitlabReviews(output: string, host = "gitlab.com"): ReviewSets {
   const sets = graphqlSets(output, "project");
-  return { open: sets.open.map(gitlabReview), merged: sets.merged.map(gitlabReview) };
+  return { open: sets.open.map(gitlabReview), merged: sets.merged.map(gitlabReview), release: gitlabRelease(sets.found, host) };
 }
 
 /**
  * The lists from a tool's output: the open ones newest first, and those merged
  * in the last 24 hours, latest first.
  */
-export function parseReviews(forge: Forge, output: string, now = Date.now()): ReviewSets {
-  const sets = forge === "github" ? githubReviews(output) : gitlabReviews(output);
-  return { open: sets.open.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), merged: recentlyMerged(sets.merged, now) };
+export function parseReviews(forge: Forge, output: string, now = Date.now(), host?: string): ReviewSets {
+  const sets = forge === "github" ? githubReviews(output) : gitlabReviews(output, host);
+  return { open: sets.open.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), merged: recentlyMerged(sets.merged, now), release: sets.release };
 }
+
+/** A release worth showing: under way, or finished in the last 24 hours. */
+export const shownRelease = (release: Release | null | undefined, now = Date.now()): Release | null =>
+  release && (release.state === "running" || now - Date.parse(release.updatedAt) <= MERGED_WINDOW_MS) ? release : null;
 
 /** The merged ones of the last 24 hours, latest first. */
 export function recentlyMerged(list: Review[], now = Date.now()): Review[] {

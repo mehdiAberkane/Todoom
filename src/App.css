@@ -323,6 +323,9 @@ textarea { resize: vertical; }
 .pr-opened { --tint: #3b82f6; }
 .pr-ciFailed { --tint: #ef4444; }
 .pr-merged { --tint: #a855f7; }
+.pr-releaseStarted { --tint: #f59e0b; }
+.pr-releasePublished { --tint: #22c55e; }
+.pr-releaseFailed { --tint: #ef4444; }
 .pr-more { --tint: #64748b; display: flex; align-items: center; gap: 8px; cursor: default; color: #c9cfdf; }
 .pr-more span { flex: 1; }
 .pr-notice-head { display: flex; align-items: center; gap: 8px; font-size: 11px; }
@@ -350,6 +353,13 @@ textarea { resize: vertical; }
 .reviews-head { display: flex; align-items: center; gap: 6px; }
 .reviews-head h3 { flex: 1; margin: 0; font-size: 15px; }
 .reviews-repo { font-size: 12px; color: var(--muted); text-align: left; word-break: break-all; }
+/* The latest tag's build (TOD-78): one line above the PR/MR. */
+.release-line { display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 6px 8px; margin: 6px 0; font: inherit; font-size: 13px; text-align: left; color: var(--text); background: none; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.release-line .ci { font-weight: 700; }
+.release-line.release-failure { border-color: var(--danger-text); }
+.release-line.release-running { border-color: var(--accent-2); }
+.release-line { flex-wrap: wrap; }
+.release-line .muted { flex-basis: 100%; padding-left: 24px; font-size: 12px; }
 .reviews-empty { font-size: 13px; color: var(--muted); }
 .reviews-error { font-size: 13px; color: var(--danger-text); }
 .reviews-host { font-size: 13px; border: 1px solid var(--accent-2); border-radius: 8px; padding: 10px; }
