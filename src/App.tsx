@@ -20,6 +20,7 @@ import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
 import { CalendarPage } from "./components/CalendarPage";
 import { UndoToast } from "./components/UndoToast";
+import { ActivityPage } from "./components/ActivityPage";
 import { RoutineToast, type RoutineNotice } from "./components/RoutineToast";
 import { CaptureForm } from "./components/QuickCapture";
 import { Modal } from "./components/ui";
@@ -85,10 +86,11 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   useCloseGuard(unsaved.length, retryNow);
   const [boardId, setBoardId] = useState(() => localGet("todoom-board"));
   // The page shown in place of a board, if any; the metrics page carries its scope ("all" or a board id).
-  const [page, setPage] = useState<null | "settings" | "myWork" | "calendar" | { metrics: string }>(null);
+  const [page, setPage] = useState<null | "settings" | "myWork" | "calendar" | "activity" | { metrics: string }>(null);
   const showSettings = page === "settings";
   const showMyWork = page === "myWork";
   const showCalendar = page === "calendar";
+  const showActivity = page === "activity";
   const metrics = page && typeof page === "object" ? page.metrics : null;
   const openMetrics = (scope: string) => setPage({ metrics: scope });
   const [showSearch, setShowSearch] = useState(false);
@@ -297,6 +299,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     { id: "capture", label: t("palette.capture"), hint: "Ctrl + Alt + N", run: () => setShowCapture(true) },
     { id: "mywork", label: t("palette.myWork"), run: () => setPage("myWork") },
     { id: "calendar", label: t("palette.calendar"), run: () => setPage("calendar") },
+    { id: "activity", label: t("palette.activity"), run: () => setPage("activity") },
     { id: "metrics", label: t("palette.metrics"), run: () => openMetrics(board && !page ? board.id : "all") },
     ...activeBoards.map((b) => ({ id: `board:${b.id}`, label: t("palette.goTo", { name: b.name }), hint: b.key, run: () => openBoard(b.id) })),
     { id: "settings", label: t("palette.settings"), run: () => setPage("settings") },
@@ -342,6 +345,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         calendarOpen={showCalendar}
         calendarCount={urgentCount}
         onOpenCalendar={() => setPage("calendar")}
+        activityOpen={showActivity}
+        onOpenActivity={() => setPage("activity")}
         onOpenMetrics={() => openMetrics("all")}
         myWorkCount={myWorkCount}
         onOpenMyWork={() => setPage("myWork")}
@@ -365,7 +370,9 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
         onInstallUpdate={updater.install}
       />
       <main className="main">
-        {showCalendar ? (
+        {showActivity ? (
+          <ActivityPage boards={activeBoards} cards={data.cards} history={data.history} comments={data.comments} onOpenCard={openElsewhere} />
+        ) : showCalendar ? (
           <CalendarPage
             boards={activeBoards}
             cards={data.cards}

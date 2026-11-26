@@ -115,7 +115,8 @@ function mrText(value: string | null | undefined): string {
   return `${mrLabel(url)} ${known ? t(`mr.${state as MergeRequestState}`) : state}`;
 }
 
-function describeEvent(e: HistoryEvent): string {
+/** A change in words: « Colonne : En cours → A verifier »… */
+export function describeEvent(e: HistoryEvent): string {
   const v = (x: string | null | undefined) => x || t("describe.none");
   switch (e.field) {
     case "created":

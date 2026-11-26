@@ -1050,3 +1050,11 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgroun
 .card.overlay.stacked { box-shadow: 4px 4px 0 -1px var(--card), 4px 4px 0 0 var(--border), 8px 8px 0 -1px var(--card), 8px 8px 0 0 var(--border), 0 14px 34px rgba(0, 0, 0, 0.55); }
 .card.overlay.stacked::after { content: attr(data-count); position: absolute; top: -10px; right: -10px; background: var(--accent-2); color: #1a0b06; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 2px 8px; }
 .card.overlay { position: relative; }
+
+/* Activity page (TOD-72) */
+.activity-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.activity-page .today-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 12px; }
+.activity-page .today-section h2 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.activity-time { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 8px; }
+.activity-stale > p { margin: 0 0 6px; font-size: 12px; }
+.activity-session h2 { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); }

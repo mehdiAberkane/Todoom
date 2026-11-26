@@ -39,6 +39,9 @@ interface Props {
   myWorkOpen: boolean;
   metricsOpen: boolean;
   calendarOpen: boolean;
+  /** The « Activité » page (TOD-72). */
+  activityOpen: boolean;
+  onOpenActivity: () => void;
   /** Cards late or due today. */
   calendarCount: number;
   onOpenCalendar: () => void;
@@ -147,6 +150,9 @@ export function Sidebar(props: Props) {
         </button>
         <button className={`board-link my-work-link ${props.metricsOpen ? "active" : ""}`} onClick={props.onOpenMetrics} title={t("metrics.linkTitle")}>
           <span className="board-name">{t("metrics.link")}</span>
+        </button>
+        <button className={`board-link my-work-link ${props.activityOpen ? "active" : ""}`} onClick={props.onOpenActivity} title={t("activity.linkTitle")}>
+          <span className="board-name">{t("activity.link")}</span>
         </button>
         <div className="section-title">{t("sidebar.boards")}</div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
