@@ -26,7 +26,7 @@ import { Modal } from "./components/ui";
 import { CAPTURE_BOARDS, CAPTURE_HELLO, CAPTURE_SEND, captureBoard, captureTitle, topOrder, type CaptureTarget } from "./lib/capture";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { dailySnapshot } from "./lib/snapshotter";
-import { useReadingCopy } from "./lib/readingWriter";
+import { useReadingCopy, useWeeklyCopy } from "./lib/readingWriter";
 import { useInbox } from "./lib/inboxWatcher";
 import { usePrWatch, type MergeHandlers } from "./lib/prWatcher";
 import { mayMoveOnMerge } from "./lib/reviewWatch";
@@ -183,6 +183,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   // Plain text summaries for the phone, in the « lecture » folder.
   const workColumns = useMemo(() => myWorkColumns(data.settings), [data.settings]);
   useReadingCopy(data.settings.readingCopy !== false, !incomplete && !error, data.boards, data.cards, workColumns, hourTick);
+  // Last week in review, once a week, beside them (TOD-71).
+  useWeeklyCopy(data.settings.readingCopy !== false && data.settings.weeklySummary !== false, !incomplete && !error, activeBoards, data.cards, data.history, hourTick);
   // Ideas dropped from the phone into the inbox become cards.
   const inboxIssues = useInbox(data.settings.inbox !== false, !incomplete && !error, activeBoards, data.cards, unsavedIds, data.settings, actions);
   // PR/MR of the boards' repositories: what changed goes to the popup.

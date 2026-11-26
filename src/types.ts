@@ -219,6 +219,8 @@ export interface AppSettings {
   captureBoard?: string;
   /** Plain text summaries of the boards for the phone (« lecture » folder); absent means on. */
   readingCopy?: boolean;
+  /** Also a summary of each past week in « lecture » (TOD-71); absent means on, when readingCopy is. */
+  weeklySummary?: boolean;
   /** Ideas dropped from the phone into « boîte de réception » become cards; absent means on. */
   inbox?: boolean;
   updatedAt: string;

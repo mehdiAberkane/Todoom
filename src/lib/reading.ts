@@ -10,6 +10,7 @@ import { agenda, dueCards, type DueCard } from "./calendar";
 import { myWork } from "../components/MyWork";
 import { formatDue, toISODate } from "./utils";
 import { locale, t, tn } from "./i18n";
+import { isWeeklyName } from "./weekly";
 
 export const READING_DIR = "lecture";
 const TODAY_FILE = "0 - Aujourd'hui.md";
@@ -114,10 +115,13 @@ export function readingFiles(boards: Board[], cards: Record<string, Card[]>, myW
   return files;
 }
 
-/** What to write (new or changed since the last write) and what to remove (no board any more). */
+/**
+ * What to write (new or changed since the last write) and what to remove (no board
+ * any more). The weekly files are kept: they go by their age (weekly.ts).
+ */
 export function readingChanges(next: Map<string, string>, written: Map<string, string>, existing: string[]) {
   return {
     write: [...next].filter(([name, content]) => written.get(name) !== content),
-    remove: existing.filter((name) => name.endsWith(".md") && !next.has(name)),
+    remove: existing.filter((name) => name.endsWith(".md") && !next.has(name) && !isWeeklyName(name)),
   };
 }

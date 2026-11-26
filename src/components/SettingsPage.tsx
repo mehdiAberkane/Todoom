@@ -294,6 +294,15 @@ export function SettingsPage({
           />
           {t("reading.enabled")}
         </label>
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={settings.weeklySummary !== false}
+            disabled={settings.readingCopy === false}
+            onChange={(e) => onSave({ ...settings, backgroundDim: dim, weeklySummary: e.target.checked })}
+          />
+          {t("weekly.enabled")}
+        </label>
         <p className="muted">{t("inbox.intro", { board: boards.find((b) => b.id === captureBoardId)?.name ?? "—" })}</p>
         <label className="settings-check">
           <input type="checkbox" checked={settings.inbox !== false} onChange={(e) => onSave({ ...settings, backgroundDim: dim, inbox: e.target.checked })} />

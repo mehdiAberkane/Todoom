@@ -111,7 +111,7 @@ Todoom/
   boards/<idTableau>/history/<idCarte>/<écrivain>.json   historique, un fichier par écrivain
   boards/<idTableau>/attachments/<idCarte>/…        pièces jointes et leurs descriptions
   boards/<idTableau>/agents/<ordinateur>-agent.json état de l'agent Python
-  lecture/                                          résumés texte pour le téléphone (écrits par l'app)
+  lecture/                                          résumés texte pour le téléphone (écrits par l'app), dont « Semaine AAAA-SS.md » (les 12 dernières semaines)
   boîte de réception/                               idées déposées depuis le téléphone (deviennent des cartes)
 ```
 

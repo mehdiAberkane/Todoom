@@ -126,6 +126,7 @@ const SETTINGS: Check[] = [
   ["snapshotKeep", optional(isNumber)],
   ["captureBoard", optional(isString)],
   ["readingCopy", optional(isBoolean)],
+  ["weeklySummary", optional(isBoolean)],
   ["inbox", optional(isBoolean)],
   ["updatedAt", optional(isString)],
 ];

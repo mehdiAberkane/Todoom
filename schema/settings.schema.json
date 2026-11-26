@@ -88,6 +88,10 @@
       "type": "boolean",
       "description": "Write plain text summaries of the boards into the data folder's « lecture » subfolder, to read them in the Google Drive app on a phone. Default true."
     },
+    "weeklySummary": {
+      "type": "boolean",
+      "description": "With readingCopy: also write « Semaine YYYY-WW.md », what happened on every board the week before (done, to review, created, overdue, lingering in progress, PR/MR merged), on the first opening of each week; the last 12 are kept. Default true."
+    },
     "inbox": {
       "type": "boolean",
       "description": "Files dropped into the data folder's « boîte de réception » (from a phone, « Share › Save to Drive ») become cards on the quick capture board, then are removed. Default true."
