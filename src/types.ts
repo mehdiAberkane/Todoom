@@ -37,6 +37,11 @@ export interface Board {
   branchFormat?: string;
   /** The board's repository (https://github.com/owner/repo, https://gitlab.com/group/project): its open pull/merge requests are shown beside the columns. */
   repo?: string;
+  /**
+   * When a card's pull/merge request is merged (TOD-69): nothing, offer to move the
+   * card, or move it; to columnId, else the column named « A verifier ». Absent: offer.
+   */
+  onMerge?: { action: "none" | "propose" | "move"; columnId?: string };
   /** Priority levels, highest first; absent means the defaults P1, P2, P3. */
   priorities?: Priority[];
   /** A card without a color of its own takes its priority's (P1 red, P2 orange, P3 green); false turns that off. */

@@ -123,6 +123,25 @@
         }
       }
     },
+    "onMerge": {
+      "type": "object",
+      "required": [
+        "action"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "none",
+            "propose",
+            "move"
+          ]
+        },
+        "columnId": {
+          "type": "string"
+        }
+      },
+      "description": "When a card's pull/merge request is merged: nothing, offer to move the card (button in the popup and on the card), or move it, to columnId (default: the column named « A verifier »). Never to a done column. Absent: propose."
+    },
     "colorByPriority": {
       "type": "boolean",
       "description": "A card without a color of its own shows its priority's (default P1 red, P2 orange, P3 green). false: only the colors chosen in the cards. Absent: true."

@@ -146,6 +146,13 @@ describe("what the tools return", () => {
     expect(shownRelease(null, now)).toBeNull();
   });
 
+  it("reads the ones closed without merging, none when the answer has no such list (TOD-69)", () => {
+    const out = JSON.parse(github([], []));
+    out.data.repository.closed = { nodes: [pr(8)] };
+    expect(githubReviews(JSON.stringify(out)).closed.map((r) => r.number)).toEqual([8]);
+    expect(githubReviews(github([], [])).closed).toEqual([]);
+  });
+
   it("says when the repository isn't there, or GraphQL refused", () => {
     expect(() => githubReviews(JSON.stringify({ data: { repository: null } }))).toThrow("notfound");
     expect(() => githubReviews(JSON.stringify({ errors: [{ message: "Bad credentials" }] }))).toThrow("Bad credentials");

@@ -90,6 +90,7 @@ const BOARD: Check[] = [
   ["description", optional(isString)],
   ["branchFormat", optional(isString)],
   ["repo", optional(isString)],
+  ["onMerge", optional(shaped([["action", (v) => v === "none" || v === "propose" || v === "move"], ["columnId", optional(isString)]]))],
   ["columns", listOf(shaped([["id", isString], ["name", isString], ["collapsed", optional((v) => typeof v === "boolean")], ["limit", optional(isNumber)], ["archiveAfter", optional(isNumber)], ["sort", optional(isString)]]))],
   ["labels", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],
   ["priorities", listOf(shaped([["id", isString], ["name", isString], ["color", isString]]))],

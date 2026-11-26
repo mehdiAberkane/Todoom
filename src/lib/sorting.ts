@@ -15,6 +15,8 @@ export const COLUMN_SORTS: ColumnSort[] = ["manual", ...SORT_KEYS];
 const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 /** Columns where cards wait for the user's review: taken in the order they arrived. */
 const REVIEW_NAMES = ["a verifier", "a valider", "to review", "review", "in review"];
+/** « A verifier » and its other names: work done, waiting for the user's review. */
+export const isReviewName = (name: string) => REVIEW_NAMES.includes(plain(name));
 
 /**
  * The sort of a column: its own choice, else one fitting its name. « Terminé »:

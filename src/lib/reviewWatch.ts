@@ -2,9 +2,12 @@
 // the PR/MR popups (see PrPopupWindow): a new one opened, a CI that went red,
 // one merged. The last state seen is kept per repository on this computer.
 
-import type { AppSettings, Board, Card } from "../types";
-import { cardOfReview, hostAllowed, parseRepo, repoKey, type Release, type Repo, type Review } from "./reviews";
+import type { AppSettings, Board, Card, Column } from "../types";
+import { cardOfReview, hostAllowed, parseRepo, repoKey, sameUrl, type Release, type Repo, type Review } from "./reviews";
+import { isDoneName } from "./links";
+import { isReviewName } from "./sorting";
 import { refOf } from "./shortid";
+import { claimLabel } from "./claim";
 
 export type PrEventKind = "opened" | "ciFailed" | "merged";
 /** A release started, published, or failed (TOD-78). */
@@ -136,17 +139,26 @@ export interface PrNotice {
   card: string | null;
   /** For "more": how many others. */
   count?: number;
+  /**
+   * A merged one's card (TOD-69): moved to `column`, to move at a click (propose),
+   * or left where it is because someone has taken it (held, by `heldBy`).
+   */
+  merge?: { outcome: "moved" | "propose" | "held"; column: string; columnId: string; boardId: string; cardId: string; heldBy?: string };
 }
 
 export const MAX_POPUPS = 3;
 
+/** A merged one's event, with what was done with its card. */
+export type NoticeEvent = PrEvent & { repo: Repo; board: Board; cards: Card[]; merge?: MergeOutcome & { board: Board } };
+
 /** One notice per event, at most MAX_POPUPS, then one saying how many more. */
-export function noticesOf(events: (PrEvent & { repo: Repo; board: Board; cards: Card[] })[], stamp: string): PrNotice[] {
+export function noticesOf(events: NoticeEvent[], stamp: string): PrNotice[] {
   const shown = events.slice(0, events.length > MAX_POPUPS ? MAX_POPUPS - 1 : MAX_POPUPS);
   const notices: PrNotice[] = shown.map((e, i) => {
     // A release: its tag in place of a number, nobody's, no card.
     if (!("review" in e)) return { id: `${stamp}-${i}`, kind: e.kind, repo: e.repo.path, number: e.release.tag, title: "", author: "", url: e.release.url, card: null };
     const card = cardOfReview(e.review, e.cards);
+    const m = e.merge;
     return {
       id: `${stamp}-${i}`,
       kind: e.kind,
@@ -156,6 +168,18 @@ export function noticesOf(events: (PrEvent & { repo: Repo; board: Board; cards: 
       author: e.review.author,
       url: e.review.url,
       card: card ? (refOf(e.board, card) ?? card.title) : null,
+      ...(m && m.outcome !== "state" && m.column
+        ? {
+            merge: {
+              outcome: m.outcome,
+              column: m.column.name,
+              columnId: m.column.id,
+              boardId: m.board.id,
+              cardId: m.card.id,
+              ...(m.outcome === "held" && m.card.claimedBy ? { heldBy: claimLabel(m.card.claimedBy) } : {}),
+            },
+          }
+        : {}),
     };
   });
   const rest = events.length - shown.length;
@@ -178,4 +202,75 @@ export function watchedRepos(boards: Board[], choices: Record<string, boolean> =
     if (!out.has(key)) out.set(key, { key, repo, board });
   }
   return [...out.values()];
+}
+
+// ---- A card's pull/merge request merged or closed (TOD-69) -------------------
+
+export type MergeAction = "none" | "propose" | "move";
+
+/**
+ * What a board does when a card's PR/MR is merged, and where to: the column chosen,
+ * else the one named « A verifier ». Never a done column: that step is the user's.
+ */
+export function mergeSetting(board: Board): { action: MergeAction; column: Column | null } {
+  const action = board.onMerge?.action ?? "propose";
+  // A done column chosen (the file is shared, anyone may write it) counts as none chosen.
+  const chosen = board.onMerge?.columnId ? board.columns.find((c) => c.id === board.onMerge!.columnId && !isDoneName(c.name)) : undefined;
+  return { action, column: chosen ?? board.columns.find((c) => isReviewName(c.name)) ?? null };
+}
+
+/** Whether a card can still go to that column: not there yet, not finished, not archived. */
+export function mayMoveOnMerge(card: Card, board: Board, column: Column | null): column is Column {
+  if (!column || card.archivedAt || card.columnId === column.id) return false;
+  const current = board.columns.find((c) => c.id === card.columnId);
+  return !current || !isDoneName(current.name);
+}
+
+export interface MergeOutcome {
+  review: Review;
+  /** The card as it is, and as it should be written. */
+  card: Card;
+  next: Card;
+  /**
+   * state: only its merge request's state changes. moved: it goes to the column too.
+   * propose: it may go there, at the user's word. held: it should have moved, but
+   * someone has taken it, so it stays and the popup says why.
+   */
+  outcome: "state" | "moved" | "propose" | "held";
+  column: Column | null;
+}
+
+/**
+ * The cards of a board whose PR/MR was just merged or closed, and what to do with
+ * them. A merged one: its card is the one with its address, else the one on its
+ * branch that has none; its state becomes merged, once (a card already merged is
+ * left alone, so two computers, or a card moved back by hand, don't move it again).
+ * A closed one: only the card with its address, state closed, never moved.
+ * `bottom` gives the order at the bottom of a column.
+ */
+export function mergeOutcomes(board: Board, cards: Card[], merged: Review[], closed: Review[], bottom: (columnId: string) => number): MergeOutcome[] {
+  const live = cards.filter((c) => !c.archivedAt);
+  const { action, column } = mergeSetting(board);
+  const out: MergeOutcome[] = [];
+  const done = new Set<string>();
+  for (const review of merged) {
+    const card =
+      live.find((c) => c.mergeRequest && sameUrl(c.mergeRequest.url, review.url)) ??
+      (review.branch ? live.find((c) => !c.mergeRequest && c.branch === review.branch) : undefined);
+    if (!card || done.has(card.id) || card.mergeRequest?.state === "merged") continue;
+    done.add(card.id);
+    const next: Card = { ...card, mergeRequest: { url: card.mergeRequest?.url ?? review.url, state: "merged" } };
+    const movable = action !== "none" && mayMoveOnMerge(card, board, column);
+    if (!movable) out.push({ review, card, next, outcome: "state", column });
+    else if (action === "propose") out.push({ review, card, next, outcome: "propose", column });
+    else if (card.claimedBy) out.push({ review, card, next, outcome: "held", column });
+    else out.push({ review, card, next: { ...next, columnId: column.id, order: bottom(column.id) }, outcome: "moved", column });
+  }
+  for (const review of closed) {
+    const card = live.find((c) => c.mergeRequest?.state === "open" && sameUrl(c.mergeRequest.url, review.url));
+    if (!card || done.has(card.id)) continue;
+    done.add(card.id);
+    out.push({ review, card, next: { ...card, mergeRequest: { ...card.mergeRequest!, state: "closed" } }, outcome: "state", column: null });
+  }
+  return out;
 }

@@ -28,7 +28,8 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { dailySnapshot } from "./lib/snapshotter";
 import { useReadingCopy } from "./lib/readingWriter";
 import { useInbox } from "./lib/inboxWatcher";
-import { usePrWatch } from "./lib/prWatcher";
+import { usePrWatch, type MergeHandlers } from "./lib/prWatcher";
+import { mayMoveOnMerge } from "./lib/reviewWatch";
 import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
 import { isAsleep, pendingRepeats, successorOf } from "./lib/recurring";
@@ -42,6 +43,8 @@ import { isTyping, modalOpen } from "./lib/keys";
 const PRESENCE_WINDOW_MS = 3 * 60_000;
 /** A routine finished less than this long ago gets its « comes back on… » notice here. */
 const ROUTINE_NOTICE_MS = 2 * 60_000;
+/** Who signs, in a card's history, what Todoom did on its own (a merged PR/MR's card moved). */
+const MERGE_AGENT = "Todoom";
 
 export default function App() {
   const [dataDir, setDataDir] = useState<string | null | undefined>(undefined);
@@ -183,7 +186,28 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   // Ideas dropped from the phone into the inbox become cards.
   const inboxIssues = useInbox(data.settings.inbox !== false, !incomplete && !error, activeBoards, data.cards, unsavedIds, data.settings, actions);
   // PR/MR of the boards' repositories: what changed goes to the popup.
-  const { openReviews, releases } = usePrWatch(!incomplete && !error, activeBoards, data.cards, data.settings);
+  // A card's PR/MR merged or closed (TOD-69): its state, and the move its board asks for,
+  // written as « Todoom » in its history; a move can be undone (Ctrl + Z).
+  const current = (boardId: string, cardId: string) => (data.cards[boardId] ?? []).find((c) => c.id === cardId);
+  const mergeHandlers: MergeHandlers = {
+    apply: (outcomes) => {
+      for (const o of outcomes) {
+        // Changed since the look (here or elsewhere): the next look sees it as it is now.
+        if (current(o.board.id, o.card.id)?.updatedAt !== o.card.updatedAt) continue;
+        if (o.outcome === "moved") actions.saveCard(o.next, MERGE_AGENT);
+        else actions.untracked(() => actions.saveCard(o.next, MERGE_AGENT));
+      }
+    },
+    move: (boardId, cardId, columnId) => {
+      const board = activeBoards.find((b) => b.id === boardId);
+      const card = current(boardId, cardId);
+      const column = board?.columns.find((c) => c.id === columnId) ?? null;
+      if (!board || !card || !mayMoveOnMerge(card, board, column)) return;
+      const order = (data.cards[boardId] ?? []).filter((c) => c.columnId === columnId && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1) + 1;
+      actions.saveCard({ ...card, columnId, order });
+    },
+  };
+  const { openReviews, releases } = usePrWatch(!incomplete && !error, activeBoards, data.cards, data.settings, mergeHandlers);
   // Today's snapshot of the data folder, once the folder is read in full; checked again every hour.
   const snapshotKeep = data.settings.snapshotKeep;
   useEffect(() => {

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { t } from "../lib/i18n";
 import { isTauri } from "../lib/backend";
-import { PR_ACK, PR_NOTICES, PR_OPEN, PR_READY } from "../lib/prWatcher";
+import { PR_ACK, PR_MOVE, PR_NOTICES, PR_OPEN, PR_READY } from "../lib/prWatcher";
 import type { PrNotice } from "../lib/reviewWatch";
 
 const SHOW_MS = 8_000;
@@ -55,6 +55,12 @@ export function PrPopupWindow({ demo }: { demo?: PrNotice[] }) {
   }, [notices]);
 
   const dismiss = (id: string) => setNotices((current) => current.filter((n) => n.id !== id));
+  // « Move to A verifier »: the main window moves the card; the notice says it is done.
+  const moveCard = (n: PrNotice) => {
+    if (!n.merge) return;
+    if (isTauri) emitTo("main", PR_MOVE, { boardId: n.merge.boardId, cardId: n.merge.cardId, columnId: n.merge.columnId }).catch(() => {});
+    setNotices((current) => current.map((x) => (x.id === n.id && x.merge ? { ...x, merge: { ...x.merge, outcome: "moved" as const } } : x)));
+  };
   const open = (n: PrNotice) => {
     if (n.url && isTauri) emitTo("main", PR_OPEN, n.url).catch(() => {});
     dismiss(n.id);
@@ -104,9 +110,30 @@ export function PrPopupWindow({ demo }: { demo?: PrNotice[] }) {
                 {n.card && <span className="pr-card"> · {n.card}</span>}
               </div>
             )}
+            {n.merge && <MergeLine notice={n} onMove={() => moveCard(n)} />}
           </div>
         ),
       )}
+    </div>
+  );
+}
+
+/** Under a merged one: its card moved, held by someone, or a button to move it (TOD-69). */
+function MergeLine({ notice, onMove }: { notice: PrNotice; onMove: () => void }) {
+  const m = notice.merge!;
+  if (m.outcome === "moved") return <div className="pr-merge">→ {t("prPopup.movedTo", { column: m.column })}</div>;
+  if (m.outcome === "held") return <div className="pr-merge">{t("prPopup.held", { who: m.heldBy ?? "?" })}</div>;
+  return (
+    <div className="pr-merge">
+      <button
+        className="pr-move"
+        onClick={(e) => {
+          e.stopPropagation();
+          onMove();
+        }}
+      >
+        {t("prPopup.moveTo", { column: m.column })}
+      </button>
     </div>
   );
 }

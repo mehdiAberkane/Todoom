@@ -127,13 +127,15 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 export interface ReviewSets {
   open: Review[];
   merged: Review[];
+  /** The latest closed without merging (TOD-69). */
+  closed: Review[];
   /** Null when the latest tag set nothing off (or there is no tag). */
   release: Release | null;
 }
 
 /** The open and merged lists of a GraphQL answer ({ data: { <root>: { open, merged, tags, releases } } }). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the tool's JSON, read field by field
-function graphqlSets(output: string, root: "repository" | "project"): { open: unknown[]; merged: unknown[]; found: any } {
+function graphqlSets(output: string, root: "repository" | "project"): { open: unknown[]; merged: unknown[]; closed: unknown[]; found: any } {
   const data = JSON.parse(output);
   if (data?.errors?.length) throw new Error(str(data.errors[0]?.message) || "GraphQL error");
   const found = data?.data?.[root];
@@ -141,7 +143,8 @@ function graphqlSets(output: string, root: "repository" | "project"): { open: un
   const open: unknown = found.open?.nodes;
   const merged: unknown = found.merged?.nodes;
   if (!Array.isArray(open) || !Array.isArray(merged)) throw new Error("unexpected output");
-  return { open, merged, found };
+  const closed: unknown = found.closed?.nodes;
+  return { open, merged, closed: Array.isArray(closed) ? closed : [], found };
 }
 
 const FAILED = ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"];
@@ -236,13 +239,13 @@ function gitlabReview(m: any): Review {
 /** gh api graphql: repository.open / merged / tags / releases (see GITHUB_QUERY in Rust). */
 export function githubReviews(output: string): ReviewSets {
   const sets = graphqlSets(output, "repository");
-  return { open: sets.open.map(githubReview), merged: sets.merged.map(githubReview), release: githubRelease(sets.found) };
+  return { open: sets.open.map(githubReview), merged: sets.merged.map(githubReview), closed: sets.closed.map(githubReview), release: githubRelease(sets.found) };
 }
 
 /** glab api graphql: project.open / merged / tags / releases (see GITLAB_QUERY in Rust). */
 export function gitlabReviews(output: string, host = "gitlab.com"): ReviewSets {
   const sets = graphqlSets(output, "project");
-  return { open: sets.open.map(gitlabReview), merged: sets.merged.map(gitlabReview), release: gitlabRelease(sets.found, host) };
+  return { open: sets.open.map(gitlabReview), merged: sets.merged.map(gitlabReview), closed: sets.closed.map(gitlabReview), release: gitlabRelease(sets.found, host) };
 }
 
 /**
@@ -251,7 +254,7 @@ export function gitlabReviews(output: string, host = "gitlab.com"): ReviewSets {
  */
 export function parseReviews(forge: Forge, output: string, now = Date.now(), host?: string): ReviewSets {
   const sets = forge === "github" ? githubReviews(output) : gitlabReviews(output, host);
-  return { open: sets.open.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), merged: recentlyMerged(sets.merged, now), release: sets.release };
+  return { open: sets.open.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), merged: recentlyMerged(sets.merged, now), closed: sets.closed, release: sets.release };
 }
 
 /** A release worth showing: under way, or finished in the last 24 hours. */
@@ -265,7 +268,8 @@ export function recentlyMerged(list: Review[], now = Date.now()): Review[] {
     .sort((a, b) => b.mergedAt!.localeCompare(a.mergedAt!));
 }
 
-const sameUrl = (a: string, b: string) => a.replace(/\/+$/, "").toLowerCase() === b.replace(/\/+$/, "").toLowerCase();
+/** The same web address, whatever the case or a trailing slash. */
+export const sameUrl = (a: string, b: string) => a.replace(/\/+$/, "").toLowerCase() === b.replace(/\/+$/, "").toLowerCase();
 
 /** The card a review belongs to: the one with its address, else the one on its branch. */
 export function cardOfReview(review: Review, cards: Card[]): Card | undefined {

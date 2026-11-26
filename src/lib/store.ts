@@ -479,11 +479,11 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
   const removePath = useCallback((path: string) => enqueue(path, { kind: "remove" }), [enqueue]);
 
   const actions = useMemo(() => {
-    /** Adds what changed to this computer's history file of the card. */
-    const recordHistory = (prev: Card | undefined, next: Card) => {
+    /** Adds what changed to this computer's history file of the card; `agent` signs what the app did on its own. */
+    const recordHistory = (prev: Card | undefined, next: Card, agent?: string) => {
       const board = dataRef.current.boards.find((b) => b.id === next.boardId);
       if (!board || !hostRef.current) return;
-      appendHistory(next, eventsFor(changesBetween(prev, next, board), { host: hostRef.current }));
+      appendHistory(next, eventsFor(changesBetween(prev, next, board), { host: hostRef.current, ...(agent ? { agent } : {}) }));
     };
 
     /** Adds events to this computer's history file of the card, where the card is now. */
@@ -540,12 +540,13 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
       if (deleted) group.deleted[entry.id] = deleted;
     };
 
-    const saveCard = (card: Card) => {
+    /** Writes a card; `agent` signs its history when the app did it on its own (« Todoom »). */
+    const saveCard = (card: Card, agent?: string) => {
       const prev = currentCard(card.id, card.boardId);
       const saved = { ...card, updatedAt: nextUpdatedAt(card.updatedAt) };
       lastSaved.current.set(saved.id, saved);
       track({ kind: "card", id: saved.id, before: prev ?? null, after: saved });
-      recordHistory(prev, saved);
+      recordHistory(prev, saved, agent);
       setData((d) => {
         const list = d.cards[saved.boardId] ?? [];
         const exists = list.some((c) => c.id === saved.id);
@@ -634,7 +635,7 @@ export function useTodoom(backend: Backend, onLoaded?: OnLoaded) {
         tracking.current = false;
         try {
           plan.boards.forEach(saveBoard);
-          plan.save.forEach(saveCard);
+          plan.save.forEach((card) => saveCard(card));
           plan.remove.forEach(deleteCard);
           for (const card of plan.recreate) recreateCard(card, group.deleted[card.id]);
         } finally {

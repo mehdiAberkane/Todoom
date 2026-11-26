@@ -22,6 +22,7 @@ import { refOf } from "../lib/shortid";
 import { openExternal } from "../lib/open";
 import { datesOf, formatDuration, staysOf, timeByColumn } from "../lib/timeline";
 import type { MergeRequestState } from "../types";
+import { mayMoveOnMerge, mergeSetting } from "../lib/reviewWatch";
 
 interface Props {
   card: Card;
@@ -583,6 +584,7 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
               ))}
             </select>
           )}
+          <MergedMove card={draft} board={board} onMove={(columnId) => set({ columnId })} />
 
           {activity && <Tracking card={card} board={board} history={activity.history} />}
 
@@ -768,5 +770,16 @@ function Tracking({ card, board, history }: { card: Card; board: Board; history:
         </ul>
       )}
     </div>
+  );
+}
+
+/** Its PR/MR merged, the card not yet where its board sends merged ones: « Move to A verifier » (TOD-69). */
+function MergedMove({ card, board, onMove }: { card: Card; board: Board; onMove: (columnId: string) => void }) {
+  const { action, column } = mergeSetting(board);
+  if (card.mergeRequest?.state !== "merged" || action === "none" || !mayMoveOnMerge(card, board, column)) return null;
+  return (
+    <button className="btn-ghost small merged-move" onClick={() => onMove(column.id)} title={t("cardModal.mergedMoveTitle")}>
+      {t("prPopup.moveTo", { column: column.name })}
+    </button>
   );
 }

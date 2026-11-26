@@ -8,14 +8,29 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import type { AppSettings, Board, Card } from "../types";
 import { backend, isTauri } from "./backend";
 import { openExternal } from "./open";
-import { parseReviews, type Release, type Review } from "./reviews";
-import { allowed, BACK_LOOK_AFTER_MS, nextLookDelay, noticesOf, reviewEvents, reviewNotifySettings, watchedRepos, type PrNotice, type Seen } from "./reviewWatch";
+import { parseRepo, parseReviews, repoKey, sameUrl, type Release, type Review } from "./reviews";
+import {
+  allowed,
+  BACK_LOOK_AFTER_MS,
+  mergeOutcomes,
+  nextLookDelay,
+  noticesOf,
+  reviewEvents,
+  reviewNotifySettings,
+  watchedRepos,
+  type MergeOutcome,
+  type NoticeEvent,
+  type PrNotice,
+  type Seen,
+} from "./reviewWatch";
 
 /** Main → popup: notices to show. Popup → main: ready, received (ids), open (address). */
 export const PR_NOTICES = "todoom://pr-notices";
 export const PR_READY = "todoom://pr-ready";
 export const PR_ACK = "todoom://pr-ack";
 export const PR_OPEN = "todoom://pr-open";
+/** Popup → main: move a merged one's card, as offered (TOD-69). */
+export const PR_MOVE = "todoom://pr-move";
 const POPUP = "prpopup";
 
 // What was last seen of each repository, on this computer only (not in Drive).
@@ -40,10 +55,18 @@ function sendPending(notices: PrNotice[]) {
   if (notices.length) emitTo(POPUP, PR_NOTICES, notices).catch(() => {});
 }
 
-export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string, Card[]>, settings: AppSettings) {
+/** What the watch asks the main window to write (TOD-69). */
+export interface MergeHandlers {
+  /** The cards whose PR/MR was merged or closed: their state, and the move when the board says so. */
+  apply: (outcomes: (MergeOutcome & { board: Board })[]) => void;
+  /** « Move to A verifier » clicked in the popup. */
+  move: (boardId: string, cardId: string, columnId: string) => void;
+}
+
+export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string, Card[]>, settings: AppSettings, merge?: MergeHandlers) {
   // Read at each look, so the 2 minute rhythm isn't restarted by every edit.
-  const latest = useRef({ boards, cards, settings });
-  latest.current = { boards, cards, settings };
+  const latest = useRef({ boards, cards, settings, merge });
+  latest.current = { boards, cards, settings, merge };
   // Sent to the popup until it says it received them (it may still be loading).
   const pending = useRef<PrNotice[]>([]);
   // The open PR/MR and the release of each repository at the last look, by "forge:host/path", for « Mon travail ».
@@ -61,6 +84,7 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
         pending.current = pending.current.filter((n) => !e.payload.includes(n.id));
       }),
       listen<string>(PR_OPEN, (e) => openExternal(e.payload)),
+      listen<{ boardId: string; cardId: string; columnId: string }>(PR_MOVE, (e) => latest.current.merge?.move(e.payload.boardId, e.payload.cardId, e.payload.columnId)),
     ];
     return () => offs.forEach((off) => off.then((f) => f()));
   }, []);
@@ -81,9 +105,9 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
       busy = true;
       lastLook = Date.now();
       try {
-        const { boards, cards, settings } = latest.current;
+        const { boards, cards, settings, merge } = latest.current;
         const seen = readSeen();
-        const events: Parameters<typeof noticesOf>[0] = [];
+        const events: NoticeEvent[] = [];
         const read: Record<string, Review[]> = {};
         const readReleases: Record<string, Release | null> = {};
         // Hosts allowed on this computer, read at each look: an answer given in the panel counts at once.
@@ -99,7 +123,19 @@ export function usePrWatch(ready: boolean, boards: Board[], cards: Record<string
             const result = reviewEvents(seen[w.key], sets.open, sets.merged, sets.release);
             seen[w.key] = result.next;
             const boardCards = boards.flatMap((b) => cards[b.id] ?? []);
-            for (const e of allowed(result.events, reviewNotifySettings(settings))) events.push({ ...e, repo: w.repo, board: w.board, cards: boardCards });
+            // The cards of every board on this repository whose PR/MR was merged or closed.
+            const outcomes = boards
+              .filter((b) => !b.archivedAt && b.repo && parseRepo(b.repo) && repoKey(parseRepo(b.repo)!) === w.key)
+              .flatMap((b) => {
+                const own = cards[b.id] ?? [];
+                const bottom = (columnId: string) => own.filter((c) => c.columnId === columnId && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1) + 1;
+                return mergeOutcomes(b, own, sets.merged, sets.closed, bottom).map((o) => ({ ...o, board: b }));
+              });
+            if (outcomes.length) merge?.apply(outcomes);
+            for (const e of allowed(result.events, reviewNotifySettings(settings))) {
+              const m = "review" in e ? outcomes.find((o) => sameUrl(o.review.url, e.review.url)) : undefined;
+              events.push({ ...e, repo: w.repo, board: m?.board ?? w.board, cards: boardCards, ...(m ? { merge: m } : {}) });
+            }
           } catch {
             // gh or glab missing, signed out, offline: the panel says why; nothing is reported here.
           }

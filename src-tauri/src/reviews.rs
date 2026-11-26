@@ -39,11 +39,13 @@ pub(crate) fn is_forge_path(forge: &str, path: &str) -> bool {
 
 /// One question per repository and per look (one gh or glab launched, not two):
 /// the open ones, the latest merged ones (the interface keeps the last 24 hours),
+/// the latest closed without merging (their cards' merge request becomes closed, TOD-69),
 /// and the release under way: the pipeline of the latest tag, and its release page
 /// (TOD-78). Read by gitlabReviews in reviews.ts.
 pub(crate) const GITLAB_QUERY: &str = "query($path: ID!) { project(fullPath: $path) { \
 open: mergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { ...M } } \
 merged: mergeRequests(state: merged, first: 20, sort: MERGED_AT_DESC) { nodes { ...M } } \
+closed: mergeRequests(state: closed, first: 10, sort: UPDATED_DESC) { nodes { ...M } } \
 tags: pipelines(scope: TAGS, first: 1) { nodes { ref status path createdAt updatedAt } } \
 releases(first: 1, sort: RELEASED_AT_DESC) { nodes { tagName links { selfUrl } } } } } \
 fragment M on MergeRequest { iid title webUrl draft sourceBranch updatedAt mergedAt author { username } headPipeline { status } }";
@@ -55,6 +57,7 @@ fragment M on MergeRequest { iid title webUrl draft sourceBranch updatedAt merge
 pub(crate) const GITHUB_QUERY: &str = "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { \
 open: pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...P } } \
 merged: pullRequests(states: MERGED, first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...P } } \
+closed: pullRequests(states: CLOSED, first: 10, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...P } } \
 tags: refs(refPrefix: \"refs/tags/\", first: 1, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name \
 target { ... on Commit { ...R } ... on Tag { target { ... on Commit { ...R } } } } } } \
 releases(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName url } } } } \

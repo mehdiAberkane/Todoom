@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AppSettings, Board, Card } from "../types";
 import type { Release, Repo, Review } from "./reviews";
-import { allowed, AWAY_LONG_MS, isBot, MAX_POPUPS, nextLookDelay, noticesOf, PR_WATCH_FAST_MS, PR_WATCH_SLOW_MS, reviewEvents, reviewNotifySettings, watchedRepos, type Seen } from "./reviewWatch";
+import { allowed, AWAY_LONG_MS, isBot, MAX_POPUPS, mayMoveOnMerge, mergeOutcomes, mergeSetting, nextLookDelay, noticesOf, PR_WATCH_FAST_MS, PR_WATCH_SLOW_MS, reviewEvents, reviewNotifySettings, watchedRepos, type Seen } from "./reviewWatch";
 
 const pr = (number: number, patch: Partial<Review> = {}): Review => ({
   number,
@@ -144,5 +144,86 @@ describe("when to look again", () => {
   it("slowly when nothing is open, or only robots' with their CI done", () => {
     expect(nextLookDelay([], null, now)).toBe(PR_WATCH_SLOW_MS);
     expect(nextLookDelay([done(3, { author: "dependabot" }), done(4, { author: "renovate[bot]", ci: "failure" })], null, now)).toBe(PR_WATCH_SLOW_MS);
+  });
+});
+
+describe("a card's PR/MR merged or closed (TOD-69)", () => {
+  const columns = [
+    { id: "todo", name: "À faire" },
+    { id: "doing", name: "En cours" },
+    { id: "check", name: "À vérifier" },
+    { id: "done", name: "Terminé" },
+  ];
+  const board = (onMerge?: Board["onMerge"]) => ({ id: "b", name: "Todoom", key: "TOD", columns, labels: [], ...(onMerge ? { onMerge } : {}) }) as unknown as Board;
+  const card = (id: string, patch: Partial<Card> = {}): Card =>
+    ({ id, boardId: "b", columnId: "doing", order: 0, title: id, branch: null, mergeRequest: null, claimedBy: null, archivedAt: null, updatedAt: "2026-11-26T10:00:00Z", ...patch }) as unknown as Card;
+  const url = (n: number) => `https://github.com/o/r/pull/${n}`;
+  const bottom = () => 7;
+  const outcomes = (b: Board, cards: Card[], merged: Review[], closed: Review[] = []) =>
+    mergeOutcomes(b, cards, merged, closed, bottom).map((o) => [o.card.id, o.outcome, o.next.columnId, o.next.mergeRequest?.state]);
+
+  it("offers to move by default, to the column named « A verifier », never to a done one", () => {
+    expect(mergeSetting(board())).toMatchObject({ action: "propose", column: { id: "check" } });
+    expect(mergeSetting(board({ action: "move", columnId: "todo" })).column?.id).toBe("todo");
+    expect(mergeSetting(board({ action: "move", columnId: "done" })).column?.id).toBe("check");
+    const noReview = { ...board(), columns: columns.filter((c) => c.id !== "check") } as Board;
+    expect(mergeSetting(noReview).column).toBeNull();
+  });
+
+  it("finds the card by its PR/MR's address, else by its branch when it has none", () => {
+    const cards = [card("a", { mergeRequest: { url: url(1) + "/", state: "open" } }), card("b", { branch: "feature/2" }), card("c", { branch: "feature/3", mergeRequest: { url: url(9), state: "open" } })];
+    const merged = [pr(1, { url: url(1) }), pr(2, { url: url(2) }), pr(3, { url: url(3) })];
+    expect(outcomes(board(), cards, merged)).toEqual([
+      ["a", "propose", "doing", "merged"],
+      ["b", "propose", "doing", "merged"],
+    ]);
+    // Found by its branch: the card gets the PR's address.
+    expect(mergeOutcomes(board(), cards, merged, [], bottom)[1].next.mergeRequest).toEqual({ url: url(2), state: "merged" });
+  });
+
+  it("moves it when the board says so, at the bottom of the column, unless someone has taken it", () => {
+    const cards = [card("a", { mergeRequest: { url: url(1), state: "open" } }), card("b", { mergeRequest: { url: url(2), state: "open" }, claimedBy: { host: "PC", agent: "Claude", at: "x" } })];
+    const o = mergeOutcomes(board({ action: "move" }), cards, [pr(1, { url: url(1) }), pr(2, { url: url(2) })], [], bottom);
+    expect(o.map((x) => [x.card.id, x.outcome, x.next.columnId, x.next.order])).toEqual([
+      ["a", "moved", "check", 7],
+      ["b", "held", "doing", 0],
+    ]);
+  });
+
+  it("only changes the state of a card already there, finished, or on a board that does nothing", () => {
+    const merged = [pr(1, { url: url(1) })];
+    const at = (columnId: string) => [card("a", { columnId, mergeRequest: { url: url(1), state: "open" } })];
+    expect(outcomes(board({ action: "move" }), at("check"), merged)).toEqual([["a", "state", "check", "merged"]]);
+    expect(outcomes(board({ action: "move" }), at("done"), merged)).toEqual([["a", "state", "done", "merged"]]);
+    expect(outcomes(board({ action: "none" }), at("doing"), merged)).toEqual([["a", "state", "doing", "merged"]]);
+  });
+
+  it("does it once: a card already merged, or archived, is left alone", () => {
+    const merged = [pr(1, { url: url(1) })];
+    expect(outcomes(board({ action: "move" }), [card("a", { mergeRequest: { url: url(1), state: "merged" } })], merged)).toEqual([]);
+    expect(outcomes(board({ action: "move" }), [card("a", { mergeRequest: { url: url(1), state: "open" }, archivedAt: "x" })], merged)).toEqual([]);
+  });
+
+  it("marks a PR/MR closed without merging as closed, by its address only, never moving the card", () => {
+    const cards = [card("a", { mergeRequest: { url: url(1), state: "open" } }), card("b", { branch: "feature/2" })];
+    expect(outcomes(board({ action: "move" }), cards, [], [pr(1, { url: url(1) }), pr(2, { url: url(2) })])).toEqual([["a", "state", "doing", "closed"]]);
+  });
+
+  it("says in the popup what became of the card", () => {
+    const repo: Repo = { forge: "github", host: "github.com", path: "o/r" };
+    const b = board({ action: "move" });
+    const cards = [card("a", { number: 4, mergeRequest: { url: url(1), state: "open" } }), card("b", { number: 5, mergeRequest: { url: url(2), state: "open" }, claimedBy: { host: "PC", agent: "Claude", at: "x" } })];
+    const merged = [pr(1, { url: url(1) }), pr(2, { url: url(2) })];
+    const o = mergeOutcomes(b, cards, merged, [], bottom);
+    const notices = noticesOf(
+      merged.map((r, i) => ({ kind: "merged" as const, review: r, repo, board: b, cards, merge: { ...o[i], board: b } })),
+      "t",
+    );
+    expect(notices.map((n) => n.merge)).toEqual([
+      { outcome: "moved", column: "À vérifier", columnId: "check", boardId: "b", cardId: "a" },
+      { outcome: "held", column: "À vérifier", columnId: "check", boardId: "b", cardId: "b", heldBy: "PC · Claude" },
+    ]);
+    expect(mayMoveOnMerge(cards[0], b, mergeSetting(b).column)).toBe(true);
+    expect(mayMoveOnMerge({ ...cards[0], columnId: "done" }, b, mergeSetting(b).column)).toBe(false);
   });
 });
