@@ -99,6 +99,8 @@ export interface Card {
   color?: string | null;
   /** A routine: when the card reaches a « done » column, the next one is made, due one period later. */
   repeat?: { every: "day" | "week" | "month" } | null;
+  /** The next card of a routine waits off the board until this day (YYYY-MM-DD), a few days before it is due. */
+  wakeOn?: string | null;
   /** Who is working on the card, or null when nobody is. */
   claimedBy: Claim | null;
   /** Set when the card is archived: it leaves the board but can be restored. */

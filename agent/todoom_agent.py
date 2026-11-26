@@ -314,6 +314,12 @@ def column_sort(column):
     return "priority"
 
 
+def asleep(card, today=None):
+    """The next card of a routine, still waiting off the board until its wakeOn day (TOD-82)."""
+    wake = card.get("wakeOn")
+    return isinstance(wake, str) and wake > (today or datetime.now().strftime("%Y-%m-%d"))
+
+
 def ordered(cards, column, board, today=None):
     """A column's cards in the order the app shows them: its sort, then their order."""
     sort = column_sort(column)
@@ -679,8 +685,8 @@ def tick(dry_run=False):
                 log.warning("%s ignoré : son id n'est pas le nom du fichier", path.name)
                 tick.bad_logged.add(path.name)
             continue
-        # Archived cards keep their column in Todoom but are off the board.
-        if card.get("columnId") == cols[COL_TRIGGER] and not card.get("archivedAt"):
+        # Archived cards keep their column in Todoom but are off the board, as a routine's next card still waiting.
+        if card.get("columnId") == cols[COL_TRIGGER] and not card.get("archivedAt") and not asleep(card):
             # Taken by a conversation or another computer: it's being worked on elsewhere.
             if held_by_other(card):
                 if card["id"] not in tick.held_logged:

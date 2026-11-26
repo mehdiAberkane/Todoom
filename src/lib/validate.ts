@@ -66,6 +66,7 @@ const CARD: Check[] = [
   ["branch", nullable(isString)],
   ["color", optional(nullable(isString))],
   ["repeat", optional(nullable(shaped([["every", (v) => v === "day" || v === "week" || v === "month"]])))],
+  ["wakeOn", nullable((v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v))],
   ["mergeRequest", nullable(shaped([["url", isString], ["state", (v) => v === "open" || v === "merged" || v === "closed"]]))],
   ["claimedBy", nullable(shaped([["host", isString], ["at", isString], ["agent", optional(isString)], ["conversation", optional(isString)]]))],
   ["archivedAt", nullable(isString)],

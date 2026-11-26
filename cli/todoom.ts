@@ -3,7 +3,7 @@
 
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { findDataDir, identity, normalize, Store, TodoomError, type CardChanges } from "./store";
+import { findDataDir, identity, listed, normalize, Store, TodoomError, type CardChanges } from "./store";
 import { serveMcp } from "./mcp";
 import { prioritiesOf } from "../src/lib/priority";
 import { claimLabel } from "../src/lib/claim";
@@ -19,7 +19,8 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
                                               de prendre un ticket) ; --description la remplace
   todoom new-board <nom> [--template dev|simple|<tableau>] [--description <texte>] [--repo <adresse>]
                                               nouveau tableau (modèle « dev » par défaut)
-  todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived]
+  todoom cards <tableau> [--column <nom>] [--search <texte>] [--archived | --waiting]
+                                              --waiting : les prochaines cartes des routines, pas encore arrivées
   todoom show <carte>
   todoom create <tableau> <titre> [--column <nom>] [--description <texte>]
                 [--label <nom>]... [--priority <nom>] [--due AAAA-MM-JJ]
@@ -27,6 +28,7 @@ const HELP = `todoom ${VERSION} — les tableaux Todoom en ligne de commande (so
                 [--label <nom>]... [--unlabel <nom>]... [--priority <nom> | --no-priority]
                 [--due AAAA-MM-JJ | --no-due] [--branch <nom> | --no-branch]
                 [--mr <adresse>] [--mr-state open|merged|closed] [--no-mr]
+                [--repeat day|week|month | --no-repeat]
   todoom move <carte> <colonne> [--top] [--board <tableau>]
                                               --board : vers un autre tableau (étiquettes par nom)
   todoom link <carte> <type> <autre carte>    type : depends-on, blocks, duplicate-of,
@@ -90,6 +92,9 @@ export async function main(argv: string[]): Promise<number> {
       force: { type: "boolean" },
       due: { type: "string" },
       "no-due": { type: "boolean" },
+      repeat: { type: "string" },
+      "no-repeat": { type: "boolean" },
+      waiting: { type: "boolean" },
       top: { type: "boolean" },
       save: { type: "boolean" },
       template: { type: "string" },
@@ -146,7 +151,7 @@ export async function main(argv: string[]): Promise<number> {
       const q = o.search ? normalize(o.search) : "";
       const cards = s
         .cards(board)
-        .filter((c) => !!c.archivedAt === !!o.archived)
+        .filter((c) => listed(c, { archived: o.archived, waiting: o.waiting }))
         .filter((c) => !columnId || c.columnId === columnId)
         .filter((c) => !q || normalize(`${c.title}\n${c.description}`).includes(q));
       // Already in the board's order: column by column, each as the app shows it.
@@ -201,6 +206,7 @@ export async function main(argv: string[]): Promise<number> {
         mrUrl: o["no-mr"] ? null : o.mr,
         mrState: o["mr-state"],
         due: o["no-due"] ? null : o.due,
+        repeat: o["no-repeat"] ? null : o.repeat,
       };
       if (Object.values(changes).every((v) => v === undefined)) throw new TodoomError("Rien à modifier : voir todoom --help");
       out(store().update(rest[0], changes));

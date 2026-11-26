@@ -36,6 +36,22 @@ export function nextDue(due: string | null, repeat: Repeat, today: string): stri
   }
 }
 
+/** How many days before its due date the next card of a routine comes on the board. */
+export const WAKE_LEAD_DAYS: Record<Repeat["every"], number> = { day: 0, week: 1, month: 7 };
+
+/**
+ * The day the next card comes on the board (TOD-82): a few days before it is due,
+ * not as soon as the last one is done; null when that day is already here.
+ */
+export function wakeOnFor(due: string, every: Repeat["every"], today: string): string | null {
+  const [y, m, d] = parse(due);
+  const wake = toISODate(new Date(y, m - 1, d - WAKE_LEAD_DAYS[every]));
+  return wake > today ? wake : null;
+}
+
+/** A card still waiting off the board until its wakeOn day: the next card of a routine. */
+export const isAsleep = (card: Pick<Card, "wakeOn">, today: string) => !!card.wakeOn && card.wakeOn > today;
+
 /** Repeating cards that reached a « done » column and have no next one yet. Archiving one stops it. */
 export function pendingRepeats(boards: Board[], cards: Record<string, Card[]>): { card: Card; board: Board }[] {
   const out: { card: Card; board: Board }[] = [];
@@ -53,6 +69,7 @@ export const successorId = (card: Card, due: string) => `${card.id}r${due.replac
  * The next card of a routine: same title, description, labels, priority, color
  * and checklist (unticked), in the board's first column, due one period later;
  * the repetition goes with it. Not its links, branch, merge request or taker.
+ * It waits off the board until a few days before it is due (wakeOn).
  */
 export function successorOf(card: Card, board: Board, today: string, order: number, at = new Date().toISOString()): Card {
   const due = nextDue(card.due, card.repeat!, today);
@@ -63,6 +80,7 @@ export function successorOf(card: Card, board: Board, today: string, order: numb
     columnId: board.columns[0]?.id ?? card.columnId,
     order,
     due,
+    wakeOn: wakeOnFor(due, card.repeat!.every, today),
     checklist: card.checklist.map(({ cardId: _linked, ...item }) => ({ ...item, id: uid(), done: false })),
     links: [],
     branch: null,

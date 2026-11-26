@@ -14,7 +14,8 @@ import {
 import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 import type { Board, Card } from "../types";
 import type { Actions } from "../lib/store";
-import { dueStatus, formatDue, localGet, localSet, reorder, uid } from "../lib/utils";
+import { dueStatus, formatDue, localGet, localSet, reorder, toISODate, uid } from "../lib/utils";
+import { isAsleep } from "../lib/recurring";
 import { cardColor, prioritiesOf } from "../lib/priority";
 import { checklistDone, openBlockers, type Located } from "../lib/links";
 import { mergedHistory } from "../lib/activity";
@@ -90,7 +91,13 @@ export function BoardView({
   allBoards: Board[];
 }) {
   // Everything below works on the cards still on the board; archived ones only show in the archive.
-  const cards = useMemo(() => allCards.filter((c) => !c.archivedAt), [allCards]);
+  // The next cards of routines wait off the board until a few days before they are due (TOD-82).
+  const today = toISODate(new Date());
+  const cards = useMemo(() => allCards.filter((c) => !c.archivedAt && !isAsleep(c, today)), [allCards, today]);
+  const waiting = useMemo(
+    () => allCards.filter((c) => !c.archivedAt && isAsleep(c, today)).sort((a, b) => (a.wakeOn ?? "").localeCompare(b.wakeOn ?? "")),
+    [allCards, today],
+  );
   const archived = useMemo(() => allCards.filter((c) => c.archivedAt), [allCards]);
   // Cards finished per week, from the history: the last one is this week.
   const weekly = useMemo(() => finishedPerWeek(board, allCards, (id) => mergedHistory(history[id])), [board, allCards, history]);
@@ -460,7 +467,9 @@ export function BoardView({
 
   const overdue = cards.filter((c) => dueStatus(c.due) === "overdue").length;
   // An archived card opens too (from the search, or a link): its editor offers to put it back.
-  const openCard = openCardId ? (cardById.get(openCardId) ?? archived.find((c) => c.id === openCardId)) : undefined;
+  const openCard = openCardId
+    ? (cardById.get(openCardId) ?? waiting.find((c) => c.id === openCardId) ?? archived.find((c) => c.id === openCardId))
+    : undefined;
   const activeCard = activeId?.startsWith(CARD) ? cardById.get(activeId.slice(CARD.length)) : undefined;
   // How many cards the drag carries: more than one when the dragged card is in the selection.
   const dragGroup = activeCard && selection.has(activeCard.id) ? selection.size : 0;
@@ -490,6 +499,7 @@ export function BoardView({
               </span>
             )}
           </span>
+          {waiting.length > 0 && <WaitingMenu cards={waiting} column={board.columns[0]?.name ?? ""} onOpen={setOpenCardId} />}
           <AgentStatusChips agents={agents} cardById={cardById} refOf={(c) => refOf(board, c)} />
         </div>
         <button className={`board-context-line ${board.description ? "" : "empty"}`} onClick={() => setShowContext(true)} title={t("board.contextTitle")}>
@@ -750,5 +760,27 @@ export function BoardView({
         />
       )}
     </div>
+  );
+}
+
+/** « ⟳ 2 à venir »: the next cards of routines, still off the board until a few days before they are due. */
+function WaitingMenu({ cards, column, onOpen }: { cards: Card[]; column: string; onOpen: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="sort-menu waiting-menu" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setOpen(false)}>
+      <button className="btn-ghost small" onClick={() => setOpen((o) => !o)} title={t("repeat.waitingTitle", { column })} aria-expanded={open}>
+        {tn("repeat.waitingCount", cards.length)}
+      </button>
+      {open && (
+        <div className="sort-options waiting-options" role="menu">
+          {cards.map((c) => (
+            <button key={c.id} role="menuitem" onClick={() => (setOpen(false), onOpen(c.id))}>
+              <span className="waiting-title">{c.title}</span>
+              <span className="muted">{t("repeat.comesBack", { date: formatDue(c.wakeOn!) })}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }

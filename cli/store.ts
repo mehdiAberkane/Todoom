@@ -24,6 +24,8 @@ import { boardSetup, fromSetup } from "../src/lib/templates";
 import { setLang } from "../src/lib/i18n";
 import { parseRepo } from "../src/lib/reviews";
 import { orderColumn } from "../src/lib/sorting";
+import { isAsleep, REPEATS, type Repeat } from "../src/lib/recurring";
+import { toISODate } from "../src/lib/utils";
 import { acquireLock, type LockOptions } from "./lock";
 
 export class TodoomError extends Error {}
@@ -115,6 +117,16 @@ function inBoardOrder(cards: Card[], board: Board): Card[] {
   ];
 }
 
+/**
+ * Whether a card belongs to a listing: the board's cards (not archived, not a
+ * routine's next card still waiting, TOD-82), the archived ones, or the waiting ones.
+ */
+export function listed(card: Card, wanted: { archived?: boolean; waiting?: boolean } = {}, today = toISODate(new Date())): boolean {
+  if (wanted.archived) return !!card.archivedAt;
+  if (card.archivedAt) return false;
+  return isAsleep(card, today) === !!wanted.waiting;
+}
+
 /** Why a card or board is refused, in a sentence. */
 function refusal(what: string, problem: IssueReason): string {
   if (problem.code === "too_long") return `${what} refusé${what === "Carte" ? "e" : ""} : le champ « ${problem.field} » est trop long (au plus ${problem.max?.toLocaleString("fr-FR")})`;
@@ -142,6 +154,10 @@ export interface CardView {
   suggestedBranch?: string;
   mergeRequest: MergeRequest | null;
   claimedBy: Claim | null;
+  /** A routine: when the card is done, the next one comes, one period later. */
+  repeat: Repeat["every"] | null;
+  /** The next card of a routine waits off the board (not listed) until this day. */
+  wakeOn?: string;
   order: number;
   archived: boolean;
   archivedAt: string | null;
@@ -165,6 +181,8 @@ export interface CardChanges {
   /** Web address of the merge request, or null to remove it. */
   mrUrl?: string | null;
   mrState?: string;
+  /** Makes the card a routine (day, week, month), or null to stop it. */
+  repeat?: string | null;
 }
 
 /**
@@ -411,6 +429,8 @@ export class Store {
       ...(card.branch ? {} : { suggestedBranch: branchName(card, board) }),
       mergeRequest: card.mergeRequest,
       claimedBy: card.claimedBy,
+      repeat: card.repeat?.every ?? null,
+      ...(card.wakeOn ? { wakeOn: card.wakeOn } : {}),
       order: card.order,
       archived: !!card.archivedAt,
       archivedAt: card.archivedAt,
@@ -557,6 +577,7 @@ export class Store {
       due: changes.due !== undefined ? changes.due : card.due,
       branch: changes.branch !== undefined ? changes.branch?.trim() || null : card.branch,
       mergeRequest: mergeRequestAfter(card.mergeRequest, changes),
+      ...(changes.repeat !== undefined ? { repeat: repeatOf(changes.repeat) } : {}),
     };
     return this.view(this.save(board, next, card), board);
   }
@@ -565,6 +586,8 @@ export class Store {
     const { card, board } = this.card(cardId);
     const column = this.column(board, columnName);
     const next = { ...card, columnId: column.id, order: this.position(board, column.id, where, card.id) };
+    // Moved by hand: a routine's next card that was still waiting comes now.
+    if (card.wakeOn) next.wakeOn = null;
     return this.view(this.save(board, next, card), board);
   }
 
@@ -801,4 +824,12 @@ function withDefaults(raw: Card, board: Board): Card {
     createdAt: raw.createdAt ?? "",
     updatedAt: raw.updatedAt ?? "",
   };
+}
+
+/** « month » → { every: "month" }; null or « never » stops the routine. */
+function repeatOf(wanted: string | null): Card["repeat"] {
+  if (wanted === null || /^(never|jamais|none|aucune?)$/i.test(wanted.trim())) return null;
+  const every = wanted.trim().toLowerCase() as Repeat["every"];
+  if (!REPEATS.includes(every)) throw new TodoomError(`Répétition inconnue : ${wanted} (day, week, month, ou never)`);
+  return { every };
 }

@@ -3,7 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { identity, normalize, Store, TodoomError } from "./store";
+import { identity, listed, normalize, Store, TodoomError } from "./store";
 import { prioritiesOf } from "../src/lib/priority";
 import { claimLabel } from "../src/lib/claim";
 
@@ -104,16 +104,17 @@ export function createServer(dir: string): McpServer {
     "list_cards",
     {
       title: "List cards",
-      description: `Cards of a board, column by column, each column in the order the app shows it (its sort: priority, due date… or by hand), without their descriptions (use get_card). The first card of « À faire » is the one to take. ${NAMES}`,
+      description: `Cards of a board, column by column, each column in the order the app shows it (its sort: priority, due date… or by hand), without their descriptions (use get_card). The first card of « À faire » is the one to take. The next card of a routine is not listed until a few days before it is due (see waiting). ${NAMES}`,
       inputSchema: {
         board: z.string().describe("Board name"),
         column: z.string().optional().describe("Only this column"),
         search: z.string().optional().describe("Only cards whose title or description contains this text"),
         archived: z.boolean().optional().describe("List archived cards instead of the ones on the board"),
+        waiting: z.boolean().optional().describe("List the routines' next cards still waiting off the board instead (their wakeOn day is to come)"),
       },
       annotations: readOnly,
     },
-    ({ board: boardName, column, search, archived }) =>
+    ({ board: boardName, column, search, archived, waiting }) =>
       run(() => {
         const board = store.board(boardName);
         const columnId = column ? store.column(board, column).id : undefined;
@@ -121,7 +122,7 @@ export function createServer(dir: string): McpServer {
         // In the board's order: column by column, each as the app shows it (store.cards).
         return store
           .cards(board)
-          .filter((c) => !!c.archivedAt === !!archived)
+          .filter((c) => listed(c, { archived, waiting }))
           .filter((c) => !columnId || c.columnId === columnId)
           .filter((c) => !q || normalize(`${c.title}\n${c.description}`).includes(q))
           .map((c) => {
@@ -194,6 +195,7 @@ export function createServer(dir: string): McpServer {
         branch: z.string().nullable().optional().describe("Git branch of the work (the card's suggestedBranch, unless the branch already has another name), or null to remove it"),
         mergeRequestUrl: z.string().nullable().optional().describe("Web address of the merge request / pull request, or null to remove it"),
         mergeRequestState: z.enum(["open", "merged", "closed"]).optional(),
+        repeat: z.enum(["day", "week", "month"]).nullable().optional().describe("Makes the card a routine: once done, the next one comes one period later; null stops the routine"),
       },
       annotations: writes,
     },

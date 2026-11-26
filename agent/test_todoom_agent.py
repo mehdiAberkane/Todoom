@@ -320,6 +320,12 @@ class OrderTest(unittest.TestCase):
         board = {"priorities": [{"id": "p3"}, {"id": "p1"}]}
         self.assertEqual(ids({"name": "En cours"}, board)[:3], ["late", "low", "high-soon"])
 
+    def test_a_routines_next_card_waits_until_its_wake_day(self):
+        self.assertTrue(agent.asleep({"wakeOn": "2026-12-15"}, today="2026-11-26"))
+        self.assertFalse(agent.asleep({"wakeOn": "2026-11-26"}, today="2026-11-26"))
+        self.assertFalse(agent.asleep({"wakeOn": None}, today="2026-11-26"))
+        self.assertFalse(agent.asleep({}, today="2026-11-26"))
+
     def test_a_sort_the_agent_does_not_know_falls_back_to_the_default(self):
         self.assertEqual(agent.column_sort({"name": "En cours", "sort": "magic"}), "priority")
         self.assertEqual(agent.column_sort({"name": "Terminé"}), "updated")

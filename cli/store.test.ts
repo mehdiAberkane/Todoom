@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cardProblem } from "../src/lib/validate";
-import { findDataDir, normalize, Store, TodoomError } from "./store";
+import { findDataDir, listed, normalize, Store, TodoomError } from "./store";
 import { acquireLock, LockBusy, lockPath } from "./lock";
 
 // The lock files of these tests stay in a temporary folder, not in Todoom's settings.
@@ -102,6 +102,31 @@ describe("writes", () => {
     const future = "2099-01-01T00:00:00.000Z";
     writeFileSync(join(cardsDir(), `${a.id}.json`), JSON.stringify({ ...onDisk(a.id), updatedAt: future }));
     expect(Date.parse(store.update(a.id, { title: "Un bis" }).updatedAt)).toBeGreaterThan(Date.parse(future));
+  });
+
+  it("makes a card a routine, and stops it", () => {
+    const a = store.create("Todoom", "Audit");
+    expect(store.update(a.id, { repeat: "month" }).repeat).toBe("month");
+    expect(onDisk(a.id).repeat).toEqual({ every: "month" });
+    expect(store.update(a.id, { repeat: null }).repeat).toBeNull();
+    expect(onDisk(a.id).repeat).toBeNull();
+    expect(() => store.update(a.id, { repeat: "yearly" })).toThrow(/Répétition inconnue/);
+  });
+
+  it("leaves a routine's next card out of the listing until its day, and brings it when moved by hand (TOD-82)", () => {
+    const a = store.create("Todoom", "Audit");
+    const b = store.create("Todoom", "Autre");
+    writeFileSync(join(cardsDir(), `${a.id}.json`), JSON.stringify({ ...onDisk(a.id), wakeOn: "2026-12-15" }));
+    const cards = store.cards(store.board("Todoom"));
+    const ids = (wanted: { archived?: boolean; waiting?: boolean }, today: string) => cards.filter((c) => listed(c, wanted, today)).map((c) => c.id);
+    expect(ids({}, "2026-11-26")).toEqual([b.id]);
+    expect(ids({ waiting: true }, "2026-11-26")).toEqual([a.id]);
+    expect(ids({}, "2026-12-15").sort()).toEqual([a.id, b.id].sort());
+    expect(store.card(a.id).card.wakeOn).toBe("2026-12-15");
+    expect(store.view(store.card(a.id).card, store.board("Todoom")).wakeOn).toBe("2026-12-15");
+    const moved = store.move(a.id, "À faire");
+    expect(moved.wakeOn).toBeUndefined();
+    expect(onDisk(a.id).wakeOn).toBeNull();
   });
 
   it("updates only the fields given", () => {

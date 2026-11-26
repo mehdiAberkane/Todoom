@@ -789,6 +789,11 @@ button.badge-link:focus-visible { outline: 2px solid var(--accent-2); outline-of
 .sort-badge { background: none; border: 1px solid transparent; color: var(--muted); font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
 .sort-badge:hover, .sort-badge[aria-expanded="true"] { border-color: var(--border); color: var(--text); background: none; }
 .sort-options button[aria-checked="true"] { color: var(--accent-2); }
+.waiting-options { left: 0; right: auto; min-width: 240px; max-width: 360px; }
+.waiting-options button { display: flex; flex-direction: column; gap: 2px; }
+.waiting-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.routine-toast { bottom: 72px; }
+:root:has(.bulk-bar) .routine-toast { bottom: auto; top: 64px; }
 .due-filter.on { border-color: var(--accent-2); color: var(--accent-2); }
 
 /* Collapsed columns, card limit */

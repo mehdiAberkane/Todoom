@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Card } from "./types";
 import "./App.css";
 import { backend, isTauri } from "./lib/backend";
 import { expiredBoards, useTodoom } from "./lib/store";
@@ -19,6 +20,7 @@ import { veilOf } from "./lib/appearance";
 import { MetricsPage } from "./components/MetricsPage";
 import { CalendarPage } from "./components/CalendarPage";
 import { UndoToast } from "./components/UndoToast";
+import { RoutineToast, type RoutineNotice } from "./components/RoutineToast";
 import { CaptureForm } from "./components/QuickCapture";
 import { Modal } from "./components/ui";
 import { CAPTURE_BOARDS, CAPTURE_HELLO, CAPTURE_SEND, captureBoard, captureTitle, topOrder, type CaptureTarget } from "./lib/capture";
@@ -29,7 +31,7 @@ import { useInbox } from "./lib/inboxWatcher";
 import { usePrWatch } from "./lib/prWatcher";
 import { DEFAULT_KEEP } from "./lib/snapshots";
 import { agenda, dueCards } from "./lib/calendar";
-import { pendingRepeats, successorOf } from "./lib/recurring";
+import { isAsleep, pendingRepeats, successorOf } from "./lib/recurring";
 import { dueForArchive } from "./lib/autoArchive";
 import { mergedHistory } from "./lib/activity";
 import { MyWork, myWork, myWorkColumns } from "./components/MyWork";
@@ -38,6 +40,8 @@ import { CommandPalette, ShortcutsHelp, type Command } from "./components/Comman
 import { isTyping, modalOpen } from "./lib/keys";
 
 const PRESENCE_WINDOW_MS = 3 * 60_000;
+/** A routine finished less than this long ago gets its « comes back on… » notice here. */
+const ROUTINE_NOTICE_MS = 2 * 60_000;
 
 export default function App() {
   const [dataDir, setDataDir] = useState<string | null | undefined>(undefined);
@@ -186,6 +190,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
     if (incomplete || error) return;
     dailySnapshot(snapshotKeep ?? DEFAULT_KEEP).catch((e) => console.warn("snapshot", e));
   }, [incomplete, error, hourTick, snapshotKeep]);
+  const [routineNotice, setRoutineNotice] = useState<RoutineNotice | null>(null);
   // A routine finished (in a « done » column) brings its next card; see recurring.ts.
   useEffect(() => {
     if (incomplete) return;
@@ -197,12 +202,20 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       const last = cards.filter((c) => c.columnId === column.id && !c.archivedAt).reduce((m, c) => Math.max(m, c.order), -1);
       const next = successorOf(card, board, today, last + 1);
       // Another computer may have made it already: then only the repetition is moved.
+      const made = !cards.some((c) => c.id === next.id);
       actions.untracked(() => {
-        if (!cards.some((c) => c.id === next.id)) actions.saveCard(next);
+        if (made) actions.saveCard(next);
         actions.saveCard({ ...card, repeat: null });
       });
+      // Finished just now (not long ago, on another computer): say when it comes back.
+      if (made && Date.now() - Date.parse(card.updatedAt) < ROUTINE_NOTICE_MS) setRoutineNotice({ next, column: column.name });
     }
   }, [activeBoards, data.cards, incomplete, actions]);
+  // « Stop the routine »: its next card goes to the archive, as it is now.
+  const stopRoutine = (next: Card) => {
+    const latest = (data.cards[next.boardId] ?? []).find((c) => c.id === next.id) ?? next;
+    if (!latest.archivedAt) actions.archiveCard(latest);
+  };
   // Every board gets a key and every card a number (SOL-42). Same rules on every
   // computer, so two of them doing it at once write the same thing.
   useEffect(() => {
@@ -271,7 +284,8 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
   }, [activeBoards, data.cards]);
 
   const counts = useMemo(
-    () => Object.fromEntries(Object.entries(data.cards).map(([id, cards]) => [id, cards.filter((c) => !c.archivedAt).length])),
+    // The cards on each board: not archived, not a routine's next card still waiting.
+    () => Object.fromEntries(Object.entries(data.cards).map(([id, cards]) => [id, cards.filter((c) => !c.archivedAt && !isAsleep(c, toISODate(new Date()))).length])),
     [data.cards],
   );
   const others = data.presence.filter((p) => p.host !== host && Date.now() - Date.parse(p.at) < PRESENCE_WINDOW_MS);
@@ -410,6 +424,7 @@ function Workspace({ dataDir, onSettings }: { dataDir: string; onSettings: () =>
       )}
       {showHelp && <ShortcutsHelp onClose={() => setShowHelp(false)} />}
       <UndoToast lastAction={lastAction} onUndo={actions.undo} />
+      <RoutineToast notice={routineNotice} onStop={stopRoutine} />
       {showCapture && (
         <Modal onClose={() => setShowCapture(false)} className="capture-modal">
           <h3>{t("capture.title")}</h3>

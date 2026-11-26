@@ -15,7 +15,7 @@ import { applyTemplate, CARD_TEMPLATES } from "../lib/templates";
 import { AttachmentsSection, filesOf, type AttachmentProps } from "./AttachmentsSection";
 import { branchName, branchUrl, MR_STATES, webUrl } from "../lib/dev";
 import { CARD_COLORS, toISODate } from "../lib/utils";
-import { nextDue, REPEATS, type Repeat } from "../lib/recurring";
+import { isAsleep, nextDue, REPEATS, type Repeat } from "../lib/recurring";
 import { claimLabel } from "../lib/claim";
 import { checklistDone, isFinished } from "../lib/links";
 import { refOf } from "../lib/shortid";
@@ -520,6 +520,14 @@ export function CardModal({ card, board, onSave, onClose, onManageLabels, isNew 
           </select>
           {draft.repeat && (
             <p className="hint">{t("repeat.hint", { date: formatDue(nextDue(draft.due, draft.repeat, toISODate(new Date()))) })}</p>
+          )}
+          {isAsleep(card, toISODate(new Date())) && (
+            <p className="hint routine-waiting">
+              {t("repeat.waiting", { date: formatDue(card.wakeOn!), column: board.columns[0]?.name ?? "" })}{" "}
+              <button className="link" onClick={() => onSave({ ...card, wakeOn: null })}>
+                {t("repeat.wakeNow")}
+              </button>
+            </p>
           )}
 
           <h4>{t("field.branch")}</h4>

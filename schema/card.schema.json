@@ -152,6 +152,14 @@
       ],
       "description": "Color of the band at the top of the card (#rrggbb), or null for none."
     },
+    "wakeOn": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "The next card of a routine waits off the board (not listed, not taken) until this day, a few days before it is due."
+    },
     "repeat": {
       "type": [
         "object",
